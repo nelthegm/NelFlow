@@ -115,6 +115,18 @@ function getStrikeIdentifier(roll, context) {
   return typeof identifier === "string" && identifier.split(".").length >= 3 ? identifier : null;
 }
 
+function actualMapPenalty(message) {
+  const modifiers = messageFlags(message).modifiers;
+  if (!Array.isArray(modifiers)) return null;
+  const modifier = modifiers.find(
+    (candidate) =>
+      candidate?.slug === "multiple-attack-penalty" &&
+      candidate.enabled !== false &&
+      candidate.ignored !== true,
+  );
+  return Number.isFinite(modifier?.modifier) ? modifier.modifier : null;
+}
+
 async function extractEphemeralTargetEffects({ origin, target, item, domains, options }) {
   if (!(origin && target)) return [];
   const factories = domains.flatMap(
@@ -236,6 +248,8 @@ export class PF2eAdapter {
       sourceTokenUuid: context.origin?.token ?? message.token?.uuid ?? null,
       targetActorUuid: context.target?.actor ?? null,
       targetTokenUuid: context.target?.token ?? null,
+      mapIncreases: Number.isInteger(context.mapIncreases) ? context.mapIncreases : 0,
+      mapPenalty: actualMapPenalty(message),
     };
   }
 
@@ -291,6 +305,32 @@ export class PF2eAdapter {
     } finally {
       pendingCaptures.delete(captureKey(transactionId, "damage"));
     }
+  }
+
+  /**
+   * Summarize PF2e's structured DamageRoll instances. This never consults chat
+   * card HTML or reconstructs damage from item data.
+   */
+  static summarizeDamageRoll(roll) {
+    if (!roll || !Array.isArray(roll.instances) || !Number.isFinite(roll.total)) return null;
+    const totals = new Map();
+    for (const instance of roll.instances) {
+      const type = typeof instance?.type === "string" ? instance.type : null;
+      if (!type || !Number.isFinite(instance.total)) continue;
+      const key = `${instance.persistent ? "persistent:" : ""}${type}`;
+      totals.set(key, (totals.get(key) ?? 0) + instance.total);
+    }
+    return {
+      total: roll.total,
+      components: Array.from(totals, ([key, total]) => {
+        const persistent = key.startsWith("persistent:");
+        return {
+          type: persistent ? key.slice("persistent:".length) : key,
+          total,
+          persistent,
+        };
+      }),
+    };
   }
 
   /**

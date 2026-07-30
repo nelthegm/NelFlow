@@ -5,6 +5,12 @@
   "Nelflow.Settings.AutoApply.Hint": "When disabled, Nelflow rolls damage but leaves PF2e's native damage controls for manual application.",
   "Nelflow.Settings.EnableUndo.Name": "Show Undo for Automatically Applied Damage",
   "Nelflow.Settings.EnableUndo.Hint": "Allow GMs to restore the recorded HP and temporary HP when the target has not changed since application.",
+  "Nelflow.Settings.CompactTurnStacks.Name": "Compact Turn Stacks",
+  "Nelflow.Settings.CompactTurnStacks.Hint": "Group supported Nelflow actions into durable compact chat summaries. Additional action modes may be added in future versions.",
+  "Nelflow.Settings.CompactTurnStacks.Off": "Off",
+  "Nelflow.Settings.CompactTurnStacks.NpcStrikes": "NPC Strikes Only",
+  "Nelflow.Settings.CollapseLinkedNativeCards.Name": "Collapse Linked Native Cards",
+  "Nelflow.Settings.CollapseLinkedNativeCards.Hint": "Collapse linked PF2e attack, damage, and application cards while keeping their native content and controls available.",
   "Nelflow.Settings.Debug.Name": "Enable Debug Logging",
   "Nelflow.Settings.Debug.Hint": "Log concise Strike and transaction diagnostics to the browser console.",
 
@@ -21,6 +27,42 @@
   "Nelflow.Status.FailedDetail": "Failed: {reason}",
   "Nelflow.Status.Undo": "Undo",
   "Nelflow.Status.UndoTitle": "Restore the recorded HP and temporary HP",
+
+  "Nelflow.Outcome.CriticalFailure": "Critical Failure",
+  "Nelflow.Outcome.Failure": "Failure",
+  "Nelflow.Outcome.Success": "Success",
+  "Nelflow.Outcome.CriticalSuccess": "Critical Success",
+
+  "Nelflow.State.Resolving": "Resolving",
+  "Nelflow.State.PendingApplication": "Pending Application",
+  "Nelflow.State.Applied": "Applied",
+  "Nelflow.State.AppliedAmount": "Applied ({amount} HP)",
+  "Nelflow.State.NotApplied": "Not Applied",
+  "Nelflow.State.Undone": "Undone",
+  "Nelflow.State.UndoBlocked": "Undo Blocked",
+  "Nelflow.State.Error": "Error",
+
+  "Nelflow.Stack.StoredContent": "Nelflow compact turn stack",
+  "Nelflow.Stack.UnknownStrike": "Unknown Strike",
+  "Nelflow.Stack.UnknownCombatant": "Unknown Combatant",
+  "Nelflow.Stack.Round": "Round {round}",
+  "Nelflow.Stack.Standalone": "Outside Combat",
+  "Nelflow.Stack.Map": "MAP {penalty}",
+  "Nelflow.Stack.MapStep": "MAP step {step}",
+  "Nelflow.Stack.Target": "→ {target}",
+  "Nelflow.Stack.Persistent": "persistent",
+  "Nelflow.Stack.Details": "Details",
+  "Nelflow.Stack.DetailsAria": "Expand row details and native message links",
+  "Nelflow.Stack.AttackMessage": "Attack",
+  "Nelflow.Stack.DamageMessage": "Damage",
+  "Nelflow.Stack.RowsAria": "Strike results",
+
+  "Nelflow.Native.ShowDetails": "Show Details",
+  "Nelflow.Native.HideDetails": "Hide Details",
+  "Nelflow.Native.Attack": "PF2e Attack",
+  "Nelflow.Native.Damage": "PF2e Damage",
+  "Nelflow.Native.Application": "PF2e Application",
+  "Nelflow.Native.LinkedMessage": "PF2e Message",
 
   "Nelflow.Reason.AttackFailed": "the Strike did not hit",
   "Nelflow.Reason.NoTarget": "exactly one target is required",
@@ -39,5 +81,6 @@
   "Nelflow.Notification.ApplyFailed": "Nelflow could not apply damage safely. Use PF2e's native damage controls.",
   "Nelflow.Notification.UndoChanged": "Undo blocked: the target's HP or temporary HP changed after Nelflow applied damage.",
   "Nelflow.Notification.UndoUnavailable": "Undo is no longer available for this transaction.",
-  "Nelflow.Notification.UndoFailed": "Nelflow could not restore the recorded HP safely."
+  "Nelflow.Notification.UndoFailed": "Nelflow could not restore the recorded HP safely.",
+  "Nelflow.Notification.NativeMessageUnavailable": "The linked native PF2e message is no longer available."
 }

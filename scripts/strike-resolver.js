@@ -3,6 +3,7 @@ import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { TransactionStore } from "./transaction-store.js";
+import { TurnStackService } from "./turn-stack-service.js";
 
 const inFlight = new Set();
 
@@ -32,11 +33,20 @@ function makeSnapshot(attackMessage, strike, targetToken) {
     sourceTokenUuid: strike.sourceTokenUuid,
     sourceItemUuid: strike.item.uuid,
     strikeIdentifier: strike.identifier,
+    strikeName: strike.item.name,
+    strikeIcon: strike.item.img,
+    sourceName: attackMessage.token?.name ?? strike.actor.name,
+    sourceIcon: attackMessage.token?.texture?.src ?? strike.actor.img,
     attackMessageId: attackMessage.id,
+    attackCreatedAt: attackMessage._stats?.createdTime ?? Date.now(),
     targetActorUuid: targetToken.actor.uuid,
     targetTokenUuid: targetToken.document.uuid,
+    targetName: targetToken.name,
     sceneId: targetToken.document.parent?.id ?? null,
     outcome: strike.outcome,
+    mapIncreases: strike.mapIncreases,
+    mapPenalty: strike.mapPenalty,
+    autoApplyRequested: getSetting(SETTINGS.AUTO_APPLY),
     processingUserId: game.user.id,
     timestamp: Date.now(),
   };
@@ -44,6 +54,28 @@ function makeSnapshot(attackMessage, strike, targetToken) {
 
 function appliedAmount(before, after) {
   return Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp);
+}
+
+async function syncStack(attackMessage, transaction, stage) {
+  try {
+    await TurnStackService.syncTransaction(attackMessage, transaction);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    logger.error(
+      "Compact stack projection failed",
+      logContext(attackMessage, transaction, `stack-${stage}`, reason),
+      error,
+    );
+    try {
+      await TransactionStore.update(attackMessage, { presentationError: reason });
+    } catch (stateError) {
+      logger.error(
+        "Unable to persist compact stack error",
+        logContext(attackMessage, transaction, "persist-stack-error", reason),
+        stateError,
+      );
+    }
+  }
 }
 
 export class StrikeResolver {
@@ -119,17 +151,19 @@ export class StrikeResolver {
       const snapshot = makeSnapshot(message, strike, targetToken);
       transaction = await TransactionStore.claim(message, snapshot);
       if (!transaction) return;
+      await syncStack(message, transaction, "claim");
       logger.debug("Transaction claimed", {
         transactionId: transaction.id,
         snapshot,
       });
 
       if (["failure", "criticalFailure"].includes(strike.outcome)) {
-        await TransactionStore.update(message, {
+        transaction = await TransactionStore.update(message, {
           state: TRANSACTION_STATES.SKIPPED,
           reasonKey: "Nelflow.Reason.AttackFailed",
           targetName: targetToken.name,
         });
+        await syncStack(message, transaction, "skipped");
         return;
       }
 
@@ -147,9 +181,11 @@ export class StrikeResolver {
       transaction = await TransactionStore.update(message, {
         state: TRANSACTION_STATES.DAMAGE_ROLLED,
         damageMessageId: rolled.damageMessage.id,
+        damageSummary: PF2eAdapter.summarizeDamageRoll(rolled.roll),
         targetName: targetToken.name,
       });
-      await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
+      transaction = await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
+      await syncStack(message, transaction, "damage-rolled");
 
       if (!getSetting(SETTINGS.AUTO_APPLY)) return;
 
@@ -189,6 +225,7 @@ export class StrikeResolver {
         appliedAmount: appliedAmount(preApplication, postApplication),
         targetName: targetToken.name,
       });
+      await syncStack(message, transaction, "applied");
       logger.debug("Damage applied", {
         transactionId: transaction.id,
         preApplication,
@@ -204,11 +241,12 @@ export class StrikeResolver {
       );
       if (transaction) {
         try {
-          await TransactionStore.update(message, {
+          transaction = await TransactionStore.update(message, {
             state: TRANSACTION_STATES.FAILED,
             reasonKey: "Nelflow.Reason.ProcessingError",
             errorStage: stage,
           });
+          await syncStack(message, transaction, "failed");
         } catch (stateError) {
           logger.error(
             "Unable to persist terminal failure state",
@@ -264,13 +302,17 @@ export class StrikeResolver {
           ...context,
           reason: "Target HP or temporary HP changed after application",
         });
+        const blocked = await TransactionStore.update(attackMessage, { undoBlocked: true });
+        await syncStack(attackMessage, blocked, "undo-blocked");
         return;
       }
 
       await PF2eAdapter.restoreHealth(targetActor, transaction.preApplication);
-      await TransactionStore.update(attackMessage, {
+      const undone = await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.UNDONE,
+        undoBlocked: false,
       });
+      await syncStack(attackMessage, undone, "undone");
       logger.debug("Transaction undone", {
         transactionId: transaction.id,
         restored: transaction.preApplication,
@@ -278,6 +320,14 @@ export class StrikeResolver {
     } catch (error) {
       notify("Nelflow.Notification.UndoFailed");
       logger.error("Guarded Undo failed", context, error);
+      try {
+        const marked = await TransactionStore.update(attackMessage, {
+          presentationError: error instanceof Error ? error.message : String(error),
+        });
+        await syncStack(attackMessage, marked, "undo-error");
+      } catch (stateError) {
+        logger.error("Unable to persist Undo error", context, stateError);
+      }
     }
   }
 }

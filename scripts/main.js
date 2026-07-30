@@ -1,8 +1,9 @@
-import { renderTransactionStatus } from "./chat-ui.js";
+import { renderNelflowChat } from "./chat-ui.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { registerSettings } from "./settings.js";
 import { StrikeResolver } from "./strike-resolver.js";
+import { TurnStackService } from "./turn-stack-service.js";
 
 Hooks.once("init", () => {
   registerSettings();
@@ -20,6 +21,7 @@ Hooks.once("ready", () => {
   }
 
   PF2eAdapter.initialize();
+  TurnStackService.initialize();
   Hooks.on("createChatMessage", (message) => {
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
       logger.error(
@@ -33,6 +35,6 @@ Hooks.once("ready", () => {
       );
     });
   });
-  Hooks.on("renderChatMessageHTML", renderTransactionStatus);
-  logger.debug("Slice 1 ready");
+  Hooks.on("renderChatMessageHTML", renderNelflowChat);
+  logger.debug("Slice 2 ready");
 });
