@@ -36,5 +36,5 @@ Hooks.once("ready", () => {
     });
   });
   Hooks.on("renderChatMessageHTML", renderNelflowChat);
-  logger.debug("Slice 2 ready");
+  logger.debug("Slice 2.1 ready");
 });

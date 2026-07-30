@@ -4,17 +4,21 @@ Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
 Slice 1 safely continues one GM-authored NPC Strike against one recorded target
 through PF2e's native damage and optional application pathways. Slice 2 groups
 supported Strikes from one combatant turn into a durable compact chat stack.
+Slice 2.1 compacts each safely linked native audit card and reduces redundant
+space inside that stack.
 
 ```text
-Stone Giant — Round 3
+[Foundry speaker: Stone Giant]
+Round 3
 Greatclub → Vincent · Success · 24 bludgeoning · Applied · Undo
 Greatclub · MAP −5 → Vincent · Critical Success · 47 bludgeoning · Applied
 Fist · MAP −10 → Brynna · Failure
 ```
 
 Original PF2e attack, damage, and damage-taken messages remain intact. With
-native collapse enabled, Nelflow hides only their rendered body until Show
-Details is selected; stored content and native controls are not rewritten.
+native collapse enabled, Nelflow shows a concise structured summary and hides
+only the rendered native body until Show Details is selected. Stored content,
+rolls, PF2e flags, and native controls are not rewritten.
 
 ## Requirements
 
@@ -69,6 +73,25 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 The stack is presentation only. The native attack message's canonical
 `flags.nelflow.transaction` remains the sole mechanical state.
 
+## Slice 2.1 native-card compaction
+
+- Linked attack cards summarize the Strike and outcome.
+- Linked damage cards summarize the Strike, evaluated total, and structured
+  damage types without reading or reconstructing the displayed formula.
+- Uniquely linked PF2e damage-application cards show a minimal target and
+  applied HP/temp-HP audit line.
+- Show Details and Hide Details operate independently on each native message.
+  Expansion reveals the original PF2e subtree and all native or companion
+  module controls.
+- Foundry's outer speaker header remains. The stack's inner header now shows
+  only the round or Outside Combat instead of repeating the actor.
+- Closed row Details and guarded Undo controls share the wrapped result line;
+  opening Details exposes exact attack, damage, and application references.
+
+Compaction requires exact Nelflow message linkage, visible message content, and
+the standard direct Foundry message header/content structure. If any check
+fails, Nelflow leaves the full native card visible.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -78,7 +101,8 @@ The stack is presentation only. The native attack message's canonical
 - **Compact Turn Stacks** — `NPC Strikes Only` by default; choose `Off` to keep
   Slice 1 per-message status presentation.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
-  stacks remain active and native PF2e cards stay fully expanded.
+  stacks remain active, native PF2e cards stay fully expanded, and Nelflow adds
+  no replacement collapse controls.
 - **Enable Debug Logging** — disabled by default.
 
 ## Safety and Undo
@@ -107,6 +131,11 @@ Undo Blocked.
   not tracked as an automatic application; the row remains Not Applied.
 - A user-deleted native message cannot be reopened from row Details. The row
   and canonical transaction remain intact.
+- PF2e application-card revert remains native and available after expansion,
+  but does not reconcile Nelflow's separate transaction or stack state.
+- Healing, zero-effect application messages without structured applied-damage
+  data, and ambiguous concurrent application captures are left unlinked and
+  fully native.
 - Reloading while resolution is actively in flight reconstructs the last
   durable row but does not replay it, avoiding a duplicate roll or application.
 - Chat modules that replace Foundry's standard message header/body structure
@@ -119,5 +148,7 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Slice 2 architecture](docs/SLICE_002_COMPACT_TURN_STACKS.md)
 - [Slice 2 runtime test plan](docs/SLICE_002_TEST_PLAN.md)
+- [Slice 2.1 native-card compaction](docs/SLICE_002_1_NATIVE_CARD_COMPACTION.md)
+- [Slice 2.1 runtime test plan](docs/SLICE_002_1_TEST_PLAN.md)
 - [Slice 1 API findings](docs/SLICE_001_API_FINDINGS.md)
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)

@@ -1,6 +1,7 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { logger } from "./logger.js";
+import { formatDamageSummary, NativeCardCompactor } from "./native-card-compactor.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
@@ -86,34 +87,6 @@ function rowState(row) {
   return { key: "Nelflow.State.Error", className: "error" };
 }
 
-function damageTypeLabel(type) {
-  const configured = CONFIG.PF2E?.damageTypes?.[type];
-  if (typeof configured === "string") return localize(configured);
-  if (typeof configured?.label === "string") return localize(configured.label);
-  return type.replaceAll("-", " ");
-}
-
-function damageText(summary) {
-  if (!Number.isFinite(summary?.total)) return "";
-  const components = (summary.components ?? []).filter(
-    (component) => component.type && Number.isFinite(component.total),
-  );
-  if (components.length === 1 && components[0].total === summary.total) {
-    const prefix = components[0].persistent
-      ? `${localize("Nelflow.Stack.Persistent")} `
-      : "";
-    return `${summary.total} ${prefix}${damageTypeLabel(components[0].type)}`;
-  }
-  if (!components.length) return String(summary.total);
-  const details = components
-    .map((component) => {
-      const prefix = component.persistent ? `${localize("Nelflow.Stack.Persistent")} ` : "";
-      return `${component.total} ${prefix}${damageTypeLabel(component.type)}`;
-    })
-    .join(", ");
-  return `${summary.total} (${details})`;
-}
-
 function mapText(row) {
   if (!row.mapIncreases) return "";
   if (!Number.isFinite(row.mapPenalty)) {
@@ -125,32 +98,10 @@ function mapText(row) {
   return format("Nelflow.Stack.Map", { penalty });
 }
 
-function findRenderedMessage(messageId) {
-  return Array.from(document.querySelectorAll("[data-message-id]")).find(
-    (element) => element.dataset.messageId === messageId,
-  );
-}
-
-function setNativeExpanded(element, expanded) {
-  element.classList.toggle("nelflow-native-collapsed", !expanded);
-  const button = element.querySelector(":scope > .message-header .nelflow-native-toggle");
-  if (!button) return;
-  const label = localize(expanded ? "Nelflow.Native.HideDetails" : "Nelflow.Native.ShowDetails");
-  button.title = label;
-  button.setAttribute("aria-label", label);
-  button.setAttribute("aria-expanded", String(expanded));
-  const text = button.querySelector("span");
-  if (text) text.textContent = label;
-}
-
 function revealNativeMessage(messageId) {
-  const element = findRenderedMessage(messageId);
-  if (!element) {
+  if (!NativeCardCompactor.reveal(messageId)) {
     ui.notifications.warn("Nelflow.Notification.NativeMessageUnavailable", { localize: true });
-    return;
   }
-  setNativeExpanded(element, true);
-  element.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 function referenceButton(messageId, labelKey, iconClass) {
@@ -205,7 +156,7 @@ function renderRow(row, canMutate) {
   const outcome = document.createElement("span");
   outcome.textContent = outcomeLabel(row.outcome);
   resultLine.append(outcome);
-  const damage = damageText(row.damageSummary);
+  const damage = formatDamageSummary(row.damageSummary);
   if (damage) {
     const damageLabel = document.createElement("span");
     damageLabel.textContent = damage;
@@ -220,10 +171,35 @@ function renderRow(row, canMutate) {
     });
   }
   if (row.transactionState !== TRANSACTION_STATES.SKIPPED) resultLine.append(stateLabel);
-  main.append(attackLine, resultLine);
+  const details = document.createElement("details");
+  details.className = "nelflow-stack__details";
+  const detailsToggle = document.createElement("summary");
+  detailsToggle.textContent = localize("Nelflow.Stack.Details");
+  detailsToggle.setAttribute("aria-label", localize("Nelflow.Stack.DetailsAria"));
+  const references = document.createElement("div");
+  references.className = "nelflow-stack__references";
+  references.append(
+    referenceButton(row.attackMessageId, "Nelflow.Stack.AttackMessage", "fa-solid fa-dice-d20"),
+    referenceButton(row.damageMessageId, "Nelflow.Stack.DamageMessage", "fa-solid fa-burst"),
+  );
+  if (row.applicationMessageId) {
+    references.append(
+      referenceButton(
+        row.applicationMessageId,
+        "Nelflow.Stack.ApplicationMessage",
+        "fa-solid fa-heart-pulse",
+      ),
+    );
+  }
+  if (row.presentationError) {
+    const error = document.createElement("span");
+    error.className = "nelflow-stack__error";
+    error.textContent = row.presentationError;
+    references.append(error);
+  }
+  details.append(detailsToggle, references);
+  resultLine.append(details);
 
-  const controls = document.createElement("div");
-  controls.className = "nelflow-stack__controls";
   const canUndo =
     canMutate &&
     getSetting(SETTINGS.ENABLE_UNDO) &&
@@ -248,30 +224,12 @@ function renderRow(row, canMutate) {
         }
       }, "stack-row-undo");
     });
-    controls.append(undo);
+    resultLine.append(undo);
   }
 
-  summary.append(image, main, controls);
-
-  const details = document.createElement("details");
-  details.className = "nelflow-stack__details";
-  const detailsToggle = document.createElement("summary");
-  detailsToggle.textContent = localize("Nelflow.Stack.Details");
-  detailsToggle.setAttribute("aria-label", localize("Nelflow.Stack.DetailsAria"));
-  const references = document.createElement("div");
-  references.className = "nelflow-stack__references";
-  references.append(
-    referenceButton(row.attackMessageId, "Nelflow.Stack.AttackMessage", "fa-solid fa-dice-d20"),
-    referenceButton(row.damageMessageId, "Nelflow.Stack.DamageMessage", "fa-solid fa-burst"),
-  );
-  if (row.presentationError) {
-    const error = document.createElement("span");
-    error.className = "nelflow-stack__error";
-    error.textContent = row.presentationError;
-    references.append(error);
-  }
-  details.append(detailsToggle, references);
-  item.append(summary, details);
+  main.append(attackLine, resultLine);
+  summary.append(image, main);
+  item.append(summary);
   return item;
 }
 
@@ -283,18 +241,13 @@ function renderStack(message, html, stack) {
 
   const header = document.createElement("header");
   header.className = "nelflow-stack__header";
-  const portrait = document.createElement("img");
-  portrait.className = "nelflow-stack__portrait";
-  portrait.src = stack.actor?.img ?? "icons/svg/mystery-man.svg";
-  portrait.alt = "";
-  const title = document.createElement("strong");
-  title.textContent = stack.actor?.name ?? localize("Nelflow.Stack.UnknownCombatant");
   const context = document.createElement("span");
+  context.className = "nelflow-stack__context";
   context.textContent =
     stack.kind === "combat-turn"
       ? format("Nelflow.Stack.Round", { round: stack.identity.round })
       : localize("Nelflow.Stack.Standalone");
-  header.append(portrait, title, context);
+  header.append(context);
 
   const rows = document.createElement("ol");
   rows.className = "nelflow-stack__rows";
@@ -400,45 +353,6 @@ function renderLegacyStatus(message, html) {
   (html.querySelector(".message-content") ?? html).append(row);
 }
 
-function collapseNativeCard(message, html) {
-  if (
-    !TurnStackService.enabled() ||
-    !getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS) ||
-    !message.getFlag(MODULE_ID, "transaction") ||
-    html.querySelector(".nelflow-native-toggle")
-  ) {
-    return;
-  }
-
-  const header = html.querySelector(":scope > .message-header");
-  if (!header) return;
-  html.classList.add("nelflow-linked-native", "nelflow-native-collapsed");
-  for (const child of html.children) {
-    if (child !== header) child.classList.add("nelflow-native-detail");
-  }
-
-  const marker = message.getFlag(MODULE_ID, "transaction");
-  const roleKeys = {
-    attack: "Nelflow.Native.Attack",
-    damage: "Nelflow.Native.Damage",
-    application: "Nelflow.Native.Application",
-  };
-  const role = document.createElement("span");
-  role.className = "nelflow-native-label";
-  role.textContent = localize(roleKeys[marker.role] ?? "Nelflow.Native.LinkedMessage");
-
-  const button = labeledButton({
-    className: "nelflow-native-toggle",
-    iconClass: "fa-solid fa-chevron-down",
-    label: localize("Nelflow.Native.ShowDetails"),
-  });
-  button.setAttribute("aria-expanded", "false");
-  button.addEventListener("click", () => {
-    setNativeExpanded(html, html.classList.contains("nelflow-native-collapsed"));
-  });
-  header.append(role, button);
-}
-
 export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
   const stack = message.getFlag(MODULE_ID, "stack");
@@ -447,5 +361,5 @@ export function renderNelflowChat(message, html) {
     return;
   }
   renderLegacyStatus(message, html);
-  collapseNativeCard(message, html);
+  NativeCardCompactor.render(message, html);
 }

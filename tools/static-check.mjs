@@ -64,6 +64,10 @@ if (manifest) {
   if (!manifest.relationships?.systems?.some((system) => system.id === "pf2e")) {
     fail("PF2e system relationship is missing");
   }
+  const packageMetadata = JSON.parse(read("package.json"));
+  if (manifest.version !== packageMetadata.version) {
+    fail("module.json and package.json versions do not match");
+  }
   for (const path of [...(manifest.esmodules ?? []), ...(manifest.styles ?? [])]) {
     if (!existsSync(join(root, path))) fail(`manifest path does not exist: ${path}`);
   }
@@ -168,8 +172,71 @@ if (!mechanicalSource.includes('"multiple-attack-penalty"')) {
 if (!runtimeSource.includes('Hooks.on("renderChatMessageHTML"')) {
   fail("renderChatMessageHTML hook registration is missing");
 }
+if ((runtimeSource.match(/Hooks\.on\(["']renderChatMessageHTML["']/g) ?? []).length !== 1) {
+  fail("there must be exactly one renderChatMessageHTML hook registration");
+}
 if (!existsSync(join(root, "tools", "package.ps1"))) {
   fail("packaging script is missing");
+}
+
+const compactor = read("scripts/native-card-compactor.js");
+if (
+  /\.formula\b|reconstruct.*formula|message\.(?:content|flavor)|_source\.(?:content|flavor)/i.test(
+    compactor,
+  )
+) {
+  fail("native-card presentation appears to inspect or reconstruct displayed damage data");
+}
+if (/\b(?:message|damageMessage|attackMessage)\.(?:update|setFlag)\s*\(/.test(compactor)) {
+  fail("native-card presentation must not persistently mutate ChatMessages");
+}
+if (/\basync\s+(?:function|render\b)|static\s+async\s+render\b/.test(compactor)) {
+  fail("native-card rendering must remain synchronous");
+}
+if (
+  !compactor.includes("resolved.transaction.applicationMessageId") ||
+  !compactor.includes("message.isContentVisible") ||
+  !compactor.includes("standard direct message header/content not available") ||
+  !compactor.includes("if (existing) return")
+) {
+  fail("native-card linkage, visibility, fail-open, or duplicate-listener guard is missing");
+}
+if (/rolls\s*:|["']rolls["']\s*:/.test(runtimeSource)) {
+  fail("runtime code appears to replace native PF2e rolls");
+}
+
+const captureSection =
+  adapter.match(/function captureMatches[\s\S]*?function onPreCreateChatMessage/)?.[0] ?? "";
+for (const required of [
+  "flags.appliedDamage?.uuid",
+  "flags.appliedDamage?.isHealing === false",
+  "flags.origin?.actor === capture.sourceActorUuid",
+  "speakerToken === capture.targetTokenId",
+]) {
+  if (!captureSection.includes(required)) {
+    fail(`application capture is missing structured guard: ${required}`);
+  }
+}
+if (/\.content\b|textContent|innerText|Date\.now|createdTime/.test(captureSection)) {
+  fail("application capture appears to correlate by text, content, or timing");
+}
+if (
+  !adapter.includes('capture.role === "application"') ||
+  !adapter.includes("capture.candidates.length === 1")
+) {
+  fail("application capture must require one unique structured lifecycle candidate");
+}
+
+const packageScript = read("tools/package.ps1");
+if (
+  !packageScript.includes('@("scripts", "styles", "lang", "docs")') ||
+  !packageScript.includes("module.json") ||
+  !packageScript.includes("README.md")
+) {
+  fail("package script runtime/documentation allowlist is incomplete");
+}
+if (/Copy-Item[\s\S]*\$projectRoot\s+-Destination/.test(packageScript)) {
+  fail("package script appears capable of recursively packaging the project root");
 }
 
 for (const relativePath of walkAll()) {

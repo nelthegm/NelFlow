@@ -1,0 +1,240 @@
+import { MODULE_ID, SETTINGS } from "./constants.js";
+import { logger } from "./logger.js";
+import { PF2eAdapter } from "./pf2e-adapter.js";
+import { getSetting } from "./settings.js";
+import { TransactionStore } from "./transaction-store.js";
+import { TurnStackService } from "./turn-stack-service.js";
+
+const reportedFailures = new Set();
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function format(key, data) {
+  return game.i18n.format(key, data);
+}
+
+function damageTypeLabel(type) {
+  const configured = CONFIG.PF2E?.damageTypes?.[type];
+  if (typeof configured === "string") return localize(configured);
+  if (typeof configured?.label === "string") return localize(configured.label);
+  return type.replaceAll("-", " ");
+}
+
+/** Format only the structured DamageRoll summary already persisted by Slice 2. */
+export function formatDamageSummary(summary) {
+  if (!Number.isFinite(summary?.total)) return "";
+  const components = (summary.components ?? []).filter(
+    (component) => component.type && Number.isFinite(component.total),
+  );
+  if (components.length === 1 && components[0].total === summary.total) {
+    const persistent = components[0].persistent
+      ? `${localize("Nelflow.Stack.Persistent")} `
+      : "";
+    return `${summary.total} ${persistent}${damageTypeLabel(components[0].type)}`;
+  }
+  if (!components.length) return String(summary.total);
+  const details = components
+    .map((component) => {
+      const persistent = component.persistent
+        ? `${localize("Nelflow.Stack.Persistent")} `
+        : "";
+      return `${component.total} ${persistent}${damageTypeLabel(component.type)}`;
+    })
+    .join(", ");
+  return `${summary.total} (${details})`;
+}
+
+function debugFailureOnce(message, reason) {
+  const key = `${message.id}:${reason}`;
+  if (reportedFailures.has(key)) return;
+  reportedFailures.add(key);
+  logger.debug("Native card compaction skipped", {
+    messageId: message.id,
+    stage: "native-card-render",
+    reason,
+  });
+}
+
+function identifyLinkedMessage(message) {
+  const marker = message.getFlag(MODULE_ID, "transaction");
+  if (!marker?.id || !["attack", "damage", "application"].includes(marker.role)) return null;
+  const resolved = TransactionStore.resolveCanonical(message);
+  if (!resolved || resolved.transaction.id !== marker.id) return null;
+
+  const expectedIds = {
+    attack: resolved.transaction.attackMessageId,
+    damage: resolved.transaction.damageMessageId,
+    application: resolved.transaction.applicationMessageId,
+  };
+  if (!expectedIds[marker.role] || expectedIds[marker.role] !== message.id) return null;
+  return { marker, ...resolved };
+}
+
+function outcomeLabel(outcome) {
+  const keys = {
+    criticalFailure: "Nelflow.Outcome.CriticalFailure",
+    failure: "Nelflow.Outcome.Failure",
+    success: "Nelflow.Outcome.Success",
+    criticalSuccess: "Nelflow.Outcome.CriticalSuccess",
+  };
+  return localize(keys[outcome] ?? "Nelflow.State.Error");
+}
+
+/**
+ * PF2e may obscure token names for players. Use the persisted name only when
+ * the current viewer is a GM or PF2e reports that the rendered token name is
+ * visible; otherwise use a neutral localized label.
+ */
+function visibleApplicationTarget(message, transaction) {
+  const recorded =
+    transaction.targetName ??
+    transaction.snapshot?.targetName ??
+    localize("Nelflow.Native.Target");
+  if (game.user.isGM) return recorded;
+  const token = message.token;
+  const nameVisibilityEnabled = Boolean(game.pf2e?.settings?.tokens?.nameVisibility);
+  if (token && (!nameVisibilityEnabled || token.playersCanSeeName)) {
+    return recorded;
+  }
+  return localize("Nelflow.Native.Target");
+}
+
+function summaryText(message, role, transaction) {
+  const strike = transaction.snapshot?.strikeName ?? localize("Nelflow.Stack.UnknownStrike");
+  if (role === "attack") {
+    return format("Nelflow.Native.AttackSummary", {
+      strike,
+      outcome: outcomeLabel(transaction.snapshot?.outcome),
+    });
+  }
+  if (role === "damage") {
+    const rollSummary =
+      transaction.damageSummary ??
+      PF2eAdapter.summarizeDamageRoll(message.rolls?.find((roll) => roll?.instances));
+    const damage = formatDamageSummary(rollSummary);
+    return damage
+      ? format("Nelflow.Native.DamageSummary", { strike, damage })
+      : format("Nelflow.Native.DamageSummaryUnavailable", { strike });
+  }
+
+  const target = visibleApplicationTarget(message, transaction);
+  return Number.isFinite(transaction.appliedAmount)
+    ? format("Nelflow.Native.ApplicationSummary", {
+        target,
+        amount: transaction.appliedAmount,
+      })
+    : format("Nelflow.Native.ApplicationSummaryUnavailable", { target });
+}
+
+function makeToggle() {
+  const label = localize("Nelflow.Native.ShowDetails");
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "nelflow-native-toggle";
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-expanded", "false");
+
+  const icon = document.createElement("i");
+  icon.className = "fa-solid fa-chevron-down";
+  icon.setAttribute("aria-hidden", "true");
+  const text = document.createElement("span");
+  text.textContent = label;
+  button.append(icon, text);
+  return button;
+}
+
+function setExpanded(element, expanded) {
+  element.classList.toggle("nelflow-native-collapsed", !expanded);
+  const button = element.querySelector(":scope > .nelflow-native-summary .nelflow-native-toggle");
+  if (!button) return;
+
+  const label = localize(expanded ? "Nelflow.Native.HideDetails" : "Nelflow.Native.ShowDetails");
+  button.title = label;
+  button.setAttribute("aria-label", label);
+  button.setAttribute("aria-expanded", String(expanded));
+  const text = button.querySelector("span");
+  if (text) text.textContent = label;
+  const toggleIcon = button.querySelector("i");
+  toggleIcon?.classList.toggle("fa-chevron-up", expanded);
+  toggleIcon?.classList.toggle("fa-chevron-down", !expanded);
+}
+
+function restoreFullCard(html) {
+  html.classList.remove("nelflow-linked-native", "nelflow-native-collapsed");
+  html.querySelector(":scope > .nelflow-native-summary")?.remove();
+  for (const element of html.querySelectorAll(".nelflow-native-detail")) {
+    element.classList.remove("nelflow-native-detail");
+  }
+}
+
+function compactCard(message, html, linked) {
+  const directChildren = Array.from(html.children);
+  const header = directChildren.find((element) => element.classList.contains("message-header"));
+  const content = directChildren.find((element) => element.classList.contains("message-content"));
+  if (!header || !content) {
+    debugFailureOnce(message, "standard direct message header/content not available");
+    return;
+  }
+
+  const summary = document.createElement("div");
+  summary.className = `nelflow-native-summary nelflow-native-summary--${linked.marker.role}`;
+  summary.dataset.nelflowRole = linked.marker.role;
+  const text = document.createElement("span");
+  text.className = "nelflow-native-summary__text";
+  text.textContent = summaryText(message, linked.marker.role, linked.transaction);
+  const button = makeToggle();
+  button.addEventListener("click", () => {
+    setExpanded(html, html.classList.contains("nelflow-native-collapsed"));
+  });
+  summary.append(text, button);
+
+  // Mutate only the pending rendered HTMLElement. The stored PF2e content and
+  // its native listener-bearing descendants remain untouched.
+  header.after(summary);
+  content.classList.add("nelflow-native-detail");
+  html.classList.add("nelflow-linked-native", "nelflow-native-collapsed");
+}
+
+function findRenderedMessage(messageId) {
+  return Array.from(document.querySelectorAll("[data-message-id]")).find(
+    (element) => element.dataset.messageId === messageId,
+  );
+}
+
+export class NativeCardCompactor {
+  static render(message, html) {
+    const existing = html.querySelector(":scope > .nelflow-native-summary");
+    if (!TurnStackService.enabled() || !getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
+      if (existing) restoreFullCard(html);
+      return;
+    }
+
+    const linked = identifyLinkedMessage(message);
+    if (!linked || !message.visible || !message.isContentVisible) {
+      if (existing) restoreFullCard(html);
+      return;
+    }
+    if (existing) return;
+
+    try {
+      compactCard(message, html, linked);
+    } catch (error) {
+      restoreFullCard(html);
+      debugFailureOnce(
+        message,
+        error instanceof Error ? error.message : "unexpected presentation failure",
+      );
+    }
+  }
+
+  static reveal(messageId) {
+    const element = findRenderedMessage(messageId);
+    if (!element) return false;
+    if (element.querySelector(":scope > .nelflow-native-summary")) setExpanded(element, true);
+    element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return true;
+  }
+}

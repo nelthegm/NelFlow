@@ -35,30 +35,54 @@ function captureMatches(capture, document) {
   }
 
   const speakerToken = document.speaker?.token ?? document._source?.speaker?.token;
-  return speakerToken === capture.targetTokenId;
+  return (
+    speakerToken === capture.targetTokenId &&
+    flags.origin?.actor === capture.sourceActorUuid &&
+    flags.appliedDamage?.uuid === capture.targetActorUuid &&
+    flags.appliedDamage?.isHealing === false
+  );
 }
 
 function onPreCreateChatMessage(document, _data, _options, userId) {
   if (userId !== game.user.id) return;
 
-  for (const capture of pendingCaptures.values()) {
-    if (capture.message || !captureMatches(capture, document)) continue;
-    document.updateSource({
-      flags: {
-        [MODULE_ID]: {
-          transaction: transactionMarker(capture),
-        },
+  const matches = Array.from(pendingCaptures.values()).filter(
+    (capture) =>
+      capture.role === "damage" && !capture.message && captureMatches(capture, document),
+  );
+  if (!matches.length) return;
+
+  // Damage-message capture is part of Slice 1 mechanics and retains its
+  // established pre-create marker behavior.
+  const capture = matches[0];
+  document.updateSource({
+    flags: {
+      [MODULE_ID]: {
+        transaction: transactionMarker(capture),
       },
-    });
-    break;
-  }
+    },
+  });
 }
 
 function onCreateChatMessage(message) {
   const marker = message.flags?.[MODULE_ID]?.transaction;
-  if (!marker?.id || !marker.role) return;
-  const capture = pendingCaptures.get(captureKey(marker.id, marker.role));
-  if (capture) capture.message = message;
+  if (marker?.id && marker.role) {
+    const capture = pendingCaptures.get(captureKey(marker.id, marker.role));
+    if (capture) capture.message = message;
+  }
+
+  // PF2e's application method does not return its ChatMessage. Collect every
+  // structurally matching candidate during the awaited native call and accept
+  // it only if the set is unique when that call finishes.
+  for (const capture of pendingCaptures.values()) {
+    if (
+      capture.role === "application" &&
+      captureMatches(capture, message) &&
+      !capture.candidates.some((candidate) => candidate.id === message.id)
+    ) {
+      capture.candidates.push(message);
+    }
+  }
 }
 
 function createCapture({ transactionId, attackMessageId, role, sourceActorUuid, itemUuid, targetToken }) {
@@ -70,6 +94,8 @@ function createCapture({ transactionId, attackMessageId, role, sourceActorUuid, 
     itemUuid,
     targetTokenUuid: targetToken.document.uuid,
     targetTokenId: targetToken.document.id,
+    targetActorUuid: targetToken.actor.uuid,
+    candidates: [],
     message: null,
   };
   pendingCaptures.set(captureKey(transactionId, role), capture);
@@ -78,6 +104,9 @@ function createCapture({ transactionId, attackMessageId, role, sourceActorUuid, 
 
 function finishCapture(capture) {
   pendingCaptures.delete(captureKey(capture.transactionId, capture.role));
+  if (capture.role === "application") {
+    return capture.candidates.length === 1 ? capture.candidates[0] : null;
+  }
   if (capture.message) return capture.message;
   return game.messages.find(
     (candidate) =>
