@@ -1,0 +1,283 @@
+import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
+import { logger } from "./logger.js";
+import { PF2eAdapter } from "./pf2e-adapter.js";
+import { getSetting } from "./settings.js";
+import { TransactionStore } from "./transaction-store.js";
+
+const inFlight = new Set();
+
+function localize(key) {
+  return game.i18n.localize(key);
+}
+
+function notify(key) {
+  ui.notifications.warn(key, { localize: true });
+}
+
+function logContext(attackMessage, transaction, stage, reason) {
+  const snapshot = transaction?.snapshot;
+  return {
+    attackMessageId: attackMessage?.id,
+    transactionId: transaction?.id,
+    sourceActorUuid: snapshot?.sourceActorUuid,
+    targetActorUuid: snapshot?.targetActorUuid,
+    stage,
+    reason,
+  };
+}
+
+function makeSnapshot(attackMessage, strike, targetToken) {
+  return {
+    sourceActorUuid: strike.actor.uuid,
+    sourceTokenUuid: strike.sourceTokenUuid,
+    sourceItemUuid: strike.item.uuid,
+    strikeIdentifier: strike.identifier,
+    attackMessageId: attackMessage.id,
+    targetActorUuid: targetToken.actor.uuid,
+    targetTokenUuid: targetToken.document.uuid,
+    sceneId: targetToken.document.parent?.id ?? null,
+    outcome: strike.outcome,
+    processingUserId: game.user.id,
+    timestamp: Date.now(),
+  };
+}
+
+function appliedAmount(before, after) {
+  return Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp);
+}
+
+export class StrikeResolver {
+  static async handleAttackMessage(message) {
+    if (
+      !getSetting(SETTINGS.ENABLED) ||
+      !PF2eAdapter.isEnvironmentSupported() ||
+      !game.user.isGM ||
+      message.author?.id !== game.user.id ||
+      TransactionStore.get(message) ||
+      inFlight.has(message.id)
+    ) {
+      return;
+    }
+
+    const isStrikeCandidate = PF2eAdapter.isNpcStrikeCandidate(message);
+    const strike = PF2eAdapter.inspectStrikeMessage(message);
+    logger.debug("Chat message inspection", PF2eAdapter.diagnosticSummary(message, strike));
+    if (!strike) {
+      if (isStrikeCandidate) {
+        notify("Nelflow.Notification.UnresolvedStrike");
+        logger.warn("Unable to resolve NPC Strike", {
+          attackMessageId: message.id,
+          sourceActorUuid: message.actor?.uuid,
+          stage: "detect",
+          reason: localize("Nelflow.Reason.UnresolvedStrike"),
+        });
+      }
+      return;
+    }
+
+    inFlight.add(message.id);
+    let transaction = null;
+    let stage = "detect";
+    try {
+      const targets = PF2eAdapter.selectedTargets();
+      if (targets.length === 0) {
+        notify("Nelflow.Notification.NoTarget");
+        logger.warn(
+          "Strike skipped",
+          logContext(message, transaction, stage, localize("Nelflow.Reason.NoTarget")),
+        );
+        return;
+      }
+      if (targets.length !== 1) {
+        notify("Nelflow.Notification.MultipleTargets");
+        logger.warn(
+          "Strike skipped",
+          logContext(message, transaction, stage, localize("Nelflow.Reason.MultipleTargets")),
+        );
+        return;
+      }
+
+      const targetToken = PF2eAdapter.resolveRecordedTarget(strike, targets[0]);
+      if (!targetToken) {
+        notify("Nelflow.Notification.TargetMismatch");
+        logger.warn(
+          "Strike skipped",
+          logContext(message, transaction, stage, localize("Nelflow.Reason.TargetMismatch")),
+        );
+        return;
+      }
+
+      if (!strike.outcome || !PF2eAdapter.hasNativeDamageMethod(strike)) {
+        notify("Nelflow.Notification.UnresolvedStrike");
+        logger.warn(
+          "Strike outcome or damage method unavailable",
+          logContext(message, transaction, stage, localize("Nelflow.Reason.UnresolvedStrike")),
+        );
+        return;
+      }
+
+      const snapshot = makeSnapshot(message, strike, targetToken);
+      transaction = await TransactionStore.claim(message, snapshot);
+      if (!transaction) return;
+      logger.debug("Transaction claimed", {
+        transactionId: transaction.id,
+        snapshot,
+      });
+
+      if (["failure", "criticalFailure"].includes(strike.outcome)) {
+        await TransactionStore.update(message, {
+          state: TRANSACTION_STATES.SKIPPED,
+          reasonKey: "Nelflow.Reason.AttackFailed",
+          targetName: targetToken.name,
+        });
+        return;
+      }
+
+      stage = "roll-damage";
+      const rolled = await PF2eAdapter.rollStrikeDamage({
+        attackMessage: message,
+        strike,
+        targetToken,
+        transactionId: transaction.id,
+      });
+      if (!rolled) {
+        throw new Error(localize("Nelflow.Reason.DamageMessageMissing"));
+      }
+
+      transaction = await TransactionStore.update(message, {
+        state: TRANSACTION_STATES.DAMAGE_ROLLED,
+        damageMessageId: rolled.damageMessage.id,
+        targetName: targetToken.name,
+      });
+      await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
+
+      if (!getSetting(SETTINGS.AUTO_APPLY)) return;
+
+      stage = "apply-damage";
+      const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
+      if (!preApplication) {
+        throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+      }
+
+      const applied = await PF2eAdapter.applyDamageToRecordedTarget({
+        attackMessage: message,
+        damageMessage: rolled.damageMessage,
+        strike,
+        targetToken,
+        transactionId: transaction.id,
+      });
+      if (!applied) {
+        throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+      }
+
+      const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
+      if (!postApplication) {
+        throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+      }
+
+      if (applied.applicationMessage) {
+        transaction = await TransactionStore.linkMessage(
+          message,
+          applied.applicationMessage,
+          "application",
+        );
+      }
+      transaction = await TransactionStore.update(message, {
+        state: TRANSACTION_STATES.APPLIED,
+        preApplication,
+        postApplication,
+        appliedAmount: appliedAmount(preApplication, postApplication),
+        targetName: targetToken.name,
+      });
+      logger.debug("Damage applied", {
+        transactionId: transaction.id,
+        preApplication,
+        postApplication,
+        appliedAmount: transaction.appliedAmount,
+      });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      logger.error(
+        "Strike automation failed",
+        logContext(message, transaction, stage, reason),
+        error,
+      );
+      if (transaction) {
+        try {
+          await TransactionStore.update(message, {
+            state: TRANSACTION_STATES.FAILED,
+            reasonKey: "Nelflow.Reason.ProcessingError",
+            errorStage: stage,
+          });
+        } catch (stateError) {
+          logger.error(
+            "Unable to persist terminal failure state",
+            logContext(message, transaction, "persist-failure", reason),
+            stateError,
+          );
+        }
+      }
+      if (stage === "apply-damage" || stage === "roll-damage") {
+        notify("Nelflow.Notification.ApplyFailed");
+      }
+    } finally {
+      inFlight.delete(message.id);
+    }
+  }
+
+  static async undoFromMessage(message) {
+    if (!game.user.isGM || !getSetting(SETTINGS.ENABLE_UNDO)) return;
+    const resolved = TransactionStore.resolveCanonical(message);
+    if (!resolved) {
+      notify("Nelflow.Notification.UndoUnavailable");
+      return;
+    }
+
+    const { attackMessage, transaction } = resolved;
+    const context = logContext(attackMessage, transaction, "undo", null);
+    if (
+      transaction.state !== TRANSACTION_STATES.APPLIED ||
+      !transaction.preApplication ||
+      !transaction.postApplication
+    ) {
+      notify("Nelflow.Notification.UndoUnavailable");
+      return;
+    }
+
+    try {
+      const targetToken = await PF2eAdapter.resolveToken(transaction.snapshot.targetTokenUuid);
+      const targetActor = targetToken?.actor;
+      if (!targetActor || targetActor.uuid !== transaction.snapshot.targetActorUuid) {
+        notify("Nelflow.Notification.UndoUnavailable");
+        logger.warn("Undo target unavailable", {
+          ...context,
+          reason: "Recorded target no longer resolves",
+        });
+        return;
+      }
+
+      const current = PF2eAdapter.healthSnapshot(targetActor);
+      const expected = transaction.postApplication;
+      if (!current || current.hp !== expected.hp || current.tempHp !== expected.tempHp) {
+        notify("Nelflow.Notification.UndoChanged");
+        logger.warn("Undo guard blocked restoration", {
+          ...context,
+          reason: "Target HP or temporary HP changed after application",
+        });
+        return;
+      }
+
+      await PF2eAdapter.restoreHealth(targetActor, transaction.preApplication);
+      await TransactionStore.update(attackMessage, {
+        state: TRANSACTION_STATES.UNDONE,
+      });
+      logger.debug("Transaction undone", {
+        transactionId: transaction.id,
+        restored: transaction.preApplication,
+      });
+    } catch (error) {
+      notify("Nelflow.Notification.UndoFailed");
+      logger.error("Guarded Undo failed", context, error);
+    }
+  }
+}

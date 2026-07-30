@@ -1,0 +1,33 @@
+.nelflow-status {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-cool-5, #282d3b) 12%, transparent);
+  border-left: 2px solid var(--color-warm-1, #ee9b3a);
+  display: flex;
+  font-size: var(--font-size-12, 0.75rem);
+  gap: 0.4rem;
+  justify-content: space-between;
+  line-height: 1.2;
+  margin-top: 0.3rem;
+  min-height: 1.5rem;
+  padding: 0.2rem 0.35rem;
+}
+
+.nelflow-status__text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.nelflow-status__undo {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: inherit;
+  gap: 0.2rem;
+  min-height: 1.25rem;
+  padding: 0.1rem 0.35rem;
+}
+
+.nelflow-status__undo:disabled {
+  cursor: progress;
+  opacity: 0.65;
+}

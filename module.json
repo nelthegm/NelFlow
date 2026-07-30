@@ -1,0 +1,35 @@
+{
+  "id": "nelflow",
+  "title": "Nelflow",
+  "description": "An experimental PF2e combat-resolution workflow module.",
+  "version": "0.1.0",
+  "authors": [
+    {
+      "name": "Nelson Cruz"
+    }
+  ],
+  "compatibility": {
+    "minimum": "14"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "pf2e",
+        "type": "system"
+      }
+    ]
+  },
+  "esmodules": [
+    "scripts/main.js"
+  ],
+  "styles": [
+    "styles/nelflow.css"
+  ],
+  "languages": [
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/en.json"
+    }
+  ]
+}

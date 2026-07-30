@@ -1,0 +1,21 @@
+# Foundry and build artifacts
+*.zip
+dist/
+storage/
+logs/
+cache/
+
+# Dependencies and coverage
+node_modules/
+coverage/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Local scratch files
+*.log
+*.tmp
+*.bak
