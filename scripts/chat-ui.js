@@ -9,6 +9,7 @@ import {
   strikeOutcomeLabel,
 } from "./presentation-format.js";
 import { renderDurableStackFallback } from "./stack-fallback.js";
+import { failOpenSaveResolver, renderSaveResolverChat } from "./save-resolver-ui.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
@@ -454,6 +455,7 @@ export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
   let stack = null;
   try {
+    if (renderSaveResolverChat(message, html)) return;
     stack = message.getFlag(MODULE_ID, "stack");
     if (stack) {
       if (!validStackProjection(stack)) throw new Error("Invalid persisted stack projection");
@@ -464,8 +466,16 @@ export function renderNelflowChat(message, html) {
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
   } catch (error) {
-    html.classList.remove("nelflow-native-record-hidden", "nelflow-native-collapsed");
+    html.classList.remove(
+      "nelflow-native-record-hidden",
+      "nelflow-native-collapsed",
+      "nelflow-save-native-hidden",
+    );
     NativeRecordsController.failOpen(stack?.id);
+    failOpenSaveResolver(
+      message.getFlag(MODULE_ID, "saveResolver")?.resolverId ??
+        message.getFlag(MODULE_ID, "saveResolverNative")?.resolverId,
+    );
     if (stack && canRenderStackForViewer(message)) {
       try {
         renderDurableStackFallback(message, html, stack);

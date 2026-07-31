@@ -269,6 +269,161 @@
   display: none !important;
 }
 
+.nelflow-save-native-hidden {
+  display: none !important;
+}
+
+.nelflow-save-native-label {
+  align-items: center;
+  color: var(--color-text-subtle, #666);
+  font-size: var(--font-size-11, 0.6875rem);
+  font-weight: 600;
+  display: flex;
+  gap: 0.3rem;
+  justify-content: space-between;
+  padding: 0.08rem 0.25rem;
+}
+
+.nelflow-save-native-toggle {
+  align-items: center;
+  display: inline-flex;
+  font-size: inherit;
+  gap: 0.2rem;
+  min-height: 1.2rem;
+  padding: 0.04rem 0.22rem;
+  width: auto;
+}
+
+.nelflow-save-native-collapsed > .message-header,
+.nelflow-save-native-collapsed > .message-content {
+  display: none !important;
+}
+
+.nelflow-save-start,
+.nelflow-save button,
+.nelflow-save select,
+.nelflow-save input {
+  font-size: var(--font-size-11, 0.6875rem);
+  min-height: 1.3rem;
+  padding: 0.08rem 0.28rem;
+  width: auto;
+}
+
+.nelflow-save__override-reason {
+  max-width: 8rem;
+}
+
+.nelflow-save-start {
+  align-items: center;
+  display: flex;
+  gap: 0.3rem;
+  justify-content: center;
+  margin-top: 0.25rem;
+  width: 100%;
+}
+
+.nelflow-save,
+.nelflow-save-fallback {
+  border: 1px solid color-mix(in srgb, var(--color-border-light-2, #999) 55%, transparent);
+  border-radius: 3px;
+  font-size: var(--font-size-12, 0.75rem);
+  overflow: hidden;
+}
+
+.nelflow-save__header {
+  align-items: center;
+  background: color-mix(in srgb, var(--color-cool-5, #282d3b) 14%, transparent);
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  padding: 0.2rem 0.3rem;
+}
+
+.nelflow-save__header > img,
+.nelflow-save__target-image {
+  border: 0;
+  height: 1.6rem;
+  object-fit: cover;
+  width: 1.6rem;
+}
+
+.nelflow-save__header small {
+  color: var(--color-text-subtle, #666);
+  display: block;
+}
+
+.nelflow-save__progress {
+  color: var(--color-text-subtle, #666);
+  padding: 0.14rem 0.3rem;
+}
+
+.nelflow-save__targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nelflow-save__target {
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #999) 35%, transparent);
+  display: grid;
+  gap: 0.3rem;
+  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
+  margin: 0;
+  padding: 0.2rem 0.3rem;
+}
+
+.nelflow-save__target-body {
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.nelflow-save__result {
+  color: var(--color-text-subtle, #666);
+  overflow-wrap: anywhere;
+}
+
+.nelflow-save__controls,
+.nelflow-save__footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  justify-content: flex-end;
+}
+
+.nelflow-save__footer {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #999) 35%, transparent);
+  padding: 0.2rem 0.3rem;
+}
+
+.nelflow-save__details {
+  display: inline-block;
+}
+
+.nelflow-save__details > summary {
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.nelflow-save__target--applied .nelflow-save__result {
+  color: var(--color-level-success, #267a3e);
+}
+
+.nelflow-save__target--manual .nelflow-save__result,
+.nelflow-save__target--undo-blocked .nelflow-save__result {
+  color: var(--color-level-warning, #936b00);
+}
+
+.nelflow-save-fallback {
+  padding: 0.3rem;
+}
+
+.nelflow-save-fallback ol {
+  margin: 0.2rem 0 0;
+  padding-left: 1.2rem;
+}
+
 .nelflow-native-highlight {
   animation: nelflow-native-highlight 1.4s ease-out;
 }

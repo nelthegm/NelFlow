@@ -9,6 +9,8 @@ export const SETTINGS = Object.freeze({
   COMPACT_TURN_STACKS: "compactTurnStacks",
   COLLAPSE_LINKED_NATIVE_CARDS: "collapseLinkedNativeCards",
   STACK_FIRST_NATIVE_RECORDS: "stackFirstNativeRecords",
+  BASIC_SAVE_RESOLVER: "basicSaveResolver",
+  AUTO_APPLY_BASIC_SAVE_DAMAGE: "autoApplyBasicSaveDamage",
   DEBUG: "debug",
 });
 
@@ -23,6 +25,13 @@ export const STACK_FIRST_NATIVE_RECORD_MODES = Object.freeze({
 });
 
 export const STACK_SCHEMA_VERSION = 2;
+
+export const BASIC_SAVE_RESOLVER_MODES = Object.freeze({
+  OFF: "off",
+  NPC_SPELLS: "npc-spells",
+});
+
+export const SAVE_RESOLVER_SCHEMA_VERSION = 1;
 
 export const TRANSACTION_STATES = Object.freeze({
   DETECTED: "detected",

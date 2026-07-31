@@ -1,4 +1,5 @@
 import {
+  BASIC_SAVE_RESOLVER_MODES,
   COMPACT_STACK_MODES,
   MODULE_ID,
   SETTINGS,
@@ -60,6 +61,25 @@ const SETTING_DEFINITIONS = [
     },
     default: STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK,
     onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.BASIC_SAVE_RESOLVER,
+    name: "Nelflow.Settings.BasicSaveResolver.Name",
+    hint: "Nelflow.Settings.BasicSaveResolver.Hint",
+    type: String,
+    choices: {
+      [BASIC_SAVE_RESOLVER_MODES.OFF]: "Nelflow.Settings.BasicSaveResolver.Off",
+      [BASIC_SAVE_RESOLVER_MODES.NPC_SPELLS]:
+        "Nelflow.Settings.BasicSaveResolver.NpcSpells",
+    },
+    default: BASIC_SAVE_RESOLVER_MODES.NPC_SPELLS,
+    onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.AUTO_APPLY_BASIC_SAVE_DAMAGE,
+    name: "Nelflow.Settings.AutoApplyBasicSaveDamage.Name",
+    hint: "Nelflow.Settings.AutoApplyBasicSaveDamage.Hint",
+    default: true,
   },
   {
     key: SETTINGS.DEBUG,

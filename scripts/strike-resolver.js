@@ -1,6 +1,7 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { DAMAGE_CORRELATION_REASONS } from "./damage-correlation.js";
 import { logger } from "./logger.js";
+import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
@@ -374,9 +375,16 @@ export class StrikeResolver {
     }
 
     try {
-      const targetToken = await PF2eAdapter.resolveToken(transaction.snapshot.targetTokenUuid);
-      const targetActor = targetToken?.actor;
-      if (!targetActor || targetActor.uuid !== transaction.snapshot.targetActorUuid) {
+      const restored = await guardedHealthRestore({
+        resolveToken: (uuid) => PF2eAdapter.resolveToken(uuid),
+        healthSnapshot: (actor) => PF2eAdapter.healthSnapshot(actor),
+        restoreHealth: (actor, snapshot) => PF2eAdapter.restoreHealth(actor, snapshot),
+        targetTokenUuid: transaction.snapshot.targetTokenUuid,
+        targetActorUuid: transaction.snapshot.targetActorUuid,
+        preApplication: transaction.preApplication,
+        postApplication: transaction.postApplication,
+      });
+      if (restored.reason === "target-unavailable") {
         notify("Nelflow.Notification.UndoUnavailable");
         logger.warn("Undo target unavailable", {
           ...context,
@@ -384,10 +392,7 @@ export class StrikeResolver {
         });
         return;
       }
-
-      const current = PF2eAdapter.healthSnapshot(targetActor);
-      const expected = transaction.postApplication;
-      if (!current || current.hp !== expected.hp || current.tempHp !== expected.tempHp) {
+      if (restored.reason === "health-changed") {
         notify("Nelflow.Notification.UndoChanged");
         logger.warn("Undo guard blocked restoration", {
           ...context,
@@ -397,8 +402,6 @@ export class StrikeResolver {
         await syncStack(attackMessage, blocked, "undo-blocked");
         return;
       }
-
-      await PF2eAdapter.restoreHealth(targetActor, transaction.preApplication);
       const undone = await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.UNDONE,
         undoBlocked: false,

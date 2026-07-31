@@ -8,6 +8,9 @@ import {
 import { logger } from "./logger.js";
 
 const pendingApplicationCaptures = new Map();
+const pendingSpellDamageCaptures = new Map();
+const messageObservers = new Set();
+let spellDamageQueue = Promise.resolve();
 let hooksRegistered = false;
 
 function shortId(value) {
@@ -64,6 +67,40 @@ function applicationCaptureMatches(capture, document) {
   );
 }
 
+function spellDamageCaptureMatches(capture, document) {
+  const flags = messageFlags(document);
+  const authorUserId =
+    document.author?.id ?? document.user?.id ?? document._source?.user ?? document._source?.author;
+  return (
+    flags.context?.type === "damage-roll" &&
+    flags.origin?.actor === capture.sourceActorUuid &&
+    flags.origin?.uuid === capture.itemUuid &&
+    authorUserId === capture.processingUserId &&
+    document.isDamageRoll === true &&
+    Boolean(document.rolls?.find((roll) => Array.isArray(roll?.instances)))
+  );
+}
+
+function onPreCreateChatMessage(document) {
+  for (const capture of pendingSpellDamageCaptures.values()) {
+    if (!spellDamageCaptureMatches(capture, document)) continue;
+    document.updateSource({
+      [`flags.${MODULE_ID}.saveResolverNative`]: {
+        resolverId: capture.resolverId,
+        sourceMessageId: capture.sourceMessageId,
+        role: "damage",
+        correlationId: capture.correlationId,
+      },
+    });
+  }
+  for (const capture of pendingApplicationCaptures.values()) {
+    if (!capture.nativeMarker || !applicationCaptureMatches(capture, document)) continue;
+    document.updateSource({
+      [`flags.${MODULE_ID}.saveResolverNative`]: capture.nativeMarker,
+    });
+  }
+}
+
 function damageCandidate(message, correlationOption) {
   const flags = messageFlags(message);
   const context = flags.context;
@@ -107,6 +144,23 @@ function onCreateChatMessage(message) {
       capture.candidates.push(message);
     }
   }
+  for (const capture of pendingSpellDamageCaptures.values()) {
+    const marker = message.getFlag?.(MODULE_ID, "saveResolverNative");
+    if (
+      marker?.correlationId === capture.correlationId &&
+      spellDamageCaptureMatches(capture, message) &&
+      !capture.candidates.some((candidate) => candidate.id === message.id)
+    ) {
+      capture.candidates.push(message);
+    }
+  }
+  for (const observer of messageObservers) {
+    try {
+      observer(message);
+    } catch (error) {
+      logger.error("Message observer failed", { stage: "create-dispatcher" }, error);
+    }
+  }
 }
 
 function createApplicationCapture({
@@ -115,6 +169,7 @@ function createApplicationCapture({
   sourceActorUuid,
   itemUuid,
   targetToken,
+  nativeMarker = null,
 }) {
   const capture = {
     transactionId,
@@ -126,6 +181,7 @@ function createApplicationCapture({
     targetTokenId: targetToken.document.id,
     targetActorUuid: targetToken.actor.uuid,
     candidates: [],
+    nativeMarker,
   };
   pendingApplicationCaptures.set(transactionId, capture);
   return capture;
@@ -234,6 +290,7 @@ export class PF2eAdapter {
   static initialize() {
     if (hooksRegistered) return;
     hooksRegistered = true;
+    Hooks.on("preCreateChatMessage", onPreCreateChatMessage);
     Hooks.on("createChatMessage", onCreateChatMessage);
     Hooks.on("deleteChatMessage", (message) => {
       damageClaims.forgetDeletedMessage(message.id);
@@ -246,6 +303,11 @@ export class PF2eAdapter {
         damageClaims.restore(message.id, transaction.id);
       }
     }
+  }
+
+  /** Subscribe to the one adapter-owned createChatMessage dispatcher. */
+  static registerMessageObserver(observer) {
+    messageObservers.add(observer);
   }
 
   /** Check the target runtime before any PF2e-specific access occurs. */
@@ -447,6 +509,58 @@ export class PF2eAdapter {
     return damageClaims.owner(messageId);
   }
 
+  /**
+   * Roll one spell's native PF2e damage. SpellPF2e#rollDamage does not accept
+   * arbitrary roll options, so the exact call is enclosed by one scoped
+   * pre-create marker. Zero or multiple marked native messages fail safely.
+   */
+  static rollSpellDamage(parameters) {
+    // SpellPF2e#rollDamage has no custom option parameter. Serializing only
+    // Nelflow's explicit shared spell-damage invocations guarantees that one
+    // scoped pre-create marker can never be shared by two local resolvers.
+    const operation = spellDamageQueue
+      .catch(() => undefined)
+      .then(() => this._rollSpellDamage(parameters));
+    spellDamageQueue = operation;
+    return operation;
+  }
+
+  static async _rollSpellDamage({ sourceMessage, spell, resolverId, correlationId }) {
+    if (typeof spell?.rollDamage !== "function" || pendingSpellDamageCaptures.has(resolverId)) {
+      return { ok: false, reason: "native-spell-damage-unavailable" };
+    }
+    const capture = {
+      resolverId,
+      correlationId,
+      sourceMessageId: sourceMessage.id,
+      sourceActorUuid: spell.actor?.uuid,
+      itemUuid: spell.uuid,
+      processingUserId: game.user.id,
+      candidates: [],
+    };
+    pendingSpellDamageCaptures.set(resolverId, capture);
+    try {
+      const roll = await spell.rollDamage(createSkipDialogEvent());
+      if (!roll?.instances) return { ok: false, reason: "native-spell-damage-unavailable" };
+      if (capture.candidates.length !== 1) {
+        return {
+          ok: false,
+          reason:
+            capture.candidates.length > 1
+              ? "spell-damage-message-ambiguous"
+              : "spell-damage-message-missing",
+          roll,
+          candidateCount: capture.candidates.length,
+        };
+      }
+      return { ok: true, roll, damageMessage: capture.candidates[0], candidateCount: 1 };
+    } catch (error) {
+      return { ok: false, reason: "native-spell-damage-call-failed", error };
+    } finally {
+      pendingSpellDamageCaptures.delete(resolverId);
+    }
+  }
+
   static validateDamageForApplication({
     attackMessage,
     transaction,
@@ -530,27 +644,53 @@ export class PF2eAdapter {
     targetToken,
     transactionId,
   }) {
-    const roll = damageMessage.rolls?.at(0);
-    const targetActor = targetToken.actor;
-    const originActor = damageMessage.actor;
-    const item = damageMessage.item;
-    const context = messageFlags(damageMessage).context;
+    return this.applyDamageRollToRecordedTarget({
+      damageMessage,
+      damageRoll: damageMessage.rolls?.at(0),
+      sourceActor: strike.actor,
+      sourceItem: strike.item,
+      targetToken,
+      expectedTargetActorUuid: strike.targetActorUuid,
+      multiplier: 1,
+      outcome: messageFlags(damageMessage).context?.outcome,
+      applicationId: transactionId,
+      attackMessageId: attackMessage.id,
+    });
+  }
 
+  static async applyDamageRollToRecordedTarget({
+    damageMessage,
+    damageRoll,
+    sourceActor,
+    sourceItem,
+    targetToken,
+    expectedTargetActorUuid,
+    multiplier,
+    outcome,
+    applicationId,
+    attackMessageId = null,
+    nativeMarker = null,
+  }) {
+    const targetActor = targetToken?.actor;
+    const originActor = damageMessage?.actor;
+    const item = damageMessage?.item;
+    const context = messageFlags(damageMessage).context;
     if (
-      !damageMessage.isDamageRoll ||
-      !roll?.instances ||
+      !damageMessage?.isDamageRoll ||
+      !damageRoll?.instances ||
+      ![0.5, 1, 2].includes(multiplier) ||
       !targetActor ||
-      targetActor.uuid !== strike.targetActorUuid ||
+      targetActor.uuid !== expectedTargetActorUuid ||
       typeof targetActor.getContextualClone !== "function" ||
       typeof targetActor.applyDamage !== "function" ||
       !originActor ||
-      originActor.uuid !== strike.actor.uuid ||
+      originActor.uuid !== sourceActor?.uuid ||
       !item ||
-      item.uuid !== strike.item.uuid ||
+      item.uuid !== sourceItem?.uuid ||
       context?.type !== "damage-roll"
-    ) {
-      return null;
-    }
+    ) return null;
+
+    const transformedRoll = multiplier === 1 ? damageRoll : damageRoll.alter(multiplier, 0);
 
     const messageRollOptions = [...(context.options ?? [])];
     const originRollOptions = messageRollOptions
@@ -586,28 +726,30 @@ export class PF2eAdapter {
       ...contextClone.getSelfRollOptions(),
     ]);
     const capture = createApplicationCapture({
-      transactionId,
-      attackMessageId: attackMessage.id,
-      sourceActorUuid: strike.actor.uuid,
-      itemUuid: strike.item.uuid,
+      transactionId: applicationId,
+      attackMessageId,
+      sourceActorUuid: sourceActor.uuid,
+      itemUuid: sourceItem.uuid,
       targetToken,
+      nativeMarker,
     });
 
     try {
       await contextClone.applyDamage({
-        damage: roll,
+        damage: transformedRoll,
         token: targetToken,
         item,
         skipIWR: false,
         rollOptions,
         shieldBlockRequest: false,
-        outcome: context.outcome,
+        outcome,
       });
       return {
         applicationMessage: finishApplicationCapture(capture),
+        transformedRoll,
       };
     } finally {
-      pendingApplicationCaptures.delete(transactionId);
+      pendingApplicationCaptures.delete(applicationId);
     }
   }
 

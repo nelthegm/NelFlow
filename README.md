@@ -9,7 +9,8 @@ space inside that stack. Slice 2.2 makes the stack the primary visible record
 and warns the GM about structured PF2e Strike riders. Slice 2.2.1 makes those
 stacks reload-safe and gives new stack messages durable readable fallback HTML.
 Slice 2.2.2 gives simultaneous native damage invocations exact
-transaction-scoped correlation.
+transaction-scoped correlation. Slice 3 adds an explicit multi-target resolver
+for GM-authored NPC spells with structured PF2e basic saves and native damage.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -32,8 +33,9 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 
 - Foundry VTT generation 14
 - Pathfinder Second Edition system (integration source-checked with PF2e 8.3.0)
-- A GM-authored NPC Strike
-- Exactly one targeted token
+- A GM-authored NPC Strike with exactly one target, or
+- a GM-authored NPC spell with a structured basic Fortitude, Reflex, or Will
+  save, native damage, and at least one targeted creature
 
 ## Install or update
 
@@ -183,6 +185,45 @@ Nelflow processes; other Workbench features may remain enabled. Nelflow does
 not automatically disable another module or claim its untagged damage cards.
 Dice So Nice rendering order does not affect document-level correlation.
 
+## Slice 3 NPC basic-save spells
+
+Eligible native NPC spell cards receive **Start Basic Save Resolver** for their
+authoring GM. Starting snapshots and deduplicates the current exact token
+targets; later targeting changes do not alter the resolver.
+
+Each player owner rolls the target actor's native PF2e save from their own row.
+The authoring GM can roll individual NPC/unowned saves or use **Roll Pending
+NPC Saves**. Exact attempt-scoped roll options keep simultaneous identical
+saves isolated. PF2e's finalized outcome remains authoritative; the GM may
+explicitly override a completed result or use **Reset Save** before damage.
+
+When all saves are complete, the GM clicks **Resolve Damage**. Nelflow rolls the
+spell's native damage exactly once, then uses PF2e's native DamageRoll
+transformation and contextual application pathway:
+
+- Critical Success: no application
+- Success: half
+- Failure: full
+- Critical Failure: double
+
+IWR, damage instances/types, temporary HP, and rounding remain native. Each
+target records its own actual HP/temp-HP delta and guarded Undo. If automatic
+application is disabled, or the shared roll contains persistent damage,
+Nelflow leaves every applicable result manual and preserves the exact native
+damage card.
+
+The persistent resolver and meaningful fallback reconstruct after refresh.
+Refreshing during damage processing does not resume the operation: it becomes
+Interrupted/manual to avoid a second roll or application. Native Records
+contains only the exact source spell, claimed saves, shared damage, and safely
+captured application messages visible to the current viewer.
+
+Supported sources are NPC spell items with structured `basic: true`,
+Fortitude/Reflex/Will, a numeric item-scoped spell DC, no attack trait, and
+native spell damage. Player spells, spell attacks, non-basic saves, spells
+without damage, template discovery, conditions, persistent-damage automation,
+hazards, and NPC non-spell abilities remain native/manual.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -198,6 +239,10 @@ Dice So Nice rendering order does not affect document-level correlation.
   choose `Always Show Audit Stubs` to keep compact native summaries visible.
   This setting never hides messages when native collapse or compact stacks are
   disabled.
+- **Basic Save Spell Resolver** — `NPC Spells` by default; choose `Off` to
+  remove Slice 3 Start controls.
+- **Auto-Apply Basic Save Damage** — enabled by default. Disable it to roll and
+  correlate one shared native damage record while leaving every target manual.
 - **Enable Debug Logging** — disabled by default.
 
 ## Safety and Undo
@@ -254,6 +299,15 @@ Undo Blocked.
   force safe ambiguity; Nelflow will not choose between two exact candidates.
 - The observed external `preUpdateActor` / unqualified `setProperty` console
   error has no matching call or hook in Nelflow's source.
+- Slice 3 does not resume an in-flight damage/application transaction after
+  reload; remaining targets become manual.
+- A spell roll containing persistent damage is not auto-applied because Slice
+  3 does not track or undo persistent conditions.
+- Deleting the source spell message before Resolve Damage prevents safe native
+  damage invocation.
+- Two token snapshots that share one actor remain distinct rows and are applied
+  sequentially; an earlier row's Undo may be blocked by a later application to
+  that same actor.
 
 ## Testing and design documentation
 
@@ -272,3 +326,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 2.2.2 runtime test plan](docs/SLICE_002_2_2_TEST_PLAN.md)
 - [Slice 1 API findings](docs/SLICE_001_API_FINDINGS.md)
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)
+- [Slice 3 NPC basic-save resolver](docs/SLICE_003_BASIC_SAVE_SPELL_RESOLVER.md)
+- [Slice 3 runtime test plan](docs/SLICE_003_TEST_PLAN.md)

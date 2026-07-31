@@ -112,6 +112,14 @@ export class NativeRecordsController {
     if (initialized) return;
     initialized = true;
     Hooks.on("deleteChatMessage", (message) => {
+      const saveResolver = message.getFlag(MODULE_ID, "saveResolver");
+      if (saveResolver?.resolverId) {
+        for (const element of document.querySelectorAll("[data-nelflow-save-resolver-id]")) {
+          if (element.dataset.nelflowSaveResolverId !== saveResolver.resolverId) continue;
+          element.classList.remove("nelflow-save-native-hidden", "nelflow-save-native-collapsed");
+          delete element.dataset.nelflowSaveResolverId;
+        }
+      }
       const stack = message.getFlag(MODULE_ID, "stack");
       if (!stack?.id) return;
       for (const element of renderedNativeRecords(stack.id)) {
@@ -126,6 +134,14 @@ export class NativeRecordsController {
         element.classList.remove("nelflow-native-record-hidden");
         if (!getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
           element.classList.remove("nelflow-native-collapsed");
+        }
+      }
+      for (const element of document.querySelectorAll(".nelflow-save-native-hidden")) {
+        element.classList.remove("nelflow-save-native-hidden");
+      }
+      if (!getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
+        for (const element of document.querySelectorAll(".nelflow-save-native-collapsed")) {
+          element.classList.remove("nelflow-save-native-collapsed");
         }
       }
       try {

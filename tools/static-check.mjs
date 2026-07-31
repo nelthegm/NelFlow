@@ -143,6 +143,8 @@ for (const required of [
   "STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK",
   "type: String",
   "choices:",
+  "SETTINGS.BASIC_SAVE_RESOLVER",
+  "SETTINGS.AUTO_APPLY_BASIC_SAVE_DAMAGE",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
 }
@@ -162,7 +164,9 @@ if (/(?:ChatMessage|game\.messages|message)\s*\.\s*(?:delete|deleteDocuments)\s*
   fail("runtime code appears to delete a native ChatMessage");
 }
 for (const relativePath of walk("scripts", ".js").filter(
-  (path) => !path.endsWith("turn-stack-service.js"),
+  (path) =>
+    !path.endsWith("turn-stack-service.js") &&
+    !path.endsWith("save-resolver-service.js"),
 )) {
   if (
     /(?:ChatMessage|ChatMessageClass|CONFIG\.ChatMessage\.documentClass)\s*(?:\.|\?\.)\s*create\s*\(/.test(
@@ -178,6 +182,8 @@ const mechanicalSource = [
   "scripts/strike-resolver.js",
   "scripts/transaction-store.js",
   "scripts/turn-stack-service.js",
+  "scripts/save-resolver-service.js",
+  "scripts/save-correlation.js",
 ]
   .map(read)
   .join("\n");
@@ -435,6 +441,7 @@ for (const required of [
   "buildDamageCorrelationOption",
   "validateDamageCandidate",
   "candidate.correlationOption !== scope.correlationOption",
+  "candidate.visible !== true",
   "candidate.authorUserId !== scope.processingUserId",
   'candidate.contextType !== "damage-roll"',
   "candidate.sourceActorUuid !== scope.sourceActorUuid",
@@ -505,6 +512,79 @@ if (
 const concurrencyTests = read("tests/damage-correlation.test.mjs");
 if ((concurrencyTests.match(/\btest\s*\(/g) ?? []).length < 20) {
   fail("mocked damage-correlation coverage must include at least 20 scenarios");
+}
+
+const saveResolver = read("scripts/save-resolver-service.js");
+const saveCorrelation = read("scripts/save-correlation.js");
+const saveModel = read("scripts/save-resolver-model.js");
+for (const required of [
+  "item?.system?.defense?.save",
+  "save?.basic !== true",
+  "item.isAttack",
+  "item.getDamage",
+  "save.check.roll",
+  "extraRollOptions: [correlationOption]",
+  "PF2eAdapter.rollSpellDamage",
+  "PF2eAdapter.applyDamageRollToRecordedTarget",
+  "isPersistentDamageSummary(summary)",
+  "guardedHealthRestore",
+  "target.targetTokenUuid",
+  "target.targetActorUuid",
+]) {
+  if (!saveResolver.includes(required)) {
+    fail(`basic-save resolver is missing structured/native guard: ${required}`);
+  }
+}
+for (const required of [
+  "buildSaveCorrelationOption",
+  "candidate.correlationOption !== scope.correlationOption",
+  "candidate.authorUserId !== scope.rollingUserId",
+  'candidate.contextType !== "saving-throw"',
+  "candidate.statistic !== scope.saveType",
+  "candidate.dc !== scope.saveDC",
+  "candidate.targetActorUuid !== scope.targetActorUuid",
+  "candidate.sourceActorUuid !== scope.sourceActorUuid",
+  "candidate.itemUuid !== scope.spellItemUuid",
+]) {
+  if (!saveCorrelation.includes(required)) {
+    fail(`save correlation is missing exact guard: ${required}`);
+  }
+}
+if (
+  /1d20|new\s+(?:Roll|DamageRoll)|damage\.formula|message\.(?:content|flavor)|DOMParser/i.test(
+    `${saveResolver}\n${saveCorrelation}\n${saveModel}`,
+  )
+) {
+  fail("basic-save mechanics appear to reconstruct a roll/formula or parse chat HTML");
+}
+if (/latest|most recent|createdTime|timestamp-only/i.test(saveCorrelation)) {
+  fail("save correlation appears to use broad or temporal matching");
+}
+if (
+  saveResolver.indexOf("draft.damage.messageId = rolled.damageMessage.id") >
+  saveResolver.indexOf("PF2eAdapter.applyDamageRollToRecordedTarget")
+) {
+  fail("target application must occur only after the shared damage message is persisted");
+}
+if (!saveResolver.includes("target.applicationState !== \"pending\"")) {
+  fail("terminal target applications must not replay");
+}
+if (!saveResolver.includes("RESOLVER_PHASES.INTERRUPTED")) {
+  fail("reload must convert in-flight resolver work to an interrupted state");
+}
+if (!read("scripts/chat-ui.js").includes("renderSaveResolverChat(message, html)")) {
+  fail("save resolver is not registered through the setup-time chat renderer");
+}
+const saveTests = read("tests/save-resolver.test.mjs");
+if ((saveTests.match(/\btest\s*\(/g) ?? []).length < 40) {
+  fail("mocked save-resolver coverage must include at least 40 scenarios");
+}
+if (!existsSync(join(root, "docs", "SLICE_003_BASIC_SAVE_SPELL_RESOLVER.md"))) {
+  fail("Slice 3 architecture documentation is missing");
+}
+const saveTestPlan = read("docs/SLICE_003_TEST_PLAN.md");
+if ((saveTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 46) {
+  fail("Slice 3 runtime test plan must include at least 46 scenarios");
 }
 const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
 if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {

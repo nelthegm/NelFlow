@@ -3,6 +3,7 @@ import { logger } from "./logger.js";
 import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { registerSettings } from "./settings.js";
+import { SaveResolverService } from "./save-resolver-service.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { TurnStackService } from "./turn-stack-service.js";
 
@@ -30,6 +31,7 @@ Hooks.once("ready", () => {
   }
 
   PF2eAdapter.initialize();
+  SaveResolverService.initialize();
   TurnStackService.initialize();
   Hooks.on("createChatMessage", (message) => {
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
@@ -43,6 +45,17 @@ Hooks.once("ready", () => {
         error,
       );
     });
+    void SaveResolverService.handleMessage(message).catch((error) => {
+      logger.error(
+        "Unhandled spell-source message error",
+        {
+          sourceMessageId: message.id,
+          stage: "createChatMessage",
+          reason: error instanceof Error ? error.message : String(error),
+        },
+        error,
+      );
+    });
   });
-  logger.debug("Slice 2.2.2 ready");
+  logger.debug("Slice 3 ready");
 });
