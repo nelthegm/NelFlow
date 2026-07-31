@@ -11,7 +11,10 @@ stacks reload-safe and gives new stack messages durable readable fallback HTML.
 Slice 2.2.2 gives simultaneous native damage invocations exact
 transaction-scoped correlation. Slice 3.1 integrates PF2e Toolbelt Target
 Helper so its existing target/save rows remain authoritative while Nelflow adds
-guarded native basic-save damage application on the same damage card.
+guarded native basic-save damage application on the same damage card. Slice
+3.1.1 guards the exact row's duplicate Toolbelt HP-damage controls after
+conclusive handling while leaving save, reroll, Block, and record controls
+available.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -215,6 +218,16 @@ require one compact GM confirmation on the damage card, or remain Off. A reroll
 before claim invalidates stale work. A changed result after application becomes
 Manual Review Required and never silently changes HP again.
 
+After a conclusive Nelflow or structurally proven external application,
+Toolbelt's Damage, Half, Double, and Triple controls are guarded for that exact
+message, target token, application, and roll index. Successful Nelflow Undo
+restores only Nelflow's restrictions and preserves Toolbelt's original disabled
+state. Undo Blocked and Result Changed remain guarded. The processing GM can
+explicitly **Enable Manual Damage** after a confirmation warning, or later
+**Guard Damage Controls** again; this presentation choice persists without
+changing HP or saves. If exact Toolbelt 3.52.x semantic markup cannot be
+proven, Nelflow keeps its status and leaves native controls usable.
+
 The original Slice 3 interface remains as **Legacy Nelflow Resolver
 (Experimental)** for Toolbelt-free testing. It is not recommended with Target
 Helper and cannot process alongside Toolbelt mode.
@@ -238,6 +251,10 @@ Helper and cannot process alongside Toolbelt mode.
   are `Off` and `Legacy Nelflow Resolver (Experimental)`.
 - **Toolbelt Basic Save Application** — defaults to `When All Saves Are
   Resolved`; alternatives are per-target, GM confirmation, and Off.
+- **Guard Toolbelt Damage Controls** is enabled by default. It guards only
+  Damage/Half/Double/Triple for an exactly identified, conclusively handled
+  target. Disable it to retain normal Toolbelt controls without changing
+  Nelflow application, status, records, or Undo.
 - The old Basic Save Spell Resolver setting remains hidden for migration only.
 - **Enable Debug Logging** — disabled by default.
 
@@ -302,6 +319,10 @@ Undo Blocked.
   truly simultaneous manual Toolbelt button click; GM Confirmation is safest
   when manual and automatic application may be mixed.
 - Native PF2e application Undo does not synchronize Nelflow's status projection.
+- Damage deliberately applied after Enable Manual Damage is not tracked and
+  requires GM judgment; Nelflow does not automatically re-guard it.
+- Toolbelt target markup replaced by another module fails open, leaving native
+  controls functional and the Nelflow status visible.
 
 ## Testing and design documentation
 
@@ -324,3 +345,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3 runtime test plan](docs/SLICE_003_TEST_PLAN.md)
 - [Slice 3.1 Toolbelt auto-application](docs/SLICE_003_1_TOOLBELT_AUTO_APPLICATION.md)
 - [Slice 3.1 runtime test plan](docs/SLICE_003_1_TEST_PLAN.md)
+- [Slice 3.1.1 Toolbelt control guards](docs/SLICE_003_1_1_TOOLBELT_CONTROL_GUARDS.md)
+- [Slice 3.1.1 runtime test plan](docs/SLICE_003_1_1_TEST_PLAN.md)

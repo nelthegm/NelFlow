@@ -7,7 +7,9 @@ import {
 import { getSetting } from "./settings.js";
 import { allPrimarySavesResolved, TOOLBELT_TARGET_STATES } from "./toolbelt-basic-save-model.js";
 import { ToolbeltBasicSaveService, TOOLBELT_BASIC_SAVE_FLAG } from "./toolbelt-basic-save-service.js";
+import { isConclusiveGuardRecord, ToolbeltControlGuard } from "./toolbelt-control-guard.js";
 import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
+import { logger } from "./logger.js";
 
 function localize(key, data) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -63,12 +65,68 @@ function nativeRecordButton(record) {
   return button;
 }
 
-function statusRow(message, normalizedTarget, record, number) {
+async function confirmManualDamage(message, record) {
+  const content = element("div");
+  content.append(element("p", null, localize("Nelflow.Toolbelt.Guard.ConfirmBody")));
+  const confirmed = await foundry.applications.api.DialogV2.confirm({
+    window: { title: localize("Nelflow.Toolbelt.Guard.ConfirmTitle") },
+    content,
+    modal: true,
+    rejectClose: false,
+  });
+  if (!confirmed) return false;
+  return ToolbeltBasicSaveService.setManualControls(message.id, record.toolbeltTargetKey, true);
+}
+
+function manualControlButton(message, draft, normalizedTarget, record) {
+  if (
+    !game.user?.isGM ||
+    !getSetting(SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS) ||
+    game.user.id !== draft.processingUserId ||
+    normalizedTarget?.toolbeltTargetKey !== record.toolbeltTargetKey ||
+    normalizedTarget?.tokenUuid !== record.tokenUuid ||
+    normalizedTarget?.actorUuid !== record.actorUuid ||
+    !isConclusiveGuardRecord(record, { toolbeltApplied: normalizedTarget?.toolbeltAppliedState })
+  ) return null;
+  const enabled = record.manualControlsEnabled === true;
+  const button = element(
+    "button",
+    "nelflow-toolbelt__manual-control",
+    localize(enabled ? "Nelflow.Toolbelt.Guard.Reguard" : "Nelflow.Toolbelt.Guard.EnableManual"),
+  );
+  button.type = "button";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    const action = enabled
+      ? ToolbeltBasicSaveService.setManualControls(message.id, record.toolbeltTargetKey, false)
+      : confirmManualDamage(message, record);
+    void action
+      .then(() => {
+        button.disabled = false;
+      })
+      .catch((error) => {
+        button.disabled = false;
+        logger.warn("toolbelt-manual-controls-update-failed", {
+          stage: "toolbelt-control-guard",
+          reason: "manual-override-update-failed",
+        }, error);
+      });
+  });
+  return button;
+}
+
+function statusRow(message, draft, normalizedTarget, record, number) {
   const row = element("div", `nelflow-toolbelt__target nelflow-toolbelt__target--${record.state}`);
   row.dataset.nelflowToolbeltTargetKey = record.toolbeltTargetKey;
   const body = element("div", "nelflow-toolbelt__target-body");
   body.append(element("strong", null, targetName(record, number)));
   body.append(element("span", "nelflow-toolbelt__status", stateLabel(record)));
+  if (
+    getSetting(SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS) &&
+    record.manualControlsEnabled === true
+  ) {
+    body.append(element("span", "nelflow-toolbelt__manual-enabled", localize("Nelflow.Toolbelt.Guard.ManualEnabled")));
+  }
   row.append(body);
 
   const controls = element("div", "nelflow-toolbelt__controls");
@@ -87,6 +145,8 @@ function statusRow(message, normalizedTarget, record, number) {
   }
   const native = nativeRecordButton(record);
   if (native) controls.append(native);
+  const manual = manualControlButton(message, draft, normalizedTarget, record);
+  if (manual) controls.append(manual);
   if (controls.childElementCount) row.append(controls);
   return row;
 }
@@ -115,7 +175,7 @@ export function renderToolbeltBasicSave(message, html) {
       : { private: true };
     if (!record || !canSeeTarget(target, record)) continue;
     visibleCount += 1;
-    list.append(statusRow(message, target, record, index + 1));
+    list.append(statusRow(message, draft, target, record, index + 1));
   }
   if (visibleCount) wrapper.append(list);
 
@@ -145,6 +205,15 @@ export function renderToolbeltBasicSave(message, html) {
 
   const content = html.querySelector(".message-content");
   content?.append(wrapper);
+  const guardedTargets = ToolbeltControlGuard.render(message, html, draft, normalized);
+  for (const key of guardedTargets) {
+    const row = Array.from(wrapper.querySelectorAll("[data-nelflow-toolbelt-target-key]")).find(
+      (candidate) => candidate.dataset.nelflowToolbeltTargetKey === key,
+    );
+    row?.querySelector(".nelflow-toolbelt__target-body")?.append(
+      element("span", "nelflow-toolbelt__guard", localize("Nelflow.Toolbelt.Guard.Indicator")),
+    );
+  }
   return true;
 }
 

@@ -466,6 +466,18 @@
   color: var(--color-text-subtle, #666);
 }
 
+.nelflow-toolbelt__guard,
+.nelflow-toolbelt__manual-enabled {
+  color: var(--color-level-info, #315a7d);
+  font-size: 0.9em;
+}
+
+.nelflow-toolbelt-control-guarded {
+  cursor: not-allowed;
+  filter: grayscale(0.65);
+  opacity: 0.55;
+}
+
 .nelflow-toolbelt__controls {
   display: inline-flex;
   flex: 0 1 auto;

@@ -9,6 +9,7 @@ import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
+import { isConclusiveGuardRecord } from "./toolbelt-control-guard.js";
 import {
   allPrimarySavesResolved,
   createTargetRecord,
@@ -460,6 +461,36 @@ export class ToolbeltBasicSaveService {
         record.undoState = "used";
       }
       await persist(message, draft);
+    });
+  }
+
+  static async setManualControls(messageId, targetKey, enabled) {
+    const message = messageById(messageId);
+    if (!message || !game.user?.isGM) return false;
+    return queue(message.id, async () => {
+      const draft = transaction(message);
+      const record = draft?.targets?.[targetKey];
+      if (!draft || !record || !currentUserOwns(draft)) return false;
+      const normalized = ToolbeltTargetHelperAdapter.normalizeDamageMessage(message);
+      const target = normalized.ok
+        ? normalized.targets.find((entry) => entry.toolbeltTargetKey === targetKey)
+        : null;
+      if (
+        !target ||
+        target.tokenUuid !== record.tokenUuid ||
+        target.actorUuid !== record.actorUuid ||
+        !isConclusiveGuardRecord(record, { toolbeltApplied: target.toolbeltAppliedState })
+      ) return false;
+      const manualControlsEnabled = enabled === true;
+      record.manualControlsEnabled = manualControlsEnabled;
+      record.manualControlsEnabledBy = manualControlsEnabled ? game.user.id : null;
+      record.manualControlsEnabledAt = manualControlsEnabled ? Date.now() : null;
+      await persist(message, draft);
+      diagnostic(manualControlsEnabled ? "toolbelt-manual-controls-enabled" : "toolbelt-manual-controls-reguarded", {
+        integrationId: draft.integrationId,
+        targetKey,
+      });
+      return true;
     });
   }
 }

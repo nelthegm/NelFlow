@@ -106,6 +106,13 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS,
+    name: "Nelflow.Settings.GuardToolbeltControls.Name",
+    hint: "Nelflow.Settings.GuardToolbeltControls.Hint",
+    default: true,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

@@ -13,6 +13,7 @@ export const SETTINGS = Object.freeze({
   AUTO_APPLY_BASIC_SAVE_DAMAGE: "autoApplyBasicSaveDamage",
   BASIC_SAVE_WORKFLOW: "basicSaveWorkflow",
   TOOLBELT_BASIC_SAVE_APPLICATION: "toolbeltBasicSaveApplication",
+  GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });

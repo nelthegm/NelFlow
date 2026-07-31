@@ -73,6 +73,7 @@ export function createTargetRecord(integration, target) {
     actorUuid: target.actorUuid,
     tokenUuid: target.tokenUuid,
     sceneId: target.sceneId,
+    rollIndex: integration.rollIndex,
     saveType: target.saveType,
     nativeOutcome: target.degreeOfSuccess,
     effectiveOutcome: target.degreeOfSuccess,
@@ -89,6 +90,9 @@ export function createTargetRecord(integration, target) {
     actualHpDelta: null,
     applicationMessageId: null,
     undoState: null,
+    manualControlsEnabled: false,
+    manualControlsEnabledBy: null,
+    manualControlsEnabledAt: null,
     reason: target.toolbeltAppliedState ? "toolbelt-already-applied" : null,
     toolbeltStateFingerprint: target.saveFingerprint,
   };

@@ -647,6 +647,53 @@ const toolbeltTestPlan = read("docs/SLICE_003_1_TEST_PLAN.md");
 if ((toolbeltTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 66) {
   fail("Slice 3.1 runtime test plan must include at least 66 scenarios");
 }
+const toolbeltGuard = read("scripts/toolbelt-control-guard.js");
+const toolbeltGuardUi = read("scripts/toolbelt-basic-save-ui.js");
+for (const required of [
+  'action === "target-applyDamage"',
+  "new Set([0.5, 1, 2, 3])",
+  'data-target-uuid][data-target-roll-index]',
+  "guardIdentityMatches(",
+  'addEventListener("click", interceptActivation, true)',
+  'addEventListener("keydown", interceptActivation, true)',
+  "event.stopImmediatePropagation()",
+  'control.setAttribute("aria-disabled", "true")',
+  "listenerRoots.has(html)",
+  "manualControlsEnabled",
+]) {
+  if (!toolbeltGuard.includes(required)) fail(`Toolbelt control guard is missing: ${required}`);
+}
+for (const required of [
+  "DialogV2.confirm",
+  "game.user.id !== draft.processingUserId",
+  "ToolbeltBasicSaveService.setManualControls",
+  "ToolbeltControlGuard.render",
+]) {
+  if (!toolbeltGuardUi.includes(required)) fail(`Toolbelt guard UI is missing: ${required}`);
+}
+if (/\.click\s*\(|dispatchEvent|MutationObserver|setTimeout\s*\(/.test(toolbeltGuard)) {
+  fail("Toolbelt control guard must not click controls, poll, or observe arbitrary DOM changes");
+}
+if (/target\.name|actor\.name|textContent\s*===|innerText/.test(toolbeltGuard)) {
+  fail("Toolbelt control guard appears to identify a row by visible text or name");
+}
+if (/setFlag|\.update\s*\(|flags\.[A-Za-z]/.test(toolbeltGuard)) {
+  fail("ordinary Toolbelt guard rendering must not update messages or imitate Toolbelt flags");
+}
+if (!settingsSource.includes("SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS")) {
+  fail("Guard Toolbelt Damage Controls setting is missing");
+}
+const guardTests = read("tests/toolbelt-control-guard.test.mjs");
+if ((guardTests.match(/\btest\s*\(/g) ?? []).length < 35) {
+  fail("mocked Toolbelt control-guard coverage must include at least 35 scenarios");
+}
+if (!existsSync(join(root, "docs", "SLICE_003_1_1_TOOLBELT_CONTROL_GUARDS.md"))) {
+  fail("Slice 3.1.1 architecture documentation is missing");
+}
+const guardTestPlan = read("docs/SLICE_003_1_1_TEST_PLAN.md");
+if ((guardTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 51) {
+  fail("Slice 3.1.1 runtime test plan must include at least 51 scenarios");
+}
 const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
 if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {
   fail("Slice 2.2.2 runtime test plan must include at least 25 scenarios");
