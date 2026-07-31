@@ -9,8 +9,9 @@ space inside that stack. Slice 2.2 makes the stack the primary visible record
 and warns the GM about structured PF2e Strike riders. Slice 2.2.1 makes those
 stacks reload-safe and gives new stack messages durable readable fallback HTML.
 Slice 2.2.2 gives simultaneous native damage invocations exact
-transaction-scoped correlation. Slice 3 adds an explicit multi-target resolver
-for GM-authored NPC spells with structured PF2e basic saves and native damage.
+transaction-scoped correlation. Slice 3.1 integrates PF2e Toolbelt Target
+Helper so its existing target/save rows remain authoritative while Nelflow adds
+guarded native basic-save damage application on the same damage card.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -34,8 +35,8 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 - Foundry VTT generation 14
 - Pathfinder Second Edition system (integration source-checked with PF2e 8.3.0)
 - A GM-authored NPC Strike with exactly one target, or
-- a GM-authored NPC spell with a structured basic Fortitude, Reflex, or Will
-  save, native damage, and at least one targeted creature
+- PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
+  player- or GM-authored basic-save spell workflow
 
 ## Install or update
 
@@ -185,44 +186,38 @@ Nelflow processes; other Workbench features may remain enabled. Nelflow does
 not automatically disable another module or claim its untagged damage cards.
 Dice So Nice rendering order does not affect document-level correlation.
 
-## Slice 3 NPC basic-save spells
+## Slice 3.1 Toolbelt basic-save workflow
 
-Eligible native NPC spell cards receive **Start Basic Save Resolver** for their
-authoring GM. Starting snapshots and deduplicates the current exact token
-targets; later targeting changes do not alter the resolver.
+Enable PF2e Toolbelt's world setting **Target Helper**, then leave Nelflow's
+**Basic Save Workflow** on **Toolbelt Target Helper**. Cast or post the spell,
+roll its native damage once, and resolve saves through Toolbelt's existing
+target rows. Nelflow creates no resolver card and adds no parallel save or
+target controls.
 
-Each player owner rolls the target actor's native PF2e save from their own row.
-The authoring GM can roll individual NPC/unowned saves or use **Roll Pending
-NPC Saves**. Exact attempt-scoped roll options keep simultaneous identical
-saves isolated. PF2e's finalized outcome remains authoritative; the GM may
-explicitly override a completed result or use **Reset Save** before damage.
-
-When all saves are complete, the GM clicks **Resolve Damage**. Nelflow rolls the
-spell's native damage exactly once, then uses PF2e's native DamageRoll
-transformation and contextual application pathway:
+Toolbelt's persisted exact targets and finalized save outcomes are authoritative.
+One deterministic active GM claims player- or GM-authored damage messages and
+uses the existing native DamageRoll:
 
 - Critical Success: no application
 - Success: half
 - Failure: full
 - Critical Failure: double
 
-IWR, damage instances/types, temporary HP, and rounding remain native. Each
-target records its own actual HP/temp-HP delta and guarded Undo. If automatic
-application is disabled, or the shared roll contains persistent damage,
-Nelflow leaves every applicable result manual and preserves the exact native
-damage card.
+IWR, typed instances, materials, temporary HP, ephemeral effects, and rounding
+remain native. Each target records its actual HP/temp-HP delta and guarded
+Undo on the existing damage message. Exact native application records remain
+available. Splash rows, persistent damage, healing, non-basic saves, ambiguous
+damage cards, and unsupported Toolbelt versions fail open to Toolbelt's manual
+controls.
 
-The persistent resolver and meaningful fallback reconstruct after refresh.
-Refreshing during damage processing does not resume the operation: it becomes
-Interrupted/manual to avoid a second roll or application. Native Records
-contains only the exact source spell, claimed saves, shared damage, and safely
-captured application messages visible to the current viewer.
+Application timing can wait for every primary save, process each resolved row,
+require one compact GM confirmation on the damage card, or remain Off. A reroll
+before claim invalidates stale work. A changed result after application becomes
+Manual Review Required and never silently changes HP again.
 
-Supported sources are NPC spell items with structured `basic: true`,
-Fortitude/Reflex/Will, a numeric item-scoped spell DC, no attack trait, and
-native spell damage. Player spells, spell attacks, non-basic saves, spells
-without damage, template discovery, conditions, persistent-damage automation,
-hazards, and NPC non-spell abilities remain native/manual.
+The original Slice 3 interface remains as **Legacy Nelflow Resolver
+(Experimental)** for Toolbelt-free testing. It is not recommended with Target
+Helper and cannot process alongside Toolbelt mode.
 
 ## Settings
 
@@ -239,10 +234,11 @@ hazards, and NPC non-spell abilities remain native/manual.
   choose `Always Show Audit Stubs` to keep compact native summaries visible.
   This setting never hides messages when native collapse or compact stacks are
   disabled.
-- **Basic Save Spell Resolver** — `NPC Spells` by default; choose `Off` to
-  remove Slice 3 Start controls.
-- **Auto-Apply Basic Save Damage** — enabled by default. Disable it to roll and
-  correlate one shared native damage record while leaving every target manual.
+- **Basic Save Workflow** — defaults to `Toolbelt Target Helper`; alternatives
+  are `Off` and `Legacy Nelflow Resolver (Experimental)`.
+- **Toolbelt Basic Save Application** — defaults to `When All Saves Are
+  Resolved`; alternatives are per-target, GM confirmation, and Off.
+- The old Basic Save Spell Resolver setting remains hidden for migration only.
 - **Enable Debug Logging** — disabled by default.
 
 ## Safety and Undo
@@ -299,15 +295,13 @@ Undo Blocked.
   force safe ambiguity; Nelflow will not choose between two exact candidates.
 - The observed external `preUpdateActor` / unqualified `setProperty` console
   error has no matching call or hook in Nelflow's source.
-- Slice 3 does not resume an in-flight damage/application transaction after
-  reload; remaining targets become manual.
-- A spell roll containing persistent damage is not auto-applied because Slice
-  3 does not track or undo persistent conditions.
-- Deleting the source spell message before Resolve Damage prevents safe native
-  damage invocation.
-- Two token snapshots that share one actor remain distinct rows and are applied
-  sequentially; an earlier row's Undo may be blocked by a later application to
-  that same actor.
+- Slice 3.1 does not resume an in-flight application after reload.
+- Persistent and splash damage remain manual.
+- Toolbelt 3.52.x does not export its application function or update queue.
+  Nelflow revalidates immediately before applying, but cannot atomically lock a
+  truly simultaneous manual Toolbelt button click; GM Confirmation is safest
+  when manual and automatic application may be mixed.
+- Native PF2e application Undo does not synchronize Nelflow's status projection.
 
 ## Testing and design documentation
 
@@ -328,3 +322,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)
 - [Slice 3 NPC basic-save resolver](docs/SLICE_003_BASIC_SAVE_SPELL_RESOLVER.md)
 - [Slice 3 runtime test plan](docs/SLICE_003_TEST_PLAN.md)
+- [Slice 3.1 Toolbelt auto-application](docs/SLICE_003_1_TOOLBELT_AUTO_APPLICATION.md)
+- [Slice 3.1 runtime test plan](docs/SLICE_003_1_TEST_PLAN.md)

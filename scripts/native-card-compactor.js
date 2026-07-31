@@ -29,6 +29,31 @@ function debugFailureOnce(message, reason) {
 }
 
 function identifyLinkedMessage(message) {
+  const toolbeltMarker = message.getFlag(MODULE_ID, "saveResolverNative");
+  if (toolbeltMarker?.role === "toolbelt-application" && toolbeltMarker.damageMessageId) {
+    const parent = game.messages.get(toolbeltMarker.damageMessageId);
+    const integration = parent?.getFlag(MODULE_ID, "toolbeltBasicSave");
+    const target = integration?.targets?.[toolbeltMarker.targetKey];
+    if (
+      integration?.integrationId === toolbeltMarker.integrationId &&
+      target?.applicationMessageId === message.id
+    ) {
+      const canSeeAmount = Boolean(
+        game.user.isGM || message.token?.actor?.isOwner || message.token?.hasPlayerOwner,
+      );
+      return {
+        marker: { id: target.applicationId, role: "application" },
+        transaction: {
+          id: target.applicationId,
+          applicationMessageId: message.id,
+          appliedAmount: canSeeAmount ? target.actualHpDelta : null,
+          targetName: null,
+          stackRef: null,
+        },
+        canonicalMessage: parent,
+      };
+    }
+  }
   const marker = message.getFlag(MODULE_ID, "transaction");
   if (!marker?.id || !["attack", "damage", "application"].includes(marker.role)) return null;
   const resolved = TransactionStore.resolveCanonical(message);

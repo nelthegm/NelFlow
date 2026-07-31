@@ -1,4 +1,4 @@
-import { BASIC_SAVE_RESOLVER_MODES, MODULE_ID, SETTINGS } from "./constants.js";
+import { BASIC_SAVE_WORKFLOW_MODES, MODULE_ID, SETTINGS } from "./constants.js";
 import { NativeCardCompactor } from "./native-card-compactor.js";
 import {
   RESOLVER_PHASES,
@@ -442,7 +442,7 @@ function renderResolver(message, html, resolver) {
 
 function renderSource(message, html, source) {
   if (!source?.eligible || !message.visible || !message.isContentVisible) return;
-  if (getSetting(SETTINGS.BASIC_SAVE_RESOLVER) !== BASIC_SAVE_RESOLVER_MODES.NPC_SPELLS) return;
+  if (getSetting(SETTINGS.BASIC_SAVE_WORKFLOW) !== BASIC_SAVE_WORKFLOW_MODES.LEGACY) return;
   if (source.resolverMessageId) return;
   if (!game.user.isGM || message.author?.id !== game.user.id) return;
   if (html.querySelector(".nelflow-save-start")) return;

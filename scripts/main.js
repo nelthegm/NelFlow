@@ -2,10 +2,12 @@ import { renderNelflowChat } from "./chat-ui.js";
 import { logger } from "./logger.js";
 import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
-import { registerSettings } from "./settings.js";
+import { migrateSettings, registerSettings } from "./settings.js";
 import { SaveResolverService } from "./save-resolver-service.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { TurnStackService } from "./turn-stack-service.js";
+import { ToolbeltBasicSaveService } from "./toolbelt-basic-save-service.js";
+import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
 
 Hooks.once("init", () => {
   registerSettings();
@@ -20,6 +22,15 @@ Hooks.once("setup", () => {
 });
 
 Hooks.once("ready", () => {
+  void initializeReady().catch((error) => {
+    logger.error("Ready initialization failed", {
+      stage: "ready",
+      reason: error instanceof Error ? error.message : String(error),
+    }, error);
+  });
+});
+
+async function initializeReady() {
   if (!PF2eAdapter.isEnvironmentSupported()) {
     logger.warn("Automation not activated", {
       stage: "ready",
@@ -30,8 +41,11 @@ Hooks.once("ready", () => {
     return;
   }
 
+  const toolbelt = ToolbeltTargetHelperAdapter.status();
+  await migrateSettings({ toolbeltReady: toolbelt.active && toolbelt.enabled });
   PF2eAdapter.initialize();
   SaveResolverService.initialize();
+  ToolbeltBasicSaveService.initialize();
   TurnStackService.initialize();
   Hooks.on("createChatMessage", (message) => {
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
@@ -56,6 +70,20 @@ Hooks.once("ready", () => {
         error,
       );
     });
+    void ToolbeltBasicSaveService.handleMessage(message).catch((error) => {
+      logger.error("Unhandled Toolbelt damage-message error", {
+        stage: "createChatMessage",
+        reason: error instanceof Error ? error.message : String(error),
+      }, error);
+    });
   });
-  logger.debug("Slice 3 ready");
-});
+  Hooks.on("updateChatMessage", (message) => {
+    void ToolbeltBasicSaveService.handleMessage(message).catch((error) => {
+      logger.error("Unhandled Toolbelt message-update error", {
+        stage: "updateChatMessage",
+        reason: error instanceof Error ? error.message : String(error),
+      }, error);
+    });
+  });
+  logger.debug("Slice 3.1 ready");
+}

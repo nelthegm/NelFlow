@@ -424,6 +424,75 @@
   padding-left: 1.2rem;
 }
 
+.nelflow-toolbelt {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #888) 45%, transparent);
+  font-size: var(--font-size-11, 0.6875rem);
+  margin-top: 0.3rem;
+  min-width: 0;
+  padding-top: 0.2rem;
+}
+
+.nelflow-toolbelt__header,
+.nelflow-toolbelt__target,
+.nelflow-toolbelt__footer {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 0.12rem 0.2rem;
+}
+
+.nelflow-toolbelt__target + .nelflow-toolbelt__target {
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #888) 25%, transparent);
+}
+
+.nelflow-toolbelt__target-body {
+  display: flex;
+  flex: 1 1 9rem;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.35rem;
+  min-width: 0;
+}
+
+.nelflow-toolbelt__target-body strong,
+.nelflow-toolbelt__status {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.nelflow-toolbelt__status {
+  color: var(--color-text-subtle, #666);
+}
+
+.nelflow-toolbelt__controls {
+  display: inline-flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.nelflow-toolbelt button {
+  font-size: inherit;
+  min-height: 1.3rem;
+  padding: 0.05rem 0.25rem;
+  width: auto;
+}
+
+.nelflow-toolbelt__target--applied .nelflow-toolbelt__status,
+.nelflow-toolbelt__target--no-damage .nelflow-toolbelt__status {
+  color: var(--color-level-success, #267a3e);
+}
+
+.nelflow-toolbelt__target--manual .nelflow-toolbelt__status,
+.nelflow-toolbelt__target--interrupted .nelflow-toolbelt__status,
+.nelflow-toolbelt__target--undo-blocked .nelflow-toolbelt__status,
+.nelflow-toolbelt__target--result-changed-after-application .nelflow-toolbelt__status {
+  color: var(--color-level-warning, #936b00);
+}
+
 .nelflow-native-highlight {
   animation: nelflow-native-highlight 1.4s ease-out;
 }

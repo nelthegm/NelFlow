@@ -1,9 +1,12 @@
 import {
   BASIC_SAVE_RESOLVER_MODES,
+  BASIC_SAVE_WORKFLOW_MODES,
   COMPACT_STACK_MODES,
   MODULE_ID,
   SETTINGS,
   STACK_FIRST_NATIVE_RECORD_MODES,
+  SETTINGS_MIGRATION_VERSION,
+  TOOLBELT_APPLICATION_MODES,
 } from "./constants.js";
 
 function refreshPresentation() {
@@ -73,13 +76,49 @@ const SETTING_DEFINITIONS = [
         "Nelflow.Settings.BasicSaveResolver.NpcSpells",
     },
     default: BASIC_SAVE_RESOLVER_MODES.NPC_SPELLS,
+    config: false,
+  },
+  {
+    key: SETTINGS.BASIC_SAVE_WORKFLOW,
+    name: "Nelflow.Settings.BasicSaveWorkflow.Name",
+    hint: "Nelflow.Settings.BasicSaveWorkflow.Hint",
+    type: String,
+    choices: {
+      [BASIC_SAVE_WORKFLOW_MODES.OFF]: "Nelflow.Settings.BasicSaveWorkflow.Off",
+      [BASIC_SAVE_WORKFLOW_MODES.TOOLBELT]: "Nelflow.Settings.BasicSaveWorkflow.Toolbelt",
+      [BASIC_SAVE_WORKFLOW_MODES.LEGACY]: "Nelflow.Settings.BasicSaveWorkflow.Legacy",
+    },
+    default: BASIC_SAVE_WORKFLOW_MODES.TOOLBELT,
     onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.TOOLBELT_BASIC_SAVE_APPLICATION,
+    name: "Nelflow.Settings.ToolbeltApplication.Name",
+    hint: "Nelflow.Settings.ToolbeltApplication.Hint",
+    type: String,
+    choices: {
+      [TOOLBELT_APPLICATION_MODES.ALL_RESOLVED]: "Nelflow.Settings.ToolbeltApplication.AllResolved",
+      [TOOLBELT_APPLICATION_MODES.PER_TARGET]: "Nelflow.Settings.ToolbeltApplication.PerTarget",
+      [TOOLBELT_APPLICATION_MODES.GM_CONFIRM]: "Nelflow.Settings.ToolbeltApplication.GmConfirm",
+      [TOOLBELT_APPLICATION_MODES.OFF]: "Nelflow.Settings.ToolbeltApplication.Off",
+    },
+    default: TOOLBELT_APPLICATION_MODES.ALL_RESOLVED,
+    onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.MIGRATION_VERSION,
+    name: "Nelflow internal migration version",
+    hint: "",
+    type: Number,
+    default: 0,
+    config: false,
   },
   {
     key: SETTINGS.AUTO_APPLY_BASIC_SAVE_DAMAGE,
     name: "Nelflow.Settings.AutoApplyBasicSaveDamage.Name",
     hint: "Nelflow.Settings.AutoApplyBasicSaveDamage.Hint",
     default: true,
+    config: false,
   },
   {
     key: SETTINGS.DEBUG,
@@ -96,7 +135,7 @@ export function registerSettings() {
       name: definition.name,
       hint: definition.hint,
       scope: "world",
-      config: true,
+      config: definition.config ?? true,
       restricted: true,
       type: definition.type ?? Boolean,
       choices: definition.choices,
@@ -109,4 +148,18 @@ export function registerSettings() {
 /** Read a Nelflow setting. */
 export function getSetting(key) {
   return game.settings.get(MODULE_ID, key);
+}
+
+/** One-time 0.3.1 workflow migration; never enables the legacy resolver. */
+export async function migrateSettings({ toolbeltReady }) {
+  if (!game.user?.isGM) return false;
+  const version = Number(getSetting(SETTINGS.MIGRATION_VERSION) ?? 0);
+  if (version >= SETTINGS_MIGRATION_VERSION) return false;
+  await game.settings.set(
+    MODULE_ID,
+    SETTINGS.BASIC_SAVE_WORKFLOW,
+    toolbeltReady ? BASIC_SAVE_WORKFLOW_MODES.TOOLBELT : BASIC_SAVE_WORKFLOW_MODES.OFF,
+  );
+  await game.settings.set(MODULE_ID, SETTINGS.MIGRATION_VERSION, SETTINGS_MIGRATION_VERSION);
+  return true;
 }

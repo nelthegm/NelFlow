@@ -1,5 +1,5 @@
 import {
-  BASIC_SAVE_RESOLVER_MODES,
+  BASIC_SAVE_WORKFLOW_MODES,
   MODULE_ID,
   SAVE_RESOLVER_SCHEMA_VERSION,
   SETTINGS,
@@ -308,7 +308,7 @@ async function persistResolver(message, transform) {
 
 async function inspectSource(message) {
   if (
-    getSetting(SETTINGS.BASIC_SAVE_RESOLVER) !== BASIC_SAVE_RESOLVER_MODES.NPC_SPELLS ||
+    getSetting(SETTINGS.BASIC_SAVE_WORKFLOW) !== BASIC_SAVE_WORKFLOW_MODES.LEGACY ||
     !game.user.isGM ||
     message.author?.id !== game.user.id ||
     sourceFlag(message)
@@ -491,11 +491,13 @@ export class SaveResolverService {
   static initialize() {
     if (initialized) return;
     initialized = true;
-    PF2eAdapter.registerMessageObserver((message) => {
-      void observeSaveMessage(message).catch((error) =>
-        logger.error("Save correlation failed", { stage: "save-candidate" }, error),
-      );
-    });
+    if (getSetting(SETTINGS.BASIC_SAVE_WORKFLOW) === BASIC_SAVE_WORKFLOW_MODES.LEGACY) {
+      PF2eAdapter.registerMessageObserver((message) => {
+        void observeSaveMessage(message).catch((error) =>
+          logger.error("Save correlation failed", { stage: "save-candidate" }, error),
+        );
+      });
+    }
     for (const message of game.messages) {
       const resolver = resolverFlag(message);
       for (const target of resolver?.targets ?? []) {

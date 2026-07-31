@@ -10,6 +10,7 @@ import {
 } from "./presentation-format.js";
 import { renderDurableStackFallback } from "./stack-fallback.js";
 import { failOpenSaveResolver, renderSaveResolverChat } from "./save-resolver-ui.js";
+import { renderToolbeltBasicSave } from "./toolbelt-basic-save-ui.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
@@ -455,6 +456,7 @@ export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
   let stack = null;
   try {
+    renderToolbeltBasicSave(message, html);
     if (renderSaveResolverChat(message, html)) return;
     stack = message.getFlag(MODULE_ID, "stack");
     if (stack) {

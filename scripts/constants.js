@@ -11,6 +11,9 @@ export const SETTINGS = Object.freeze({
   STACK_FIRST_NATIVE_RECORDS: "stackFirstNativeRecords",
   BASIC_SAVE_RESOLVER: "basicSaveResolver",
   AUTO_APPLY_BASIC_SAVE_DAMAGE: "autoApplyBasicSaveDamage",
+  BASIC_SAVE_WORKFLOW: "basicSaveWorkflow",
+  TOOLBELT_BASIC_SAVE_APPLICATION: "toolbeltBasicSaveApplication",
+  MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });
 
@@ -30,6 +33,22 @@ export const BASIC_SAVE_RESOLVER_MODES = Object.freeze({
   OFF: "off",
   NPC_SPELLS: "npc-spells",
 });
+
+export const BASIC_SAVE_WORKFLOW_MODES = Object.freeze({
+  OFF: "off",
+  TOOLBELT: "toolbelt",
+  LEGACY: "legacy",
+});
+
+export const TOOLBELT_APPLICATION_MODES = Object.freeze({
+  ALL_RESOLVED: "all-resolved",
+  PER_TARGET: "per-target",
+  GM_CONFIRM: "gm-confirm",
+  OFF: "off",
+});
+
+export const TOOLBELT_TRANSACTION_SCHEMA_VERSION = 1;
+export const SETTINGS_MIGRATION_VERSION = 1;
 
 export const SAVE_RESOLVER_SCHEMA_VERSION = 1;
 

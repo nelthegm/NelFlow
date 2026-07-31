@@ -145,6 +145,9 @@ for (const required of [
   "choices:",
   "SETTINGS.BASIC_SAVE_RESOLVER",
   "SETTINGS.AUTO_APPLY_BASIC_SAVE_DAMAGE",
+  "SETTINGS.BASIC_SAVE_WORKFLOW",
+  "SETTINGS.TOOLBELT_BASIC_SAVE_APPLICATION",
+  "SETTINGS.MIGRATION_VERSION",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
 }
@@ -585,6 +588,64 @@ if (!existsSync(join(root, "docs", "SLICE_003_BASIC_SAVE_SPELL_RESOLVER.md"))) {
 const saveTestPlan = read("docs/SLICE_003_TEST_PLAN.md");
 if ((saveTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 46) {
   fail("Slice 3 runtime test plan must include at least 46 scenarios");
+}
+const toolbeltAdapter = read("scripts/toolbelt-target-helper-adapter.js");
+const toolbeltService = read("scripts/toolbelt-basic-save-service.js");
+const toolbeltUi = read("scripts/toolbelt-basic-save-ui.js");
+const toolbeltModel = read("scripts/toolbelt-basic-save-model.js");
+for (const required of [
+  'TOOLBELT_MIN_VERSION = "3.52.0"',
+  'TOOLBELT_MAX_VERSION = "3.52.1"',
+  'game.settings.get(TOOLBELT_ID, "targetHelper.enabled")',
+  'message?.flags?.[TOOLBELT_ID]?.targetHelper',
+  'data.type !== "damage"',
+  'save?.basic === true',
+  'data.applied?.[token.id]?.[rollIndex] === true',
+  'isSplashTarget: false',
+]) {
+  if (!toolbeltAdapter.includes(required)) fail(`Toolbelt adapter guard is missing: ${required}`);
+}
+for (const required of [
+  "electProcessingGm",
+  "processingUserId",
+  "toolbeltSchemaFingerprint",
+  "PF2eAdapter.applyDamageRollToRecordedTarget",
+  "guardedHealthRestore",
+  "persistent-damage-unsupported",
+  "toolbeltAppliedState",
+  "reload-during-application",
+  "stale-toolbelt-save-state",
+]) {
+  if (!toolbeltService.includes(required)) fail(`Toolbelt transaction guard is missing: ${required}`);
+}
+if (/\.click\s*\(|dispatchEvent|jQuery|\$\s*\(/.test(`${toolbeltAdapter}\n${toolbeltService}`)) {
+  fail("Toolbelt mechanics appear to click or dispatch DOM controls");
+}
+if (/message\.(?:content|flavor)|innerHTML|textContent|querySelector/.test(`${toolbeltAdapter}\n${toolbeltService}`)) {
+  fail("Toolbelt mechanics appear to parse rendered chat content or DOM");
+}
+if (/rollDamage\s*\(|new\s+(?:Roll|DamageRoll)|1d20|damage\.formula/.test(toolbeltService)) {
+  fail("Toolbelt integration appears to reroll or reconstruct damage/save formulas");
+}
+if (/target\.name|actor\.name/.test(`${toolbeltAdapter}\n${toolbeltService}\n${toolbeltModel}`)) {
+  fail("Toolbelt mechanical identity appears to depend on a target or actor name");
+}
+if (!toolbeltUi.includes("nelflow-toolbelt") || !read("scripts/chat-ui.js").includes("renderToolbeltBasicSave")) {
+  fail("Toolbelt status UI is not routed through the existing chat renderer");
+}
+if (!read("scripts/settings.js").includes("SETTINGS_MIGRATION_VERSION")) {
+  fail("Slice 3.1 one-time settings migration is missing");
+}
+const toolbeltTests = read("tests/toolbelt-basic-save.test.mjs");
+if ((toolbeltTests.match(/\btest\s*\(/g) ?? []).length < 48) {
+  fail("mocked Toolbelt integration coverage must include at least 48 scenarios");
+}
+if (!existsSync(join(root, "docs", "SLICE_003_1_TOOLBELT_AUTO_APPLICATION.md"))) {
+  fail("Slice 3.1 architecture documentation is missing");
+}
+const toolbeltTestPlan = read("docs/SLICE_003_1_TEST_PLAN.md");
+if ((toolbeltTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 66) {
+  fail("Slice 3.1 runtime test plan must include at least 66 scenarios");
 }
 const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
 if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {
