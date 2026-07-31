@@ -18,6 +18,9 @@ available.
 Slice 3.2 extends that same Toolbelt transaction, application, guard, and Undo
 pipeline to structurally verified NPC `action` abilities with explicit basic
 saves and one exact native damage roll.
+Slice 3.3 automatically invokes PF2e's native spell damage API once for live,
+deterministic Toolbelt basic-save spell cards, then hands the resulting native
+damage message to the unchanged Slice 3.1/3.2 application workflow.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -255,6 +258,37 @@ description-only saves, healing, persistent damage, splash-only rows, and
 messages with multiple ambiguous regular rolls remain entirely native/manual.
 No action, save, or damage is rerolled and no ability resolver is created.
 
+## Slice 3.3 deterministic damage autoroll
+
+Set **Automatic Basic Save Damage Roll** to **GM-Authored Sources** or **All
+Eligible Sources**. For an exact live Toolbelt basic-save spell with targets,
+one resolved cast rank/overlay, and one regular choice-free damage action,
+Nelflow durably claims the source card and calls that exact reconstructed
+`SpellPF2e#rollDamage` once. PF2e creates the normal DamageRoll and
+ChatMessage; Toolbelt targets are carried through its public target-flag API,
+and the existing save/application timing remains authoritative.
+
+The source card shows Waiting for Targets, Auto-Rolling, Damage Rolled,
+External Damage Roll Detected, or a manual/unavailable state. Claimed and
+completed controls are presentation-guarded against accidental duplicate
+rolls. The author or a GM may explicitly **Enable Manual Damage Roll** after a
+warning, then **Guard Damage Roll** again. This override survives reload.
+
+Only the exact active source author invokes the native action. Historical cards
+never start work, nonterminal claims become Interrupted after reload, and
+terminal cards never retry. A structurally unique external damage card created
+first is linked as external; ambiguity cancels autoroll rather than choosing by
+name, time, total, or chat position.
+
+PF2e 8.3.0 exposes no native damage invocation method on `AbilityItemPF2e`.
+NPC action damage is reachable only through enhanced inline-damage card
+listeners. Because Slice 3.3 never clicks DOM controls, calls listeners, parses
+HTML/formulas, or creates substitute rolls, NPC ability source cards safely
+remain manual. Their already-accepted Slice 3.2 damage application continues
+unchanged after the user rolls native damage. Damage dialogs, unresolved
+variants, attack spells, healing, persistent/splash-only damage, missing
+targets, and ambiguous structures also remain manual.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -278,6 +312,13 @@ No action, save, or damage is rerolled and no ability resolver is created.
   choose `Spells Only` to retain Slice 3.1 behavior and leave non-spell NPC
   abilities manual. Migration updates this once only for existing Toolbelt
   workflow worlds and does not change Off or Legacy selections.
+- **Automatic Basic Save Damage Roll** — defaults to `All Eligible Sources`
+  for a new world. `GM-Authored Sources` limits invocation to source messages
+  authored by an active GM; `Off` preserves the prior manual workflow. The
+  version-3 migration sets this setting to Off once for existing worlds and
+  does not alter Basic Save Workflow, source modes, or Legacy mode. In PF2e
+  8.3.0, deterministic direct spell sources are supported; NPC action sources
+  remain manual because the system exposes no native item damage method.
 - **Guard Toolbelt Damage Controls** is enabled by default. It guards only
   Damage/Half/Double/Triple for an exactly identified, conclusively handled
   target. Disable it to retain normal Toolbelt controls without changing
@@ -355,6 +396,15 @@ Undo Blocked.
   an exact save mapping for multiple regular rolls, so those cases stay manual.
 - Conditions by degree, forced movement, persistent/splash damage, healing,
   and attack-plus-save ability effects are not automated.
+- Slice 3.3 supports direct `SpellPF2e` source cards only. Consumable-embedded
+  spells and PF2e 8.3.0 NPC `AbilityItemPF2e` sources lack a proven equivalent
+  native invocation path and remain manual.
+- A user whose PF2e **Show Damage Roll Dialogs** preference is enabled remains
+  manual: Nelflow will not open, bypass, or auto-confirm a choice-capable
+  damage dialog.
+- External-roll correlation without Nelflow's inert origin marker must be
+  structurally unique. Concurrent identical unmarked sources become Ambiguous
+  and do not autoroll.
 
 ## Testing and design documentation
 
@@ -381,3 +431,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3.1.1 runtime test plan](docs/SLICE_003_1_1_TEST_PLAN.md)
 - [Slice 3.2 Toolbelt NPC basic-save abilities](docs/SLICE_003_2_TOOLBELT_NPC_BASIC_SAVE_ABILITIES.md)
 - [Slice 3.2 runtime test plan](docs/SLICE_003_2_TEST_PLAN.md)
+- [Slice 3.3 deterministic damage autoroll](docs/SLICE_003_3_DETERMINISTIC_DAMAGE_AUTOROLL.md)
+- [Slice 3.3 runtime test plan](docs/SLICE_003_3_TEST_PLAN.md)

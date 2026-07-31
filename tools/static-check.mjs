@@ -147,6 +147,10 @@ for (const required of [
   "SETTINGS.AUTO_APPLY_BASIC_SAVE_DAMAGE",
   "SETTINGS.BASIC_SAVE_WORKFLOW",
   "SETTINGS.TOOLBELT_BASIC_SAVE_APPLICATION",
+  "SETTINGS.AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL",
+  "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.OFF",
+  "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.GM",
+  "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL",
   "SETTINGS.MIGRATION_VERSION",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
@@ -188,6 +192,9 @@ const mechanicalSource = [
   "scripts/save-resolver-service.js",
   "scripts/save-correlation.js",
   "scripts/basic-save-source-classifier.js",
+  "scripts/native-damage-action-adapter.js",
+  "scripts/auto-damage-roll-model.js",
+  "scripts/auto-damage-roll-service.js",
 ]
   .map(read)
   .join("\n");
@@ -718,8 +725,8 @@ for (const required of [
 ]) {
   if (!settingsSource.includes(required)) fail(`Slice 3.2 source setting or migration is missing: ${required}`);
 }
-if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 2")) {
-  fail("Slice 3.2 settings migration version must be 2");
+if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 3")) {
+  fail("Slice 3.3 settings migration version must be 3");
 }
 for (const required of [
   "sourceKind: normalized.sourceKind",
@@ -764,6 +771,153 @@ if ((npcAbilityTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 56) {
 const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
 if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {
   fail("Slice 2.2.2 runtime test plan must include at least 25 scenarios");
+}
+
+const autoDamageAdapter = read("scripts/native-damage-action-adapter.js");
+const autoDamageModel = read("scripts/auto-damage-roll-model.js");
+const autoDamageService = read("scripts/auto-damage-roll-service.js");
+const autoDamageUi = read("scripts/auto-damage-roll-ui.js");
+const autoDamageSource = `${autoDamageAdapter}\n${autoDamageModel}\n${autoDamageService}`;
+for (const required of [
+  'AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll"',
+  'OFF: "off"',
+  'GM: "gm"',
+  'ALL: "all"',
+  "AUTO_DAMAGE_ROLL_SCHEMA_VERSION = 1",
+]) {
+  if (!constantsSource.includes(required)) fail(`Slice 3.3 constant is missing: ${required}`);
+}
+for (const required of [
+  "default: AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL",
+  "version < 3",
+  "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.OFF",
+  "hasStoredMigration",
+]) {
+  if (!settingsSource.includes(required)) fail(`Slice 3.3 setting/migration guard is missing: ${required}`);
+}
+for (const required of [
+  "item.getDamage",
+  "item.rollDamage",
+  'damageActionId = "spell-damage"',
+  "normalizedSource.castRank !== item.rank",
+  "spell-overlay-ambiguous",
+  "damage-choice-dialog-enabled",
+  "ability-native-damage-api-unavailable",
+  "toolbelt-targets-missing",
+  "persistent-damage-unsupported",
+  "splash-damage-unsupported",
+  "eligibilityFingerprint",
+]) {
+  if (!autoDamageAdapter.includes(required)) fail(`native damage adapter guard is missing: ${required}`);
+}
+for (const required of [
+  'const FLAG = "autoDamageRoll"',
+  'const ORIGIN_FLAG = "autoDamageRollOrigin"',
+  "const liveSourceIds = new Set()",
+  "const captures = new Map()",
+  "const scheduled = new Set()",
+  "let invocationQueue = Promise.resolve()",
+  "state: AUTO_DAMAGE_ROLL_STATES.ELIGIBLE",
+  "draft.state = AUTO_DAMAGE_ROLL_STATES.CLAIMED",
+  "await persist(message, draft); // Durable source/target/authority claim precedes the native call.",
+  "draft.state = AUTO_DAMAGE_ROLL_STATES.ROLLING",
+  "durable.revision !== revisionBeforeRolling + 1",
+  "invokeNativeDamageAction(normalized.item, inspection)",
+  "capture.preCreateMatches !== 1",
+  "autoDamageCandidateMatches(draft, normalizedDamage, marker)",
+  "setMessageFlagTargets(update, capture.targetTokenUuids)",
+  "external-correlation-ambiguous",
+  "reload-interrupted-autoroll",
+  "liveSourceIds.has(sourceMessageId)",
+]) {
+  if (!autoDamageService.includes(required)) fail(`autoroll transaction/correlation guard is missing: ${required}`);
+}
+for (const state of [
+  'COMPLETED: "completed"',
+  'EXTERNAL: "external-roll-detected"',
+  'AMBIGUOUS: "ambiguous"',
+  'MANUAL: "manual"',
+  'INTERRUPTED: "interrupted"',
+  'ERROR: "error"',
+]) {
+  if (!autoDamageModel.includes(state)) fail(`autoroll terminal state is missing: ${state}`);
+}
+if (/message\.(?:content|flavor)|_source\.(?:content|flavor)|innerHTML|textContent|querySelector|DOMParser/.test(autoDamageSource)) {
+  fail("autoroll mechanics appear to parse source/damage card HTML or displayed content");
+}
+if (/\.click\s*\(|dispatchEvent|addRollListener|activateListeners|_onClick/.test(autoDamageSource)) {
+  fail("autoroll mechanics appear to click a DOM control or invoke a chat-card listener");
+}
+if (/new\s+(?:Roll|DamageRoll)|\.formula\b|construct.*formula|evaluate\s*\(/i.test(autoDamageSource)) {
+  fail("autoroll mechanics appear to construct, inspect, or evaluate a damage formula");
+}
+if (/save\.check\.roll|1d20|degreeOfSuccess\s*=|rollSave\s*\(/.test(autoDamageSource)) {
+  fail("autoroll service appears to roll or calculate a saving throw");
+}
+if (/most recent|newest|findLast|actor\.name|item\.name|sourceItem\.name|message\.timestamp/i.test(autoDamageSource)) {
+  fail("autoroll correlation appears to use names, timestamps, or newest-message matching");
+}
+const liveGate = autoDamageModel.match(/export function liveInvocationAllowed[\s\S]*?^}/m)?.[0] ?? "";
+if (!liveGate.includes("live &&") || /Date\.now|createdTime|timestamp/.test(liveGate)) {
+  fail("autoroll live-session gate is missing or depends on time");
+}
+if (/setTimeout|setInterval|MutationObserver/.test(autoDamageSource)) {
+  fail("autoroll mechanics must not use timeouts, polling, or DOM observation");
+}
+if (!autoDamageService.includes('Hooks.on("preCreateChatMessage", onPreCreateChatMessage)') ||
+    (autoDamageService.match(/Hooks\.on\(["']preCreateChatMessage["']/g) ?? []).length !== 1) {
+  fail("autoroll must use one permanent generated-message preCreate dispatcher");
+}
+for (const required of [
+  'querySelectorAll(\'[data-action="spell-damage"]\')',
+  'addEventListener("click", intercept, true)',
+  'addEventListener("keydown", intercept, true)',
+  "event.stopImmediatePropagation()",
+  "listenerRoots.has(html)",
+  "DialogV2.confirm",
+  "setManualRoll(message.id, true)",
+  "auto-damage-source-control-restored",
+  "export function failOpenAutoDamageRoll(html)",
+]) {
+  if (!autoDamageUi.includes(required)) fail(`source-card guard/UI behavior is missing: ${required}`);
+}
+if (!chatUiSource.includes("failOpenAutoDamageRoll(html)")) {
+  fail("central chat presentation failure must restore the native source control");
+}
+if (/\.click\s*\(|dispatchEvent|MutationObserver|setTimeout/.test(autoDamageUi)) {
+  fail("source-card UI must not programmatically click, dispatch, observe, or poll");
+}
+for (const event of [
+  "auto-damage-source-observed",
+  "auto-damage-awaiting-targets",
+  "auto-damage-eligible",
+  "auto-damage-ineligible",
+  "auto-damage-claimed",
+  "auto-damage-rolling",
+  "auto-damage-message-correlated",
+  "auto-damage-completed",
+  "auto-damage-external-roll-detected",
+  "auto-damage-correlation-ambiguous",
+  "auto-damage-manual",
+  "auto-damage-interrupted",
+  "auto-damage-error",
+  "auto-damage-source-control-guarded",
+  "auto-damage-source-control-restored",
+  "auto-damage-manual-roll-enabled",
+  "auto-damage-manual-roll-reguarded",
+]) {
+  if (!`${autoDamageService}\n${autoDamageUi}`.includes(event)) fail(`safe autoroll diagnostic is missing: ${event}`);
+}
+const autoDamageTests = read("tests/auto-damage-roll.test.mjs");
+if ((autoDamageTests.match(/\btest\s*\(/g) ?? []).length < 68) {
+  fail("mocked deterministic damage-autoroll coverage must include at least 68 scenarios");
+}
+if (!existsSync(join(root, "docs", "SLICE_003_3_DETERMINISTIC_DAMAGE_AUTOROLL.md"))) {
+  fail("Slice 3.3 architecture documentation is missing");
+}
+const autoDamageTestPlan = read("docs/SLICE_003_3_TEST_PLAN.md");
+if ((autoDamageTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 78) {
+  fail("Slice 3.3 runtime test plan must include at least 78 scenarios");
 }
 
 const packageScript = read("tools/package.ps1");

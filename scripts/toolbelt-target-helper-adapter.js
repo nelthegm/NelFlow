@@ -44,6 +44,15 @@ function fingerprintValue(value) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+export function targetIdentityFingerprint(targets) {
+  return fingerprintValue(
+    [...(targets ?? [])].map((target) => ({
+      tokenUuid: target.tokenUuid,
+      actorUuid: target.actorUuid,
+    })),
+  );
+}
+
 export function toolbeltStateFingerprint(data) {
   return fingerprintValue({
     targets: data.targets,
@@ -104,6 +113,18 @@ function rawFlag(message) {
   return message?.flags?.[TOOLBELT_ID]?.targetHelper ?? null;
 }
 
+function structuredMessageMode(message) {
+  const contextMode = message?.flags?.pf2e?.context?.messageMode;
+  if (["public", "gm", "blind", "self"].includes(contextMode)) return contextMode;
+  if (message?.blind === true) return "blind";
+  const recipients = [...(message?.whisper ?? [])].map((user) => user?.id ?? user).filter(Boolean);
+  if (!recipients.length) return "public";
+  const authorId = message?.author?.id ?? message?.user?.id ?? null;
+  if (recipients.length === 1 && recipients[0] === authorId) return "self";
+  if (recipients.every((userId) => game.users?.get(userId)?.isGM === true)) return "gm";
+  return "private";
+}
+
 /**
  * Toolbelt 3.52.x exposes only getMessageTargets/setMessageFlagTargets publicly.
  * This is the sole version-gated boundary that reads its persisted Target Helper flag.
@@ -138,6 +159,147 @@ export class ToolbeltTargetHelperAdapter {
 
   static readRawData(message) {
     return rawFlag(message);
+  }
+
+  /** Normalize a live Toolbelt source card without reading rendered markup. */
+  static normalizeSourceMessage(message) {
+    const status = this.status();
+    if (!status.active) return { ok: false, reason: "toolbelt-inactive", status };
+    if (!status.enabled) return { ok: false, reason: "target-helper-disabled", status };
+    if (!status.supported) return { ok: false, reason: "toolbelt-version-unsupported", status };
+
+    const data = rawFlag(message);
+    if (!data || !["spell", "action"].includes(data.type)) {
+      return { ok: false, reason: "not-toolbelt-basic-save-source", status };
+    }
+    const item = message?.item ?? null;
+    const actor = message?.actor ?? null;
+    const origin = message?.flags?.pf2e?.origin ?? null;
+    if (!item?.uuid || !actor?.uuid || item.actor?.uuid !== actor.uuid) {
+      return { ok: false, reason: "source-document-unavailable", status };
+    }
+
+    const sourceKind = item.isOfType?.("spell")
+      ? "spell"
+      : item.isOfType?.("action")
+        ? "npc-ability"
+        : "unknown";
+    if (sourceKind === "unknown") {
+      return { ok: false, reason: "source-item-type-unsupported", status };
+    }
+    if (
+      origin?.actor !== actor.uuid ||
+      origin?.uuid !== item.uuid ||
+      (sourceKind === "spell" && origin.type !== "spell") ||
+      (sourceKind === "npc-ability" && origin.type !== "action")
+    ) {
+      return { ok: false, reason: "source-origin-mismatch", status, sourceKind };
+    }
+    if (
+      sourceKind === "npc-ability" &&
+      (data.author !== actor.uuid || data.item !== item.uuid)
+    ) {
+      return { ok: false, reason: "source-toolbelt-identity-mismatch", status, sourceKind };
+    }
+
+    const variantId = sourceKind === "spell" ? item.variantId ?? "null" : "null";
+    const directVariant = data.saveVariants?.[variantId];
+    const basicVariants = Object.entries(data.saveVariants ?? {}).filter(
+      ([, save]) => save?.basic === true && SAVE_TYPES.has(save?.statistic),
+    );
+    const selected = directVariant?.basic === true && SAVE_TYPES.has(directVariant.statistic)
+      ? [variantId, directVariant]
+      : basicVariants.length === 1
+        ? basicVariants[0]
+        : null;
+    if (!selected) {
+      return { ok: false, reason: "basic-save-variant-ambiguous", status, sourceKind };
+    }
+    const [selectedVariantId, save] = selected;
+    const classification = sourceKind === "spell"
+      ? classifyBasicSaveSource({
+          message,
+          toolbeltSource: {
+            sourceActorUuid: actor.uuid,
+            sourceItemUuid: item.uuid,
+            isBasicSave: true,
+            saveType: save.statistic,
+          },
+          rollIndex: 0,
+        })
+      : null;
+    if (classification && (!classification.ok || classification.sourceKind !== sourceKind)) {
+      return {
+        ok: false,
+        reason: classification.reason ?? "source-classification-mismatch",
+        status,
+        sourceKind,
+      };
+    }
+
+    const seen = new Set();
+    const targets = [];
+    for (const tokenUuid of data.targets ?? []) {
+      if (typeof tokenUuid !== "string" || seen.has(tokenUuid)) continue;
+      seen.add(tokenUuid);
+      const token = fromUuidSync(tokenUuid, { strict: false });
+      if (!token?.id || !token.actor?.uuid) continue;
+      targets.push({
+        toolbeltTargetKey: token.id,
+        tokenUuid,
+        actorUuid: token.actor.uuid,
+      });
+    }
+    const targetFingerprint = targetIdentityFingerprint(targets);
+    const castRank = Number.isInteger(origin.castRank) ? origin.castRank : null;
+    const overlayIds = Array.isArray(origin.variant?.overlays)
+      ? [...origin.variant.overlays].map(String).sort()
+      : [];
+    const actionVariant = sourceKind === "npc-ability"
+      ? (origin.variant?.id ?? null)
+      : null;
+    const messageMode = structuredMessageMode(message);
+    const sourceFingerprint = fingerprintValue({
+      sourceMessageId: message.id,
+      sourceKind,
+      sourceActorUuid: actor.uuid,
+      sourceItemUuid: item.uuid,
+      sourceUserId: message.author?.id ?? message.user?.id ?? null,
+      saveType: save.statistic,
+      selectedVariantId,
+      sourceClassifierVersion: classification?.classifierVersion ?? null,
+      castRank,
+      overlayIds,
+      actionVariant,
+      context: message.flags?.pf2e?.context?.type ?? null,
+      messageMode,
+    });
+
+    return {
+      ok: true,
+      status,
+      message,
+      actor,
+      item,
+      sourceMessageId: message.id,
+      sourceKind,
+      sourceActorUuid: actor.uuid,
+      sourceActorType: actor.type ?? null,
+      sourceItemUuid: item.uuid,
+      sourceItemType: item.type ?? null,
+      sourceUserId: message.author?.id ?? message.user?.id ?? null,
+      saveType: save.statistic,
+      isBasicSave: true,
+      selectedVariantId,
+      sourceClassifierVersion: classification?.classifierVersion ?? null,
+      castRank,
+      overlayIds,
+      actionVariant,
+      messageMode,
+      targets,
+      targetFingerprint,
+      sourceFingerprint,
+    };
   }
 
   static normalizeDamageMessage(message) {
@@ -237,7 +399,14 @@ export class ToolbeltTargetHelperAdapter {
       eligibilityEvidence: source.eligibilityEvidence,
       sourceUserId: message.author?.id ?? message.user?.id ?? null,
       targets,
+      targetFingerprint: targetIdentityFingerprint(targets),
       splashTargetUuids: [...(data.splashTargets ?? [])],
+      sourceCastRank: Number.isInteger(message.flags?.pf2e?.origin?.castRank)
+        ? message.flags.pf2e.origin.castRank
+        : null,
+      sourceOverlayIds: Array.isArray(message.flags?.pf2e?.origin?.variant?.overlays)
+        ? [...message.flags.pf2e.origin.variant.overlays].map(String).sort()
+        : [],
       persistent: hasPersistentDamage(roll),
       schemaFingerprint: toolbeltStateFingerprint(data),
     };

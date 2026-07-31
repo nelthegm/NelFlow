@@ -8,6 +8,7 @@ import { StrikeResolver } from "./strike-resolver.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { ToolbeltBasicSaveService } from "./toolbelt-basic-save-service.js";
 import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
+import { AutoDamageRollService } from "./auto-damage-roll-service.js";
 
 Hooks.once("init", () => {
   registerSettings();
@@ -44,10 +45,17 @@ async function initializeReady() {
   const toolbelt = ToolbeltTargetHelperAdapter.status();
   await migrateSettings({ toolbeltReady: toolbelt.active && toolbelt.enabled });
   PF2eAdapter.initialize();
+  AutoDamageRollService.initialize();
   SaveResolverService.initialize();
   ToolbeltBasicSaveService.initialize();
   TurnStackService.initialize();
   Hooks.on("createChatMessage", (message) => {
+    void AutoDamageRollService.handleCreatedMessage(message).catch((error) => {
+      logger.error("Unhandled automatic damage-message error", {
+        stage: "createChatMessage",
+        reason: error instanceof Error ? error.message : String(error),
+      }, error);
+    });
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
       logger.error(
         "Unhandled attack-message error",
@@ -78,6 +86,12 @@ async function initializeReady() {
     });
   });
   Hooks.on("updateChatMessage", (message) => {
+    void AutoDamageRollService.handleUpdatedMessage(message).catch((error) => {
+      logger.error("Unhandled automatic damage-message update error", {
+        stage: "updateChatMessage",
+        reason: error instanceof Error ? error.message : String(error),
+      }, error);
+    });
     void ToolbeltBasicSaveService.handleMessage(message).catch((error) => {
       logger.error("Unhandled Toolbelt message-update error", {
         stage: "updateChatMessage",
@@ -85,5 +99,5 @@ async function initializeReady() {
       }, error);
     });
   });
-  logger.debug("Slice 3.2 ready");
+  logger.debug("Slice 3.3 ready");
 }

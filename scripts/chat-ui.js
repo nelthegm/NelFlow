@@ -15,6 +15,7 @@ import { StrikeResolver } from "./strike-resolver.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
+import { failOpenAutoDamageRoll, renderAutoDamageRoll } from "./auto-damage-roll-ui.js";
 
 const reportedRenderFailures = new Set();
 
@@ -456,6 +457,7 @@ export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
   let stack = null;
   try {
+    renderAutoDamageRoll(message, html);
     renderToolbeltBasicSave(message, html);
     if (renderSaveResolverChat(message, html)) return;
     stack = message.getFlag(MODULE_ID, "stack");
@@ -468,6 +470,7 @@ export function renderNelflowChat(message, html) {
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
   } catch (error) {
+    failOpenAutoDamageRoll(html);
     html.classList.remove(
       "nelflow-native-record-hidden",
       "nelflow-native-collapsed",

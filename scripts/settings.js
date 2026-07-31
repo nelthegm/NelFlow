@@ -8,6 +8,7 @@ import {
   SETTINGS_MIGRATION_VERSION,
   TOOLBELT_APPLICATION_MODES,
   TOOLBELT_BASIC_SAVE_SOURCE_MODES,
+  AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES,
 } from "./constants.js";
 
 function refreshPresentation() {
@@ -126,6 +127,22 @@ const SETTING_DEFINITIONS = [
     default: TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES,
   },
   {
+    key: SETTINGS.AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL,
+    name: "Nelflow.Settings.AutomaticDamageRoll.Name",
+    hint: "Nelflow.Settings.AutomaticDamageRoll.Hint",
+    type: String,
+    choices: {
+      [AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.OFF]:
+        "Nelflow.Settings.AutomaticDamageRoll.Off",
+      [AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.GM]:
+        "Nelflow.Settings.AutomaticDamageRoll.Gm",
+      [AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL]:
+        "Nelflow.Settings.AutomaticDamageRoll.All",
+    },
+    default: AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",
@@ -175,6 +192,13 @@ export async function migrateSettings({ toolbeltReady }) {
   if (!game.user?.isGM) return false;
   const version = Number(getSetting(SETTINGS.MIGRATION_VERSION) ?? 0);
   if (version >= SETTINGS_MIGRATION_VERSION) return false;
+  const storage = game.settings.storage?.get?.("world");
+  const hasStoredMigration = storage?.has?.(`${MODULE_ID}.${SETTINGS.MIGRATION_VERSION}`) === true;
+  if (!hasStoredMigration && version === 0) {
+    // A fresh world keeps registered defaults, including Slice 3.3 autoroll.
+    await game.settings.set(MODULE_ID, SETTINGS.MIGRATION_VERSION, SETTINGS_MIGRATION_VERSION);
+    return true;
+  }
   if (version < 1) {
     await game.settings.set(
       MODULE_ID,
@@ -190,6 +214,15 @@ export async function migrateSettings({ toolbeltReady }) {
       MODULE_ID,
       SETTINGS.TOOLBELT_BASIC_SAVE_SOURCES,
       TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES,
+    );
+  }
+  if (version < 3) {
+    // Existing worlds opt in explicitly so an update never adds a damage roll
+    // to an established workflow without the GM's choice.
+    await game.settings.set(
+      MODULE_ID,
+      SETTINGS.AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL,
+      AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.OFF,
     );
   }
   await game.settings.set(MODULE_ID, SETTINGS.MIGRATION_VERSION, SETTINGS_MIGRATION_VERSION);

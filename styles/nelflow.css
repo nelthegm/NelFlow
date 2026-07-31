@@ -468,6 +468,52 @@
   color: var(--color-text-subtle, #666);
 }
 
+.nelflow-auto-damage {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+  margin-top: 0.35rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--color-border-light-2, #bbb);
+  font-size: var(--font-size-12, 0.75rem);
+}
+
+.nelflow-auto-damage__status,
+.nelflow-auto-damage__guard,
+.nelflow-auto-damage__manual {
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.nelflow-auto-damage__guard,
+.nelflow-auto-damage__manual {
+  color: var(--color-text-subtle, #666);
+}
+
+.nelflow-auto-damage__controls {
+  display: flex;
+  gap: 0.25rem;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.nelflow-auto-damage__controls button {
+  width: auto;
+  min-width: 0;
+  min-height: 1.45rem;
+  padding: 0.1rem 0.35rem;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.nelflow-auto-damage-control-guarded {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .nelflow-toolbelt__guard,
 .nelflow-toolbelt__manual-enabled {
   color: var(--color-level-info, #315a7d);

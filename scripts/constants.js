@@ -14,6 +14,7 @@ export const SETTINGS = Object.freeze({
   BASIC_SAVE_WORKFLOW: "basicSaveWorkflow",
   TOOLBELT_BASIC_SAVE_APPLICATION: "toolbeltBasicSaveApplication",
   TOOLBELT_BASIC_SAVE_SOURCES: "toolbeltBasicSaveSources",
+  AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll",
   GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
@@ -54,8 +55,16 @@ export const TOOLBELT_BASIC_SAVE_SOURCE_MODES = Object.freeze({
   SPELLS_AND_NPC_ABILITIES: "spells-and-npc-abilities",
 });
 
+export const AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES = Object.freeze({
+  OFF: "off",
+  GM: "gm",
+  ALL: "all",
+});
+
+export const AUTO_DAMAGE_ROLL_SCHEMA_VERSION = 1;
+
 export const TOOLBELT_TRANSACTION_SCHEMA_VERSION = 1;
-export const SETTINGS_MIGRATION_VERSION = 2;
+export const SETTINGS_MIGRATION_VERSION = 3;
 
 export const SAVE_RESOLVER_SCHEMA_VERSION = 1;
 
