@@ -457,11 +457,13 @@
 }
 
 .nelflow-toolbelt__target-body strong,
+.nelflow-toolbelt__result,
 .nelflow-toolbelt__status {
   min-width: 0;
   overflow-wrap: break-word;
 }
 
+.nelflow-toolbelt__result,
 .nelflow-toolbelt__status {
   color: var(--color-text-subtle, #666);
 }

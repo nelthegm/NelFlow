@@ -3,8 +3,10 @@ import {
   MODULE_ID,
   SETTINGS,
   TOOLBELT_APPLICATION_MODES,
+  TOOLBELT_BASIC_SAVE_SOURCE_MODES,
   TOOLBELT_TRANSACTION_SCHEMA_VERSION,
 } from "./constants.js";
+import { sourceModeAllows } from "./basic-save-source-classifier.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
@@ -32,13 +34,47 @@ function shortId(value) {
   return typeof value === "string" ? value.slice(-8) : null;
 }
 
+function targetKeyHash(value) {
+  const text = String(value ?? "");
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
 function diagnostic(event, data = {}) {
+  if ((event.startsWith("npc-ability-") || event === "basic-save-source-classified") && !game.user?.isGM) return;
   logger.debug(event, {
     damageMessageId: shortId(data.damageMessageId),
     integrationId: shortId(data.integrationId),
-    targetKey: shortId(data.targetKey),
+    targetKeyHash: data.targetKey == null ? null : targetKeyHash(data.targetKey),
+    sourceKind: data.sourceKind ?? null,
+    sourceItemType: data.sourceItemType ?? null,
+    rollIndex: Number.isInteger(data.rollIndex) ? data.rollIndex : null,
     reason: data.reason ?? null,
   });
+}
+
+function configuredSourceMode() {
+  return getSetting(SETTINGS.TOOLBELT_BASIC_SAVE_SOURCES) ?? TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS;
+}
+
+function sourceIsEnabled(normalized) {
+  return sourceModeAllows(normalized?.sourceKind, configuredSourceMode());
+}
+
+function sourceIdentityMatches(draft, normalized) {
+  return Boolean(
+    normalized?.ok &&
+      draft.damageMessageId === normalized.message?.id &&
+      (draft.sourceKind == null ? normalized.sourceKind === "spell" : draft.sourceKind === normalized.sourceKind) &&
+      draft.sourceActorUuid === normalized.sourceActorUuid &&
+      draft.sourceItemUuid === normalized.sourceItemUuid &&
+      draft.rollIndex === normalized.rollIndex &&
+      draft.saveType === normalized.saveType,
+  );
 }
 
 function warningOnce(key, localization) {
@@ -98,9 +134,15 @@ function createTransaction(message, normalized, processingUserId) {
     schemaVersion: TOOLBELT_TRANSACTION_SCHEMA_VERSION,
     integrationId: id,
     damageMessageId: message.id,
-    sourceMessageId: null,
+    sourceMessageId: normalized.sourceMessageId,
+    sourceKind: normalized.sourceKind,
     sourceActorUuid: normalized.sourceActorUuid,
+    sourceActorType: normalized.sourceActorType,
     sourceItemUuid: normalized.sourceItemUuid,
+    sourceItemType: normalized.sourceItemType,
+    sourceActionSlug: normalized.sourceActionSlug,
+    sourceClassifierVersion: normalized.sourceClassifierVersion,
+    eligibilityEvidenceVersion: normalized.eligibilityEvidenceVersion,
     sourceUserId: normalized.sourceUserId,
     processingUserId,
     toolbeltVersion: normalized.status.version,
@@ -117,6 +159,24 @@ function createTransaction(message, normalized, processingUserId) {
   for (const target of normalized.targets) {
     base.targets[target.toolbeltTargetKey] = createTargetRecord(base, target);
     diagnostic("toolbelt-target-normalized", { integrationId: id, targetKey: target.toolbeltTargetKey });
+    if (normalized.isNpcAbility && target.saveState === "resolved") {
+      diagnostic("npc-ability-target-ready", {
+        integrationId: id,
+        targetKey: target.toolbeltTargetKey,
+        sourceKind: normalized.sourceKind,
+        sourceItemType: normalized.sourceItemType,
+        rollIndex: normalized.rollIndex,
+      });
+    }
+    if (normalized.isNpcAbility && target.toolbeltAppliedState) {
+      diagnostic("npc-ability-external-application", {
+        integrationId: id,
+        targetKey: target.toolbeltTargetKey,
+        sourceKind: normalized.sourceKind,
+        sourceItemType: normalized.sourceItemType,
+        rollIndex: normalized.rollIndex,
+      });
+    }
     if (target.saveState !== "resolved") {
       diagnostic("toolbelt-target-pending", { integrationId: id, targetKey: target.toolbeltTargetKey });
     }
@@ -144,6 +204,15 @@ function updateProjection(draft, normalized) {
     if (target.toolbeltAppliedState && ![TOOLBELT_TARGET_STATES.APPLIED, TOOLBELT_TARGET_STATES.UNDONE].includes(record.state)) {
       record.state = TOOLBELT_TARGET_STATES.EXTERNAL;
       record.reason = "toolbelt-applied-marker";
+      if (draft.sourceKind === "npc-ability") {
+        diagnostic("npc-ability-external-application", {
+          integrationId: draft.integrationId,
+          targetKey: record.toolbeltTargetKey,
+          sourceKind: draft.sourceKind,
+          sourceItemType: draft.sourceItemType,
+          rollIndex: draft.rollIndex,
+        });
+      }
       continue;
     }
     if (record.state === TOOLBELT_TARGET_STATES.PENDING_SAVE && target.saveState === "resolved") {
@@ -156,6 +225,15 @@ function updateProjection(draft, normalized) {
         integrationId: draft.integrationId,
         targetKey: record.toolbeltTargetKey,
       });
+      if (draft.sourceKind === "npc-ability") {
+        diagnostic("npc-ability-target-ready", {
+          integrationId: draft.integrationId,
+          targetKey: record.toolbeltTargetKey,
+          sourceKind: draft.sourceKind,
+          sourceItemType: draft.sourceItemType,
+          rollIndex: draft.rollIndex,
+        });
+      }
     } else if (record.state === TOOLBELT_TARGET_STATES.READY && target.saveState === "resolved") {
       record.nativeOutcome = target.degreeOfSuccess;
       record.effectiveOutcome = target.degreeOfSuccess;
@@ -187,6 +265,16 @@ async function markInterrupted(message, draft, reason) {
     integrationId: draft.integrationId,
     reason,
   });
+  if (draft.sourceKind === "npc-ability") {
+    diagnostic("npc-ability-interrupted", {
+      damageMessageId: message.id,
+      integrationId: draft.integrationId,
+      sourceKind: draft.sourceKind,
+      sourceItemType: draft.sourceItemType,
+      rollIndex: draft.rollIndex,
+      reason,
+    });
+  }
 }
 
 function applicableKeys(draft, normalized, mode, confirmed) {
@@ -198,12 +286,26 @@ function applicableKeys(draft, normalized, mode, confirmed) {
 
 async function applyOne(message, draft, targetKey) {
   let normalized = ToolbeltTargetHelperAdapter.normalizeDamageMessage(message);
-  if (!normalized.ok) {
+  if (!normalized.ok || !sourceIsEnabled(normalized) || !sourceIdentityMatches(draft, normalized)) {
     diagnostic("toolbelt-message-ineligible", { damageMessageId: message.id, reason: normalized.reason });
     const record = draft.targets[targetKey];
     record.state = TOOLBELT_TARGET_STATES.MANUAL;
-    record.reason = normalized.reason;
+    record.reason = !normalized.ok
+      ? normalized.reason
+      : !sourceIsEnabled(normalized)
+        ? "source-mode-disabled"
+        : "source-identity-changed";
     await persist(message, draft);
+    if (draft.sourceKind === "npc-ability") {
+      diagnostic("npc-ability-application-manual", {
+        integrationId: draft.integrationId,
+        targetKey,
+        sourceKind: draft.sourceKind,
+        sourceItemType: draft.sourceItemType,
+        rollIndex: draft.rollIndex,
+        reason: record.reason,
+      });
+    }
     return;
   }
   const target = normalized.targets.find((entry) => entry.toolbeltTargetKey === targetKey);
@@ -225,6 +327,15 @@ async function applyOne(message, draft, targetKey) {
     record.reason = "toolbelt-applied-before-claim";
     await persist(message, draft);
     diagnostic("toolbelt-external-application-detected", { integrationId: draft.integrationId, targetKey });
+    if (draft.sourceKind === "npc-ability") {
+      diagnostic("npc-ability-external-application", {
+        integrationId: draft.integrationId,
+        targetKey,
+        sourceKind: draft.sourceKind,
+        sourceItemType: draft.sourceItemType,
+        rollIndex: draft.rollIndex,
+      });
+    }
     return;
   }
   if (normalized.persistent) {
@@ -232,6 +343,16 @@ async function applyOne(message, draft, targetKey) {
     record.reason = "persistent-damage-unsupported";
     await persist(message, draft);
     diagnostic("toolbelt-application-manual", { integrationId: draft.integrationId, targetKey, reason: record.reason });
+    if (draft.sourceKind === "npc-ability") {
+      diagnostic("npc-ability-application-manual", {
+        integrationId: draft.integrationId,
+        targetKey,
+        sourceKind: draft.sourceKind,
+        sourceItemType: draft.sourceItemType,
+        rollIndex: draft.rollIndex,
+        reason: record.reason,
+      });
+    }
     return;
   }
 
@@ -244,11 +365,23 @@ async function applyOne(message, draft, targetKey) {
   const latest = normalized.ok
     ? normalized.targets.find((entry) => entry.toolbeltTargetKey === targetKey)
     : null;
-  if (!latest || latest.toolbeltAppliedState || latest.saveFingerprint !== record.toolbeltStateFingerprint) {
+  const durable = transaction(messageById(message.id) ?? message);
+  if (
+    !sourceIdentityMatches(draft, normalized) ||
+    !sourceIsEnabled(normalized) ||
+    !durable ||
+    durable.revision !== draft.revision ||
+    durable.processingUserId !== game.user.id ||
+    !latest ||
+    latest.toolbeltAppliedState ||
+    latest.saveFingerprint !== record.toolbeltStateFingerprint
+  ) {
     record.state = latest?.toolbeltAppliedState
       ? TOOLBELT_TARGET_STATES.EXTERNAL
       : TOOLBELT_TARGET_STATES.MANUAL;
-    record.reason = latest?.toolbeltAppliedState ? "toolbelt-applied-after-claim" : "toolbelt-state-changed-after-claim";
+    record.reason = latest?.toolbeltAppliedState
+      ? "toolbelt-applied-after-claim"
+      : "toolbelt-state-or-transaction-changed-after-claim";
     await persist(message, draft);
     return;
   }
@@ -262,6 +395,15 @@ async function applyOne(message, draft, targetKey) {
   record.state = TOOLBELT_TARGET_STATES.APPLYING;
   await persist(message, draft);
   diagnostic("toolbelt-application-started", { integrationId: draft.integrationId, targetKey });
+  if (draft.sourceKind === "npc-ability") {
+    diagnostic("npc-ability-application-started", {
+      integrationId: draft.integrationId,
+      targetKey,
+      sourceKind: draft.sourceKind,
+      sourceItemType: draft.sourceItemType,
+      rollIndex: draft.rollIndex,
+    });
+  }
 
   try {
     const targetToken = await PF2eAdapter.resolveToken(record.tokenUuid);
@@ -315,13 +457,21 @@ async function applyOne(message, draft, targetKey) {
     record.undoState = "available";
     await persist(message, draft);
     diagnostic("toolbelt-application-complete", { integrationId: draft.integrationId, targetKey });
+    if (draft.sourceKind === "npc-ability") {
+      diagnostic("npc-ability-application-complete", {
+        integrationId: draft.integrationId,
+        targetKey,
+        sourceKind: draft.sourceKind,
+        sourceItemType: draft.sourceItemType,
+        rollIndex: draft.rollIndex,
+      });
+    }
   } catch (error) {
     record.state = TOOLBELT_TARGET_STATES.ERROR;
     record.reason = error instanceof Error ? error.message : String(error);
     await persist(message, draft);
     logger.error("Toolbelt target application failed", {
       stage: "toolbelt-application",
-      targetActorUuid: record.actorUuid,
       reason: record.reason,
     }, error);
   }
@@ -362,7 +512,48 @@ async function observe(message, { confirmed = false } = {}) {
     if (normalized.reason === "toolbelt-inactive") warningOnce(normalized.reason, "Nelflow.Notification.ToolbeltInactive");
     if (normalized.reason === "target-helper-disabled") warningOnce(normalized.reason, "Nelflow.Notification.TargetHelperDisabled");
     if (normalized.reason === "toolbelt-version-unsupported") warningOnce(normalized.reason, "Nelflow.Notification.ToolbeltUnsupported");
+    if (normalized.source?.sourceKind === "npc-ability") {
+      const rollAmbiguous = normalized.reason === "shared-damage-ambiguous";
+      const sourceAmbiguous = normalized.reason.includes("ambiguous") || normalized.reason.includes("mismatch");
+      diagnostic(rollAmbiguous ? "npc-ability-roll-index-ambiguous" : sourceAmbiguous ? "npc-ability-source-ambiguous" : "npc-ability-ineligible", {
+        damageMessageId: message.id,
+        sourceKind: normalized.source.sourceKind,
+        reason: normalized.reason,
+      });
+    }
     return;
+  }
+  diagnostic("basic-save-source-classified", {
+    damageMessageId: message.id,
+    sourceKind: normalized.sourceKind,
+    sourceItemType: normalized.sourceItemType,
+    rollIndex: normalized.rollIndex,
+  });
+  if (!sourceIsEnabled(normalized)) {
+    if (normalized.isNpcAbility) {
+      diagnostic("npc-ability-ineligible", {
+        damageMessageId: message.id,
+        sourceKind: normalized.sourceKind,
+        sourceItemType: normalized.sourceItemType,
+        rollIndex: normalized.rollIndex,
+        reason: "source-mode-disabled",
+      });
+    }
+    return;
+  }
+  if (normalized.isNpcAbility) {
+    diagnostic("npc-ability-eligible", {
+      damageMessageId: message.id,
+      sourceKind: normalized.sourceKind,
+      sourceItemType: normalized.sourceItemType,
+      rollIndex: normalized.rollIndex,
+    });
+    diagnostic("npc-ability-damage-observed", {
+      damageMessageId: message.id,
+      sourceKind: normalized.sourceKind,
+      sourceItemType: normalized.sourceItemType,
+      rollIndex: normalized.rollIndex,
+    });
   }
   diagnostic("toolbelt-damage-observed", { damageMessageId: message.id });
   const processingUserId = electProcessingGm(game.users ?? [], normalized.sourceUserId);
@@ -396,6 +587,14 @@ async function observe(message, { confirmed = false } = {}) {
   }
   if (allPrimarySavesResolved(normalized.targets)) {
     diagnostic("toolbelt-all-saves-ready", { integrationId: draft.integrationId });
+    if (normalized.isNpcAbility) {
+      diagnostic("npc-ability-all-saves-ready", {
+        integrationId: draft.integrationId,
+        sourceKind: normalized.sourceKind,
+        sourceItemType: normalized.sourceItemType,
+        rollIndex: normalized.rollIndex,
+      });
+    }
   }
   await process(messageById(message.id) ?? message, draft, normalized, { confirmed });
 }

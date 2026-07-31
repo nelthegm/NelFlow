@@ -187,6 +187,7 @@ const mechanicalSource = [
   "scripts/turn-stack-service.js",
   "scripts/save-resolver-service.js",
   "scripts/save-correlation.js",
+  "scripts/basic-save-source-classifier.js",
 ]
   .map(read)
   .join("\n");
@@ -693,6 +694,72 @@ if (!existsSync(join(root, "docs", "SLICE_003_1_1_TOOLBELT_CONTROL_GUARDS.md")))
 const guardTestPlan = read("docs/SLICE_003_1_1_TEST_PLAN.md");
 if ((guardTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 51) {
   fail("Slice 3.1.1 runtime test plan must include at least 51 scenarios");
+}
+const sourceClassifier = read("scripts/basic-save-source-classifier.js");
+const npcAbilityTests = read("tests/basic-save-source-classifier.test.mjs");
+for (const required of [
+  'sourceKind: "npc-ability"',
+  'itemIs(sourceItem, "action")',
+  'actorIs(sourceActor, "npc")',
+  'context.sourceType !== "save"',
+  'origin.uuid !== sourceItem.uuid',
+  'toolbeltSource.sourceItemUuid !== sourceItem.uuid',
+  'message.flags?.pf2e?.strike',
+  'sourceModeAllows(sourceKind, mode)',
+  'sourceMessageId: origin.messageId ?? null',
+]) {
+  if (!sourceClassifier.includes(required)) fail(`NPC ability classifier is missing: ${required}`);
+}
+for (const required of [
+  "SETTINGS.TOOLBELT_BASIC_SAVE_SOURCES",
+  "TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS",
+  "TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES",
+  "version < 2",
+]) {
+  if (!settingsSource.includes(required)) fail(`Slice 3.2 source setting or migration is missing: ${required}`);
+}
+if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 2")) {
+  fail("Slice 3.2 settings migration version must be 2");
+}
+for (const required of [
+  "sourceKind: normalized.sourceKind",
+  "sourceActorType: normalized.sourceActorType",
+  "sourceItemType: normalized.sourceItemType",
+  "sourceActionSlug: normalized.sourceActionSlug",
+  "sourceClassifierVersion: normalized.sourceClassifierVersion",
+  "eligibilityEvidenceVersion: normalized.eligibilityEvidenceVersion",
+  "sourceIdentityMatches(draft, normalized)",
+  "durable.revision !== draft.revision",
+]) {
+  if (!toolbeltService.includes(required)) fail(`Toolbelt ability transaction is missing: ${required}`);
+}
+if (/message\.(?:content|flavor)|\.description\b|innerHTML|textContent|DOMParser/i.test(
+  `${sourceClassifier}\n${toolbeltAdapter}\n${toolbeltService}`,
+)) {
+  fail("NPC ability mechanics appear to parse descriptions or rendered chat HTML");
+}
+if (/rolls\s*(?:\[\s*0\s*\]|\.at\(\s*0\s*\))|findLast|most recent|latest message/i.test(toolbeltAdapter)) {
+  fail("Toolbelt adapter appears to choose the first or newest damage roll");
+}
+if (/new\s+(?:Roll|DamageRoll)|rollDamage\s*\(|damage\.formula|1d20|degreeOfSuccess\s*=/.test(
+  `${sourceClassifier}\n${toolbeltAdapter}\n${toolbeltService}`,
+)) {
+  fail("NPC ability integration appears to calculate saves or reroll/reconstruct damage");
+}
+if (/\.click\s*\(|dispatchEvent|target\.name|actor\.name|sourceItem\.name\s*===/.test(
+  `${sourceClassifier}\n${toolbeltAdapter}\n${toolbeltService}`,
+)) {
+  fail("NPC ability mechanics appear to click controls or use displayed names as identity");
+}
+if ((npcAbilityTests.match(/\btest\s*\(/g) ?? []).length < 50) {
+  fail("mocked NPC basic-save ability coverage must include at least 50 scenarios");
+}
+if (!existsSync(join(root, "docs", "SLICE_003_2_TOOLBELT_NPC_BASIC_SAVE_ABILITIES.md"))) {
+  fail("Slice 3.2 architecture documentation is missing");
+}
+const npcAbilityTestPlan = read("docs/SLICE_003_2_TEST_PLAN.md");
+if ((npcAbilityTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 56) {
+  fail("Slice 3.2 runtime test plan must include at least 56 scenarios");
 }
 const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
 if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {

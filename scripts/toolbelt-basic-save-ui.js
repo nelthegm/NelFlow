@@ -36,6 +36,42 @@ function stateLabel(record) {
   return localize(key);
 }
 
+function resultLabel(record) {
+  if (!record.nativeOutcome) return null;
+  const outcome = localize(`Nelflow.Outcome.${{
+    criticalSuccess: "CriticalSuccess",
+    success: "Success",
+    failure: "Failure",
+    criticalFailure: "CriticalFailure",
+  }[record.nativeOutcome]}`);
+  const multiplierKey = {
+    0: "Nelflow.SaveResolver.NoDamage",
+    0.5: "Nelflow.SaveResolver.Half",
+    1: "Nelflow.SaveResolver.Full",
+    2: "Nelflow.SaveResolver.Double",
+  }[record.multiplier];
+  return multiplierKey
+    ? localize("Nelflow.Toolbelt.Result", { outcome, multiplier: localize(multiplierKey) })
+    : outcome;
+}
+
+function sourceHeader(message, draft) {
+  const save = localize(`Nelflow.SaveResolver.Save.${draft.saveType}`);
+  if (draft.sourceKind !== "npc-ability") return localize("Nelflow.Toolbelt.Header", { save });
+  const item = fromUuidSync(draft.sourceItemUuid, { strict: false });
+  const actor = fromUuidSync(draft.sourceActorUuid, { strict: false });
+  const canSeeName = Boolean(
+    game.user?.isGM ||
+      item?.isOwner ||
+      actor?.isOwner ||
+      actor?.hasPlayerOwner,
+  );
+  const source = canSeeName && item?.name
+    ? item.name
+    : localize("Nelflow.Toolbelt.BasicSaveAbility");
+  return localize("Nelflow.Toolbelt.AbilityHeader", { source, save });
+}
+
 function canSeeTarget(target, record) {
   if (game.user?.isGM) return true;
   const token = fromUuidSync(record.tokenUuid, { strict: false });
@@ -120,6 +156,8 @@ function statusRow(message, draft, normalizedTarget, record, number) {
   row.dataset.nelflowToolbeltTargetKey = record.toolbeltTargetKey;
   const body = element("div", "nelflow-toolbelt__target-body");
   body.append(element("strong", null, targetName(record, number)));
+  const result = resultLabel(record);
+  if (result) body.append(element("span", "nelflow-toolbelt__result", result));
   body.append(element("span", "nelflow-toolbelt__status", stateLabel(record)));
   if (
     getSetting(SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS) &&
@@ -161,9 +199,7 @@ export function renderToolbeltBasicSave(message, html) {
   const wrapper = element("section", "nelflow-toolbelt");
   wrapper.dataset.nelflowToolbeltIntegrationId = draft.integrationId;
   const header = element("header", "nelflow-toolbelt__header");
-  header.append(element("strong", null, localize("Nelflow.Toolbelt.Header", {
-    save: localize(`Nelflow.SaveResolver.Save.${draft.saveType}`),
-  })));
+  header.append(element("strong", null, sourceHeader(message, draft)));
   wrapper.append(header);
 
   const list = element("div", "nelflow-toolbelt__targets");

@@ -1,3 +1,5 @@
+import { classifyBasicSaveSource } from "./basic-save-source-classifier.js";
+
 const TOOLBELT_ID = "pf2e-toolbelt";
 export const TOOLBELT_MIN_VERSION = "3.52.0";
 export const TOOLBELT_MAX_VERSION = "3.52.1";
@@ -82,6 +84,22 @@ function hasPersistentDamage(roll) {
   );
 }
 
+export function selectToolbeltDamageRoll(rolls, splashIndex) {
+  const regularRolls = [...(rolls ?? [])]
+    .map((roll, index) => ({ roll, index }))
+    .filter(
+      ({ roll, index }) =>
+        isNativeDamageRoll(roll) &&
+        roll.options?.splashOnly !== true &&
+        index !== Number(splashIndex),
+    );
+  if (regularRolls.length !== 1) {
+    return { ok: false, reason: "shared-damage-ambiguous", count: regularRolls.length };
+  }
+  const [selected] = regularRolls;
+  return { ok: true, ...selected };
+}
+
 function rawFlag(message) {
   return message?.flags?.[TOOLBELT_ID]?.targetHelper ?? null;
 }
@@ -138,28 +156,29 @@ export class ToolbeltTargetHelperAdapter {
     const data = rawFlag(message);
     if (!data || data.type !== "damage") return { ok: false, reason: "not-toolbelt-damage", status };
     if (data.isRegen) return { ok: false, reason: "healing-unsupported", status };
-    const sourceItem = message.item;
-    const sourceSpell = sourceItem?.isOfType?.("spell")
-      ? sourceItem
-      : sourceItem?.isOfType?.("consumable")
-        ? sourceItem.embeddedSpell
-        : null;
-    if (!sourceSpell?.uuid) return { ok: false, reason: "source-spell-unavailable", status };
     const variants = Object.entries(data.saveVariants ?? {}).filter(
       ([, save]) => save?.basic === true && SAVE_TYPES.has(save?.statistic),
     );
     if (variants.length !== 1) return { ok: false, reason: "basic-save-not-unique", status };
     const [variantId, save] = variants[0];
+    const toolbeltSource = {
+      sourceActorUuid: data.author ?? null,
+      sourceItemUuid: data.item ?? null,
+      isBasicSave: true,
+      saveType: save.statistic,
+    };
 
-    const rolls = [...(message.rolls ?? [])];
-    const regularRolls = rolls
-      .map((roll, index) => ({ roll, index }))
-      .filter(({ roll, index }) => isNativeDamageRoll(roll) && index !== Number(data.splashIndex));
-    if (regularRolls.length !== 1) return { ok: false, reason: "shared-damage-ambiguous", status };
-    const { roll, index: rollIndex } = regularRolls[0];
+    const selectedRoll = selectToolbeltDamageRoll(message.rolls, data.splashIndex);
+    if (!selectedRoll.ok) {
+      const source = classifyBasicSaveSource({ message, toolbeltSource, rollIndex: null });
+      return { ok: false, reason: selectedRoll.reason, status, source };
+    }
+    const { roll, index: rollIndex } = selectedRoll;
     if (Number(roll.total) < 0 || roll.kinds?.has?.("healing")) {
       return { ok: false, reason: "healing-unsupported", status };
     }
+    const source = classifyBasicSaveSource({ message, toolbeltSource, rollIndex });
+    if (!source.ok) return { ok: false, reason: source.reason, status, source };
 
     const seen = new Set();
     const targets = [];
@@ -204,8 +223,18 @@ export class ToolbeltTargetHelperAdapter {
       variantId,
       saveType: save.statistic,
       saveDC: save.dc,
-      sourceActorUuid: data.author ?? message.actor?.uuid ?? null,
-      sourceItemUuid: sourceSpell.uuid,
+      sourceKind: source.sourceKind,
+      sourceActorUuid: source.sourceActorUuid,
+      sourceActorType: source.sourceActorType,
+      sourceItemUuid: source.sourceItemUuid,
+      sourceItemType: source.sourceItemType,
+      sourceMessageId: source.sourceMessageId,
+      sourceActionSlug: source.sourceActionSlug,
+      isSpell: source.isSpell,
+      isNpcAbility: source.isNpcAbility,
+      sourceClassifierVersion: source.classifierVersion,
+      eligibilityEvidenceVersion: source.eligibilityEvidenceVersion,
+      eligibilityEvidence: source.eligibilityEvidence,
       sourceUserId: message.author?.id ?? message.user?.id ?? null,
       targets,
       splashTargetUuids: [...(data.splashTargets ?? [])],

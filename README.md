@@ -15,6 +15,9 @@ guarded native basic-save damage application on the same damage card. Slice
 3.1.1 guards the exact row's duplicate Toolbelt HP-damage controls after
 conclusive handling while leaving save, reroll, Block, and record controls
 available.
+Slice 3.2 extends that same Toolbelt transaction, application, guard, and Undo
+pipeline to structurally verified NPC `action` abilities with explicit basic
+saves and one exact native damage roll.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -39,7 +42,8 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 - Pathfinder Second Edition system (integration source-checked with PF2e 8.3.0)
 - A GM-authored NPC Strike with exactly one target, or
 - PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
-  player- or GM-authored basic-save spell workflow
+  player- or GM-authored basic-save spell workflow, or a supported GM-authored
+  NPC basic-save `action` ability
 
 ## Install or update
 
@@ -232,6 +236,25 @@ The original Slice 3 interface remains as **Legacy Nelflow Resolver
 (Experimental)** for Toolbelt-free testing. It is not recommended with Target
 Helper and cannot process alongside Toolbelt mode.
 
+## Slice 3.2 NPC basic-save abilities
+
+With **Toolbelt Basic Save Sources** set to **Spells and NPC Abilities**, use an
+NPC action such as Dragon Breath normally, target creatures, click its native
+damage roll once, and resolve saves through Toolbelt. Nelflow observes that
+exact Toolbelt-enriched damage message and reuses the existing application
+timing, per-target status, Application Record, guarded Undo, and duplicate
+damage-control guards. The compact header identifies a viewer-safe ability
+name when permissions allow it; otherwise it says **Basic Save Ability**.
+
+Eligibility requires exact agreement between Toolbelt's structured source
+actor/item/basic-save data and PF2e's independent NPC action origin and
+save-governed damage context. One regular native DamageRoll is supported; a
+separate structurally marked splash roll may coexist. Player abilities,
+hazards, NPC feats, Strikes, attack-plus-save effects, non-basic or
+description-only saves, healing, persistent damage, splash-only rows, and
+messages with multiple ambiguous regular rolls remain entirely native/manual.
+No action, save, or damage is rerolled and no ability resolver is created.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -251,6 +274,10 @@ Helper and cannot process alongside Toolbelt mode.
   are `Off` and `Legacy Nelflow Resolver (Experimental)`.
 - **Toolbelt Basic Save Application** — defaults to `When All Saves Are
   Resolved`; alternatives are per-target, GM confirmation, and Off.
+- **Toolbelt Basic Save Sources** — defaults to `Spells and NPC Abilities`;
+  choose `Spells Only` to retain Slice 3.1 behavior and leave non-spell NPC
+  abilities manual. Migration updates this once only for existing Toolbelt
+  workflow worlds and does not change Off or Legacy selections.
 - **Guard Toolbelt Damage Controls** is enabled by default. It guards only
   Damage/Half/Double/Triple for an exactly identified, conclusively handled
   target. Disable it to retain normal Toolbelt controls without changing
@@ -323,6 +350,11 @@ Undo Blocked.
   requires GM judgment; Nelflow does not automatically re-guard it.
 - Toolbelt target markup replaced by another module fails open, leaving native
   controls functional and the Nelflow status visible.
+- PF2e 8.3.0 NPC abilities are supported only as exact `action` item origins.
+  Toolbelt 3.52.x does not preserve the originating action-card message ID or
+  an exact save mapping for multiple regular rolls, so those cases stay manual.
+- Conditions by degree, forced movement, persistent/splash damage, healing,
+  and attack-plus-save ability effects are not automated.
 
 ## Testing and design documentation
 
@@ -347,3 +379,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3.1 runtime test plan](docs/SLICE_003_1_TEST_PLAN.md)
 - [Slice 3.1.1 Toolbelt control guards](docs/SLICE_003_1_1_TOOLBELT_CONTROL_GUARDS.md)
 - [Slice 3.1.1 runtime test plan](docs/SLICE_003_1_1_TEST_PLAN.md)
+- [Slice 3.2 Toolbelt NPC basic-save abilities](docs/SLICE_003_2_TOOLBELT_NPC_BASIC_SAVE_ABILITIES.md)
+- [Slice 3.2 runtime test plan](docs/SLICE_003_2_TEST_PLAN.md)

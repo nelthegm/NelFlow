@@ -7,6 +7,7 @@ import {
   STACK_FIRST_NATIVE_RECORD_MODES,
   SETTINGS_MIGRATION_VERSION,
   TOOLBELT_APPLICATION_MODES,
+  TOOLBELT_BASIC_SAVE_SOURCE_MODES,
 } from "./constants.js";
 
 function refreshPresentation() {
@@ -113,6 +114,18 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.TOOLBELT_BASIC_SAVE_SOURCES,
+    name: "Nelflow.Settings.ToolbeltSources.Name",
+    hint: "Nelflow.Settings.ToolbeltSources.Hint",
+    type: String,
+    choices: {
+      [TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS]: "Nelflow.Settings.ToolbeltSources.Spells",
+      [TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES]:
+        "Nelflow.Settings.ToolbeltSources.SpellsAndNpcAbilities",
+    },
+    default: TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",
@@ -157,16 +170,28 @@ export function getSetting(key) {
   return game.settings.get(MODULE_ID, key);
 }
 
-/** One-time 0.3.1 workflow migration; never enables the legacy resolver. */
+/** Versioned workflow migrations; never enable or replace the legacy resolver. */
 export async function migrateSettings({ toolbeltReady }) {
   if (!game.user?.isGM) return false;
   const version = Number(getSetting(SETTINGS.MIGRATION_VERSION) ?? 0);
   if (version >= SETTINGS_MIGRATION_VERSION) return false;
-  await game.settings.set(
-    MODULE_ID,
-    SETTINGS.BASIC_SAVE_WORKFLOW,
-    toolbeltReady ? BASIC_SAVE_WORKFLOW_MODES.TOOLBELT : BASIC_SAVE_WORKFLOW_MODES.OFF,
-  );
+  if (version < 1) {
+    await game.settings.set(
+      MODULE_ID,
+      SETTINGS.BASIC_SAVE_WORKFLOW,
+      toolbeltReady ? BASIC_SAVE_WORKFLOW_MODES.TOOLBELT : BASIC_SAVE_WORKFLOW_MODES.OFF,
+    );
+  }
+  if (
+    version < 2 &&
+    getSetting(SETTINGS.BASIC_SAVE_WORKFLOW) === BASIC_SAVE_WORKFLOW_MODES.TOOLBELT
+  ) {
+    await game.settings.set(
+      MODULE_ID,
+      SETTINGS.TOOLBELT_BASIC_SAVE_SOURCES,
+      TOOLBELT_BASIC_SAVE_SOURCE_MODES.SPELLS_AND_NPC_ABILITIES,
+    );
+  }
   await game.settings.set(MODULE_ID, SETTINGS.MIGRATION_VERSION, SETTINGS_MIGRATION_VERSION);
   return true;
 }

@@ -85,5 +85,5 @@ async function initializeReady() {
       }, error);
     });
   });
-  logger.debug("Slice 3.1 ready");
+  logger.debug("Slice 3.2 ready");
 }

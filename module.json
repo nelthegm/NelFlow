@@ -2,7 +2,7 @@
   "id": "nelflow",
   "title": "Nelflow",
   "description": "PF2e NPC Strike flow and Toolbelt Target Helper basic-save damage automation.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "authors": [
     {
       "name": "Nelson Cruz"
