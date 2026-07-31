@@ -6,6 +6,7 @@ import {
 } from "./constants.js";
 import { logger } from "./logger.js";
 import { getSetting } from "./settings.js";
+import { buildDurableStackContent, stackVisibility } from "./stack-fallback.js";
 import { TransactionStore } from "./transaction-store.js";
 
 const updateQueues = new Map();
@@ -188,26 +189,27 @@ function actorProjection(transaction) {
 
 async function createStackMessage(attackMessage, transaction, descriptor) {
   const ChatMessageClass = CONFIG.ChatMessage.documentClass;
+  const stack = {
+    schemaVersion: STACK_SCHEMA_VERSION,
+    id: descriptor.id,
+    key: descriptor.key,
+    kind: descriptor.kind,
+    identity: descriptor.identity,
+    actor: actorProjection(transaction),
+    rows: sortRows([makeRow(transaction)]),
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
   const data = {
     _id: descriptor.id,
     user: game.user.id,
     speaker: foundry.utils.deepClone(attackMessage._source?.speaker ?? {}),
-    content: game.i18n.localize("Nelflow.Stack.StoredContent"),
+    content: buildDurableStackContent(stack, descriptor.visibility),
     whisper: descriptor.visibility.whisper,
     blind: descriptor.visibility.blind,
     flags: {
       [MODULE_ID]: {
-        stack: {
-          schemaVersion: STACK_SCHEMA_VERSION,
-          id: descriptor.id,
-          key: descriptor.key,
-          kind: descriptor.kind,
-          identity: descriptor.identity,
-          actor: actorProjection(transaction),
-          rows: [makeRow(transaction)],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        },
+        stack,
       },
     },
   };
@@ -234,6 +236,18 @@ function enqueue(key, operation) {
     },
   );
   return current;
+}
+
+function persistentProjection(stack) {
+  return {
+    schemaVersion: stack.schemaVersion ?? 1,
+    actor: stack.actor ?? null,
+    rows: stack.rows ?? [],
+  };
+}
+
+function projectionChanged(current, next) {
+  return JSON.stringify(persistentProjection(current)) !== JSON.stringify(persistentProjection(next));
 }
 
 export class TurnStackService {
@@ -271,19 +285,21 @@ export class TurnStackService {
     return getSetting(SETTINGS.COMPACT_TURN_STACKS) === COMPACT_STACK_MODES.NPC_STRIKES;
   }
 
+  static canPersistStackProjection(attackMessage, transaction) {
+    return Boolean(
+      this.enabled() &&
+        game.user.isGM &&
+        attackMessage.author?.id === game.user.id &&
+        transaction.snapshot?.processingUserId === game.user.id,
+    );
+  }
+
   /**
    * Project one canonical transaction into one deterministic row. Only the GM
    * who claimed the transaction may create or mutate its stack projection.
    */
   static async syncTransaction(attackMessage, transaction) {
-    if (
-      !this.enabled() ||
-      !game.user.isGM ||
-      attackMessage.author?.id !== game.user.id ||
-      transaction.snapshot?.processingUserId !== game.user.id
-    ) {
-      return null;
-    }
+    if (!this.canPersistStackProjection(attackMessage, transaction)) return null;
 
     const canonical = TransactionStore.get(attackMessage);
     if (canonical?.id === transaction.id) transaction = canonical;
@@ -320,7 +336,14 @@ export class TurnStackService {
         rows: sortRows(rows),
         updatedAt: Date.now(),
       };
-      await stackMessage.update({ [`flags.${MODULE_ID}.stack`]: next });
+      if (!projectionChanged(stack, next)) return stackMessage;
+
+      // The authoring GM atomically advances the durable projection and its
+      // Nelflow-owned fallback. Read-only rendering never enters this path.
+      await stackMessage.update({
+        content: buildDurableStackContent(next, stackVisibility(stackMessage)),
+        [`flags.${MODULE_ID}.stack`]: next,
+      });
       return stackMessage;
     });
   }

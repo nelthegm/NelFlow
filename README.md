@@ -6,7 +6,8 @@ through PF2e's native damage and optional application pathways. Slice 2 groups
 supported Strikes from one combatant turn into a durable compact chat stack.
 Slice 2.1 compacts each safely linked native audit card and reduces redundant
 space inside that stack. Slice 2.2 makes the stack the primary visible record
-and warns the GM about structured PF2e Strike riders.
+and warns the GM about structured PF2e Strike riders. Slice 2.2.1 makes those
+stacks reload-safe and gives new stack messages durable readable fallback HTML.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -71,7 +72,9 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 - A qualifying out-of-combat Strike receives its own standalone one-row result;
   unrelated attacks never merge.
 - Reload renders stacks from ChatMessage flags. It does not reroll or reapply
-  terminal transactions.
+  terminal transactions. The renderer is registered before Foundry initializes
+  chat history, so refreshes, reconnects, tab reopening, and older history
+  batches use the same read-only projection as live messages.
 - Other GM clients render the stack but cannot project a transaction claimed by
   the authoring GM. Compact-row Undo is offered to that authoring GM.
 
@@ -123,6 +126,28 @@ fails, Nelflow leaves the full native card visible.
 When structured metadata is absent, Nelflow may locally recognize actual PF2e
 semantic controls inside visible roll notes on the already-linked attack
 message. It does not search prose or persist DOM-derived mechanics.
+
+## Slice 2.2.1 reload rehydration
+
+- Existing schema-1 and schema-2 stack messages rebuild directly from
+  `flags.nelflow.stack` whenever Foundry renders them.
+- Live messages, initial chat history, reconnects, rerenders, and later
+  historical batches all use the same synchronous read-only renderer.
+- Rendering is never gated by the authoring GM. Any permitted viewer can render
+  the privacy-filtered stack and use local Native Records controls, without
+  gaining transaction or persistent-stack mutation authority.
+- Native records reconcile in either order: records rendered first are attached
+  when their exact stack control appears, and records rendered later recognize
+  an already-rendered exact control.
+- New and legitimately updated Nelflow stack messages store semantic fallback
+  HTML alongside their stack flag in the same document update. The fallback
+  has no fake buttons, UUIDs, raw flags, or native-card duplication.
+- Broadly visible fallback content uses a neutral target and omits damage,
+  applied HP, and GM-only rider counts. Viewer-specific enhanced rendering may
+  show additional information only when Foundry permissions allow it.
+- Old placeholder-only messages are not bulk migrated. They still enhance from
+  flags after reload; a later legitimate stack update repairs their stored
+  fallback.
 
 ## Settings
 
@@ -183,6 +208,9 @@ Undo Blocked.
 - Native-message focus requires the exact message element to be present in
   Foundry's rendered chat window; the stored record remains available even when
   it is not currently mounted.
+- If enhancement fails on an old placeholder-only stack before it receives a
+  legitimate projection update, the client attempts a read-only fallback from
+  flags but does not write a migration during page load.
 
 ## Testing and design documentation
 
@@ -195,5 +223,7 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 2.1 runtime test plan](docs/SLICE_002_1_TEST_PLAN.md)
 - [Slice 2.2 stack-first chat](docs/SLICE_002_2_STACK_FIRST_CHAT.md)
 - [Slice 2.2 runtime test plan](docs/SLICE_002_2_TEST_PLAN.md)
+- [Slice 2.2.1 reload rehydration](docs/SLICE_002_2_1_RELOAD_REHYDRATION.md)
+- [Slice 2.2.1 runtime test plan](docs/SLICE_002_2_1_TEST_PLAN.md)
 - [Slice 1 API findings](docs/SLICE_001_API_FINDINGS.md)
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)

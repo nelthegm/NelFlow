@@ -10,6 +10,14 @@ Hooks.once("init", () => {
   registerSettings();
 });
 
+Hooks.once("setup", () => {
+  // Foundry initializes the ChatLog after setup but before ready. Registering
+  // here lets the same read-only renderer enhance both initial history and
+  // later live/batched messages.
+  NativeRecordsController.initialize();
+  Hooks.on("renderChatMessageHTML", renderNelflowChat);
+});
+
 Hooks.once("ready", () => {
   if (!PF2eAdapter.isEnvironmentSupported()) {
     logger.warn("Automation not activated", {
@@ -23,7 +31,6 @@ Hooks.once("ready", () => {
 
   PF2eAdapter.initialize();
   TurnStackService.initialize();
-  NativeRecordsController.initialize();
   Hooks.on("createChatMessage", (message) => {
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
       logger.error(
@@ -37,6 +44,5 @@ Hooks.once("ready", () => {
       );
     });
   });
-  Hooks.on("renderChatMessageHTML", renderNelflowChat);
-  logger.debug("Slice 2.2 ready");
+  logger.debug("Slice 2.2.1 ready");
 });

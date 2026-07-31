@@ -121,6 +121,7 @@ export class NativeRecordsController {
       visibleByStack.delete(stack.id);
     });
     Hooks.on("nelflowPresentationSettingChanged", () => {
+      visibleByStack.clear();
       for (const element of document.querySelectorAll(".nelflow-linked-native")) {
         element.classList.remove("nelflow-native-record-hidden");
         if (!getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
@@ -158,11 +159,11 @@ export class NativeRecordsController {
 
   static bindStackControl(stack, button, records) {
     if (!stackFirstEnabled() || !records.length) return;
-    if (!visibleByStack.has(stack.id)) visibleByStack.set(stack.id, false);
 
     updateControl(button, stack.id, records.length, visibleByStack.get(stack.id) === true);
     button.addEventListener("click", () => {
-      visibleByStack.set(stack.id, visibleByStack.get(stack.id) !== true);
+      if (visibleByStack.get(stack.id) === true) visibleByStack.delete(stack.id);
+      else visibleByStack.set(stack.id, true);
       applyVisibility(stack.id, button);
     });
 
@@ -202,5 +203,12 @@ export class NativeRecordsController {
     if (!stackId) return;
     visibleByStack.set(stackId, true);
     applyVisibility(stackId);
+  }
+
+  static failOpen(stackId) {
+    if (!stackId) return;
+    for (const element of renderedNativeRecords(stackId)) {
+      element.classList.remove("nelflow-native-record-hidden");
+    }
   }
 }

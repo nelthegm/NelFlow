@@ -1,12 +1,14 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { logger } from "./logger.js";
+import { NativeCardCompactor } from "./native-card-compactor.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import {
   formatDamageSummary,
-  NativeCardCompactor,
+  formatMap,
   strikeOutcomeLabel,
-} from "./native-card-compactor.js";
-import { NativeRecordsController } from "./native-records-controller.js";
+} from "./presentation-format.js";
+import { renderDurableStackFallback } from "./stack-fallback.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
@@ -86,25 +88,35 @@ function rowState(row) {
 }
 
 function mapText(row) {
-  if (!row.mapIncreases) return "";
-  if (!Number.isFinite(row.mapPenalty)) {
-    return format("Nelflow.Stack.MapStep", { step: row.mapIncreases });
-  }
-  const penalty = new Intl.NumberFormat(game.i18n.lang, { signDisplay: "always" }).format(
-    row.mapPenalty,
-  );
-  return format("Nelflow.Stack.Map", { penalty });
+  return formatMap(row);
 }
 
-function visibleNativeMessage(messageId) {
+function canRenderStackForViewer(message) {
+  return Boolean(message?.visible && message.isContentVisible);
+}
+
+function validStackProjection(stack) {
+  return Boolean(
+    stack &&
+      typeof stack.id === "string" &&
+      stack.identity &&
+      Array.isArray(stack.rows),
+  );
+}
+
+function canRevealNativeRecord(messageId) {
   const message = messageId ? game.messages.get(messageId) : null;
   return Boolean(message?.visible && message.isContentVisible);
 }
 
 function revealNativeMessage(messageId, stackId, options = {}) {
+  if (!canRevealNativeRecord(messageId)) {
+    ui.notifications.warn("Nelflow.Notification.NativeMessageUnavailable", { localize: true });
+    return;
+  }
   NativeRecordsController.show(stackId);
   if (!NativeCardCompactor.reveal(messageId, options)) {
-    ui.notifications.warn("Nelflow.Notification.NativeMessageUnavailable", { localize: true });
+    ui.notifications.warn("Nelflow.Notification.NativeMessageNotRendered", { localize: true });
   }
 }
 
@@ -114,7 +126,7 @@ function referenceButton(messageId, stackId, labelKey, iconClass) {
     iconClass,
     label: localize(labelKey),
   });
-  button.disabled = !visibleNativeMessage(messageId);
+  button.disabled = !canRevealNativeRecord(messageId);
   button.addEventListener("click", () => revealNativeMessage(messageId, stackId));
   return button;
 }
@@ -123,7 +135,7 @@ function renderSupplementalActions(row, stackId) {
   const awareness = SupplementalActionAwareness.forRow(row);
   if (
     !SupplementalActionAwareness.visibleToCurrentUser(awareness) ||
-    !visibleNativeMessage(row.attackMessageId)
+    !canRevealNativeRecord(row.attackMessageId)
   ) {
     return null;
   }
@@ -147,7 +159,19 @@ function renderSupplementalActions(row, stackId) {
   return button;
 }
 
-function renderRow(row, canMutate, stackId) {
+function canUseUndo(row, stack) {
+  return Boolean(
+    game.user.isGM &&
+      game.user.id === stack.identity?.authorUserId &&
+      getSetting(SETTINGS.ENABLE_UNDO) &&
+      row.transactionState === TRANSACTION_STATES.APPLIED &&
+      !row.undoBlocked &&
+      canRevealNativeRecord(row.attackMessageId),
+  );
+}
+
+function renderRow(row, stack) {
+  const stackId = stack.id;
   const state = rowState(row);
   const item = document.createElement("li");
   item.className = `nelflow-stack__row nelflow-stack__row--${state.className}`;
@@ -193,7 +217,7 @@ function renderRow(row, canMutate, stackId) {
   outcome.textContent = strikeOutcomeLabel(row.outcome);
   resultLine.append(outcome);
   const damage =
-    game.user.isGM || visibleNativeMessage(row.damageMessageId)
+    game.user.isGM || canRevealNativeRecord(row.damageMessageId)
       ? formatDamageSummary(row.damageSummary)
       : "";
   if (damage) {
@@ -207,7 +231,7 @@ function renderRow(row, canMutate, stackId) {
   if (
     row.appliedAmount != null &&
     state.className === "applied" &&
-    (game.user.isGM || visibleNativeMessage(row.applicationMessageId))
+    (game.user.isGM || canRevealNativeRecord(row.applicationMessageId))
   ) {
     stateLabel.textContent = format("Nelflow.State.AppliedAmount", {
       amount: row.appliedAmount,
@@ -260,13 +284,7 @@ function renderRow(row, canMutate, stackId) {
   details.append(detailsToggle, references);
   resultLine.append(details);
 
-  const canUndo =
-    canMutate &&
-    getSetting(SETTINGS.ENABLE_UNDO) &&
-    row.transactionState === TRANSACTION_STATES.APPLIED &&
-    !row.undoBlocked &&
-    Boolean(game.messages.get(row.attackMessageId));
-  if (canUndo) {
+  if (canUseUndo(row, stack)) {
     const undo = labeledButton({
       className: "nelflow-stack__undo",
       iconClass: "fa-solid fa-rotate-left",
@@ -323,8 +341,7 @@ function renderStack(message, html, stack) {
   const rows = document.createElement("ol");
   rows.className = "nelflow-stack__rows";
   rows.setAttribute("aria-label", localize("Nelflow.Stack.RowsAria"));
-  const canMutate = game.user.isGM && game.user.id === stack.identity.authorUserId;
-  for (const row of stack.rows ?? []) rows.append(renderRow(row, canMutate, stack.id));
+  for (const row of stack.rows ?? []) rows.append(renderRow(row, stack));
   article.append(header, rows);
   content.replaceChildren(article);
   html.classList.add("nelflow-stack-message");
@@ -429,10 +446,12 @@ function renderLegacyStatus(message, html) {
 
 export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
+  let stack = null;
   try {
-    const stack = message.getFlag(MODULE_ID, "stack");
+    stack = message.getFlag(MODULE_ID, "stack");
     if (stack) {
-      if (message.visible && message.isContentVisible) renderStack(message, html, stack);
+      if (!validStackProjection(stack)) throw new Error("Invalid persisted stack projection");
+      if (canRenderStackForViewer(message)) renderStack(message, html, stack);
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
@@ -440,18 +459,22 @@ export function renderNelflowChat(message, html) {
     NativeCardCompactor.render(message, html);
   } catch (error) {
     html.classList.remove("nelflow-native-record-hidden", "nelflow-native-collapsed");
+    NativeRecordsController.failOpen(stack?.id);
+    if (stack && canRenderStackForViewer(message)) {
+      try {
+        renderDurableStackFallback(message, html, stack);
+      } catch {
+        // Preserve the already stored fallback if even local fallback rendering fails.
+      }
+    }
     const reason = error instanceof Error ? error.message : "unexpected chat presentation failure";
     const key = `${message.id}:${reason}`;
     if (reportedRenderFailures.has(key)) return;
     reportedRenderFailures.add(key);
-    logger.warn(
-      "Chat presentation failed open",
-      {
-        attackMessageId: message.id,
-        stage: "renderChatMessageHTML",
-        reason,
-      },
-      error,
-    );
+    logger.debug("Chat presentation failed open", {
+      attackMessageId: message.id,
+      stage: "renderChatMessageHTML",
+      reason,
+    });
   }
 }

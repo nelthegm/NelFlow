@@ -74,6 +74,7 @@
   "Nelflow.Stack.ActionsNamedTitle": "Open the native attack record for: {actions}. Nelflow does not evaluate availability.",
   "Nelflow.Stack.ActionsUnknownTitle": "Open the native attack record. This attack contains supplemental controls; Nelflow does not evaluate availability.",
   "Nelflow.Stack.RowsAria": "Strike results",
+  "Nelflow.Fallback.AdditionalActions": "Additional actions available: {count}",
 
   "Nelflow.Native.ShowDetails": "Show Details",
   "Nelflow.Native.HideDetails": "Hide Details",
@@ -106,5 +107,6 @@
   "Nelflow.Notification.UndoChanged": "Undo blocked: the target's HP or temporary HP changed after Nelflow applied damage.",
   "Nelflow.Notification.UndoUnavailable": "Undo is no longer available for this transaction.",
   "Nelflow.Notification.UndoFailed": "Nelflow could not restore the recorded HP safely.",
-  "Nelflow.Notification.NativeMessageUnavailable": "The linked native PF2e message is no longer available."
+  "Nelflow.Notification.NativeMessageUnavailable": "The linked native PF2e message is no longer available.",
+  "Nelflow.Notification.NativeMessageNotRendered": "The linked native PF2e message is available but is not currently rendered in chat."
 }

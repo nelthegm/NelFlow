@@ -189,6 +189,17 @@ if (!runtimeSource.includes('Hooks.on("renderChatMessageHTML"')) {
 if ((runtimeSource.match(/Hooks\.on\(["']renderChatMessageHTML["']/g) ?? []).length !== 1) {
   fail("there must be exactly one renderChatMessageHTML hook registration");
 }
+const mainSource = read("scripts/main.js");
+const setupBlock =
+  mainSource.match(/Hooks\.once\(["']setup["'][\s\S]*?\n\}\);/)?.[0] ?? "";
+const readyBlock =
+  mainSource.match(/Hooks\.once\(["']ready["'][\s\S]*?\n\}\);/)?.[0] ?? "";
+if (!setupBlock.includes('Hooks.on("renderChatMessageHTML", renderNelflowChat)')) {
+  fail("chat renderer must be registered during setup so initial history can rehydrate");
+}
+if (readyBlock.includes("renderChatMessageHTML")) {
+  fail("chat renderer is registered too late during ready");
+}
 if (!existsSync(join(root, "tools", "package.ps1"))) {
   fail("packaging script is missing");
 }
@@ -223,6 +234,78 @@ if (
   !stackSource.includes("schemaVersion: STACK_SCHEMA_VERSION")
 ) {
   fail("optional Slice 2.2 stack schema compatibility is missing");
+}
+for (const required of [
+  "static canPersistStackProjection(attackMessage, transaction)",
+  "game.user.isGM",
+  "attackMessage.author?.id === game.user.id",
+  "transaction.snapshot?.processingUserId === game.user.id",
+  "if (!projectionChanged(stack, next)) return stackMessage",
+  "content: buildDurableStackContent(next, stackVisibility(stackMessage))",
+  "[`flags.${MODULE_ID}.stack`]: next",
+]) {
+  if (!stackSource.includes(required)) {
+    fail(`durable stack persistence is missing authority or atomic projection guard: ${required}`);
+  }
+}
+if (
+  !stackSource.includes("content: buildDurableStackContent(stack, descriptor.visibility)") ||
+  stackSource.includes('localize("Nelflow.Stack.StoredContent")')
+) {
+  fail("new stack messages must store meaningful durable fallback HTML");
+}
+
+const chatUiSource = read("scripts/chat-ui.js");
+const renderFunction =
+  chatUiSource.match(/export function renderNelflowChat[\s\S]*$/)?.[0] ?? "";
+for (const required of [
+  "function canRenderStackForViewer(message)",
+  "function canRevealNativeRecord(messageId)",
+  "function canUseUndo(row, stack)",
+  "renderDurableStackFallback(message, html, stack)",
+  "NativeRecordsController.failOpen(stack?.id)",
+]) {
+  if (!chatUiSource.includes(required)) {
+    fail(`reload-safe read-only stack projection is missing: ${required}`);
+  }
+}
+if (
+  /\.update\s*\(|\.setFlag\s*\(|ChatMessage(?:Class)?\.create\s*\(|applyDamage|rollStrikeDamage|\.critical\s*\(|\.damage\s*\(/.test(
+    renderFunction,
+  )
+) {
+  fail("renderNelflowChat must remain a read-only presentation path");
+}
+if (
+  /message\.author|game\.user\.isGM/.test(
+    renderFunction.match(/if \(stack\)[\s\S]*?return;\n\s*\}/)?.[0] ?? "",
+  )
+) {
+  fail("stack rendering must not be gated by authoring-GM authority");
+}
+
+const fallbackSource = read("scripts/stack-fallback.js");
+for (const required of [
+  "function escapeHtml(value)",
+  "function isGmOnlyAudience(visibility)",
+  "recipients.every((userId) => game.users?.get(userId)?.isGM === true)",
+  "stack.schemaVersion ?? 1",
+  'localize("Nelflow.Native.Target")',
+  "export function buildDurableStackContent(stack, visibility)",
+]) {
+  if (!fallbackSource.includes(required)) {
+    fail(`durable fallback is missing schema, escaping, or privacy guard: ${required}`);
+  }
+}
+if (
+  /<button\b|transactionId|attackMessageId|targetActorUuid|targetTokenUuid|\$\{[^}]*presentationError/.test(
+    fallbackSource,
+  )
+) {
+  fail("durable fallback appears to expose controls, identifiers, or diagnostics");
+}
+if (fallbackSource.includes("if (visibility?.blind) return true")) {
+  fail("blind fallback content must still validate its persisted recipient audience");
 }
 
 const awareness = read("scripts/supplemental-action-awareness.js");
@@ -261,6 +344,9 @@ for (const required of [
   "const hasControl = controls.length > 0",
   "stackFirstEnabled() && hasControl && !visible",
   "element.dataset.nelflowNativeStackId === stackId",
+  "visibleByStack.clear()",
+  "visibleByStack.delete(stack.id)",
+  "static failOpen(stackId)",
 ]) {
   if (!recordsController.includes(required)) {
     fail(`stack-first exact-link or fail-open guard is missing: ${required}`);
@@ -284,7 +370,7 @@ if (
     "revealNativeMessage(row.attackMessageId, stackId, { focus: true, highlight: true })",
   ) ||
   !read("scripts/chat-ui.js").includes(
-    "if (message.visible && message.isContentVisible) renderStack(message, html, stack)",
+    "if (canRenderStackForViewer(message)) renderStack(message, html, stack)",
   ) ||
   !read("scripts/chat-ui.js").includes(
     "if (!message.visible || !message.isContentVisible) return",
@@ -296,6 +382,13 @@ if (/async\s+(?:render|function\s+render)|await\s+NativeRecordsController/.test(
   `${recordsController}\n${compactor}\n${read("scripts/chat-ui.js")}`,
 )) {
   fail("chat presentation contains an unhandled asynchronous render update");
+}
+if (
+  /setInterval\s*\(|MutationObserver|game\.messages\.(?:forEach|map)\s*\(|ChatMessage\.updateDocuments/.test(
+    `${mainSource}\n${chatUiSource}\n${recordsController}`,
+  )
+) {
+  fail("reload rehydration must not use polling, DOM observation, or bulk migration writes");
 }
 if (/rolls\s*:|["']rolls["']\s*:/.test(runtimeSource)) {
   fail("runtime code appears to replace native PF2e rolls");
