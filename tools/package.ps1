@@ -68,7 +68,7 @@ try {
     throw "Packaged archive contains a non-portable entry path."
   }
   $forbidden = @($entries | Where-Object {
-    $_ -match '(^|/)(?:\.git|dist|tools|node_modules|__pycache__)(/|$)' -or
+    $_ -match '(^|/)(?:\.git|dist|tools|tests|node_modules|__pycache__)(/|$)' -or
     $_ -match '\.(?:zip|pyc)$' -or
     $_ -match 'TEST_PLAN'
   })

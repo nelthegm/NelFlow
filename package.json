@@ -1,9 +1,10 @@
 {
   "name": "nelflow",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node tools/static-check.mjs"
+    "check": "node tools/static-check.mjs",
+    "test": "node --test tests/*.test.mjs"
   }
 }

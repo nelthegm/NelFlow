@@ -1,4 +1,5 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
+import { DAMAGE_CORRELATION_REASONS } from "./damage-correlation.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
@@ -111,6 +112,7 @@ export class StrikeResolver {
 
     inFlight.add(message.id);
     let transaction = null;
+    let unpersistedDamageClaimId = null;
     let stage = "detect";
     try {
       const targets = PF2eAdapter.selectedTargets();
@@ -176,22 +178,106 @@ export class StrikeResolver {
         targetToken,
         transactionId: transaction.id,
       });
-      if (!rolled) {
-        throw new Error(localize("Nelflow.Reason.DamageMessageMissing"));
+      if (!rolled.ok) {
+        if (rolled.nativeRollReturned) {
+          transaction = await TransactionStore.update(message, {
+            state: TRANSACTION_STATES.FAILED,
+            reasonKey: "Nelflow.Reason.DamageUnlinked",
+            errorStage: "damage-correlation",
+            manualApplicationRequired: true,
+            damageSummary: PF2eAdapter.summarizeDamageRoll(rolled.roll),
+            damageCorrelation: {
+              schemaVersion: 1,
+              sequence: rolled.sequence ?? null,
+              strategy: rolled.strategy ?? "scoped-roll-option",
+              state: "manual-fallback",
+              reason: rolled.reason ?? DAMAGE_CORRELATION_REASONS.MISSING,
+              candidateCount: rolled.candidateCount ?? 0,
+              correlationOption: rolled.correlationOption ?? null,
+              elapsedMs: rolled.elapsedMs ?? null,
+            },
+            targetName: targetToken.name,
+          });
+          await syncStack(message, transaction, "manual-fallback");
+          logger.debug("manual-fallback", {
+            transactionId: transaction.id.slice(-10),
+            attackMessageId: message.id,
+            strategy: rolled.strategy ?? "scoped-roll-option",
+            reason: rolled.reason ?? DAMAGE_CORRELATION_REASONS.MISSING,
+            sourceActorUuid: transaction.snapshot.sourceActorUuid,
+            elapsedMs: rolled.elapsedMs ?? null,
+          });
+          notify("Nelflow.Notification.ManualApplicationRequired");
+          return;
+        }
+        throw rolled.error ??
+          new Error(
+            rolled.reason === DAMAGE_CORRELATION_REASONS.NATIVE_CALL_FAILED
+              ? localize("Nelflow.Reason.NativeDamageCallFailed")
+              : localize("Nelflow.Reason.DamageMessageMissing"),
+          );
       }
 
+      unpersistedDamageClaimId = rolled.damageMessage.id;
       transaction = await TransactionStore.update(message, {
         state: TRANSACTION_STATES.DAMAGE_ROLLED,
         damageMessageId: rolled.damageMessage.id,
         damageSummary: PF2eAdapter.summarizeDamageRoll(rolled.roll),
+        damageCorrelation: {
+          schemaVersion: 1,
+          sequence: rolled.sequence,
+          strategy: rolled.strategy,
+          state: "claimed",
+          reason: null,
+          candidateCount: rolled.candidateCount,
+          correlationOption: rolled.correlationOption,
+          elapsedMs: rolled.elapsedMs,
+        },
+        manualApplicationRequired: false,
         targetName: targetToken.name,
       });
+      if (!PF2eAdapter.persistDamageClaim(rolled.damageMessage.id, transaction.id)) {
+        throw new Error(localize("Nelflow.Reason.DamageAlreadyClaimed"));
+      }
+      unpersistedDamageClaimId = null;
       transaction = await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
       await syncStack(message, transaction, "damage-rolled");
 
       if (!getSetting(SETTINGS.AUTO_APPLY)) return;
 
       stage = "apply-damage";
+      const applicationGuard = PF2eAdapter.validateDamageForApplication({
+        attackMessage: message,
+        transaction,
+        damageMessage: rolled.damageMessage,
+        strike,
+        targetToken,
+      });
+      if (!applicationGuard.ok) {
+        transaction = await TransactionStore.update(message, {
+          state: TRANSACTION_STATES.FAILED,
+          reasonKey: "Nelflow.Reason.DamageUnlinked",
+          errorStage: "damage-correlation",
+          manualApplicationRequired: true,
+          damageCorrelation: {
+            ...(transaction.damageCorrelation ?? {}),
+            state: "manual-fallback",
+            reason: applicationGuard.reason,
+          },
+        });
+        await syncStack(message, transaction, "application-guard");
+        logger.debug("manual-fallback", {
+          transactionId: transaction.id.slice(-10),
+          attackMessageId: message.id,
+          candidateMessageId: rolled.damageMessage.id,
+          strategy: transaction.damageCorrelation?.strategy ?? "scoped-roll-option",
+          reason: applicationGuard.reason,
+          sourceActorUuid: transaction.snapshot.sourceActorUuid,
+          elapsedMs: transaction.damageCorrelation?.elapsedMs ?? null,
+        });
+        notify("Nelflow.Notification.ManualApplicationRequired");
+        return;
+      }
       const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
       if (!preApplication) {
         throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
@@ -261,6 +347,9 @@ export class StrikeResolver {
         notify("Nelflow.Notification.ApplyFailed");
       }
     } finally {
+      if (unpersistedDamageClaimId && transaction?.id) {
+        PF2eAdapter.releaseDamageClaim(unpersistedDamageClaimId, transaction.id);
+      }
       inFlight.delete(message.id);
     }
   }

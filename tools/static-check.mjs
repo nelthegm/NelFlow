@@ -79,7 +79,11 @@ if (manifest) {
   }
 }
 
-const javascriptFiles = [...walk("scripts", ".js"), ...walk("tools", ".mjs")];
+const javascriptFiles = [
+  ...walk("scripts", ".js"),
+  ...walk("tools", ".mjs"),
+  ...(existsSync(join(root, "tests")) ? walk("tests", ".mjs") : []),
+];
 for (const relativePath of javascriptFiles) {
   const absolutePath = join(root, relativePath);
   const checked = spawnSync(process.execPath, ["--check", absolutePath], { encoding: "utf8" });
@@ -100,6 +104,13 @@ for (const relativePath of walk("scripts", ".js")) {
     if (!existsSync(join(root, match[1]))) {
       fail(`${relativePath} references missing runtime asset ${match[1]}`);
     }
+  }
+}
+for (const relativePath of javascriptFiles) {
+  const source = read(relativePath);
+  for (const match of source.matchAll(/from\s+["'](\.[^"']+)["']/g)) {
+    const imported = resolve(dirname(join(root, relativePath)), match[1]);
+    if (!existsSync(imported)) fail(`${relativePath} imports missing path ${match[1]}`);
   }
 }
 
@@ -395,7 +406,7 @@ if (/rolls\s*:|["']rolls["']\s*:/.test(runtimeSource)) {
 }
 
 const captureSection =
-  adapter.match(/function captureMatches[\s\S]*?function onPreCreateChatMessage/)?.[0] ?? "";
+  adapter.match(/function applicationCaptureMatches[\s\S]*?function damageCandidate/)?.[0] ?? "";
 for (const required of [
   "flags.appliedDamage?.uuid",
   "flags.appliedDamage?.isHealing === false",
@@ -410,10 +421,94 @@ if (/\.content\b|textContent|innerText|Date\.now|createdTime/.test(captureSectio
   fail("application capture appears to correlate by text, content, or timing");
 }
 if (
-  !adapter.includes('capture.role === "application"') ||
+  !adapter.includes("function finishApplicationCapture(capture)") ||
   !adapter.includes("capture.candidates.length === 1")
 ) {
   fail("application capture must require one unique structured lifecycle candidate");
+}
+
+const correlation = read("scripts/damage-correlation.js");
+const resolver = read("scripts/strike-resolver.js");
+for (const required of [
+  "DamageMessageClaimRegistry",
+  "DamageCaptureRegistry",
+  "buildDamageCorrelationOption",
+  "validateDamageCandidate",
+  "candidate.correlationOption !== scope.correlationOption",
+  "candidate.authorUserId !== scope.processingUserId",
+  'candidate.contextType !== "damage-roll"',
+  "candidate.sourceActorUuid !== scope.sourceActorUuid",
+  "candidate.itemUuid !== scope.itemUuid",
+  "candidate.targetActorUuid !== scope.targetActorUuid",
+  "candidate.targetTokenUuid !== scope.targetTokenUuid",
+  "candidate.outcome !== scope.expectedOutcome",
+  "this.claims.claim(candidate.messageId, transactionId)",
+]) {
+  if (!correlation.includes(required)) {
+    fail(`concurrent damage correlation is missing exact guard: ${required}`);
+  }
+}
+for (const required of [
+  "options: new Set([capture.correlationOption])",
+  "damageCaptures.observe(damageCandidate(message, correlationOption))",
+  "damageCaptures.finish(transactionId",
+  "damageClaims.markPersisted(messageId, transactionId)",
+  "damageClaims.owner(damageMessage?.id) !== transaction.id",
+]) {
+  if (!adapter.includes(required)) {
+    fail(`PF2e adapter is missing transaction-scoped correlation behavior: ${required}`);
+  }
+}
+if ((adapter.match(/await\s+rollDamage\s*\(/g) ?? []).length !== 1) {
+  fail("there must be exactly one native Strike damage invocation");
+}
+const rollDamageSection =
+  adapter.match(/static async rollStrikeDamage[\s\S]*?static persistDamageClaim/)?.[0] ?? "";
+if (/Hooks\.(?:on|once)\s*\(/.test(rollDamageSection)) {
+  fail("damage invocation must not register a per-transaction hook");
+}
+if (
+  /actorName|strikeName|targetName|message\.(?:content|flavor)|_source\.(?:content|flavor)|most recent|latest message/i.test(
+    correlation,
+  )
+) {
+  fail("damage correlation appears to use names, prose, or newest-message matching");
+}
+const candidateValidator =
+  correlation.match(/export function validateDamageCandidate[\s\S]*?^}/m)?.[0] ?? "";
+if (/Date\.now|createdTime|timestamp/.test(candidateValidator)) {
+  fail("damage candidate validation must not use time as proof");
+}
+if (/new\s+DamageRoll|construct.*formula|damage\.formula/i.test(`${correlation}\n${resolver}`)) {
+  fail("concurrent correlation must not construct a DamageRoll or damage formula");
+}
+if (
+  !resolver.includes("PF2eAdapter.persistDamageClaim") ||
+  !resolver.includes("PF2eAdapter.validateDamageForApplication") ||
+  resolver.indexOf("PF2eAdapter.persistDamageClaim") >
+    resolver.indexOf("PF2eAdapter.applyDamageToRecordedTarget")
+) {
+  fail("damage application must occur only after exact claim persistence and revalidation");
+}
+if (
+  !resolver.includes("manualApplicationRequired: true") ||
+  !resolver.includes('"Nelflow.Notification.ManualApplicationRequired"') ||
+  !resolver.includes("PF2eAdapter.releaseDamageClaim")
+) {
+  fail("safe manual damage fallback or failed-claim cleanup is missing");
+}
+if (
+  /setProperty\s*\(|Hooks\.(?:on|once)\s*\(\s*["']preUpdateActor["']/.test(runtimeSource)
+) {
+  fail("Nelflow must not contain the observed external preUpdateActor/setProperty failure");
+}
+const concurrencyTests = read("tests/damage-correlation.test.mjs");
+if ((concurrencyTests.match(/\btest\s*\(/g) ?? []).length < 20) {
+  fail("mocked damage-correlation coverage must include at least 20 scenarios");
+}
+const correlationTestPlan = read("docs/SLICE_002_2_2_TEST_PLAN.md");
+if ((correlationTestPlan.match(/^\d+\.\s+\*\*/gm) ?? []).length < 25) {
+  fail("Slice 2.2.2 runtime test plan must include at least 25 scenarios");
 }
 
 const packageScript = read("tools/package.ps1");
@@ -430,6 +525,9 @@ if (/Copy-Item[\s\S]*\$projectRoot\s+-Destination/.test(packageScript)) {
 }
 if (!packageScript.includes("$_ -match 'TEST_PLAN'")) {
   fail("package verification does not exclude non-runtime test plans");
+}
+if (!packageScript.includes(".git|dist|tools|tests|node_modules")) {
+  fail("package verification must explicitly exclude tests and development tooling");
 }
 
 for (const relativePath of walkAll()) {

@@ -8,6 +8,8 @@ Slice 2.1 compacts each safely linked native audit card and reduces redundant
 space inside that stack. Slice 2.2 makes the stack the primary visible record
 and warns the GM about structured PF2e Strike riders. Slice 2.2.1 makes those
 stacks reload-safe and gives new stack messages durable readable fallback HTML.
+Slice 2.2.2 gives simultaneous native damage invocations exact
+transaction-scoped correlation.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -149,6 +151,38 @@ message. It does not search prose or persist DOM-derived mechanics.
   flags after reload; a later legitimate stack update repairs their stored
   fallback.
 
+## Slice 2.2.2 concurrent damage correlation
+
+- Every native `strike.damage` or `strike.critical` invocation receives one
+  namespaced option through PF2e's supported damage-roll options parameter.
+  PF2e carries that exact option into the created damage message's structured
+  context flags.
+- One central creation dispatcher resolves that option to an isolated
+  transaction scope, then validates author, native DamageRoll, source
+  actor/token/item, target actor/token, and success versus critical-success
+  context.
+- A session-local atomic claim registry prevents one damage message from being
+  linked to two transactions. Persisted attack/damage flags remain authority
+  and reconstruct terminal claims after reload.
+- Concurrent identical Strikes can resolve in either order without name,
+  timestamp, prose, or "latest message" matching. No global or actor queue is
+  added.
+- Before automatic application, Nelflow revalidates transaction state,
+  processing-GM authority, claim ownership, exact native context, outcome, and
+  target snapshot.
+- If a DamageRoll returns but exact message ownership cannot be proven, the row
+  shows **Damage rolled · Manual application required**. Nelflow does not
+  reroll, link a guess, apply a candidate, or offer Nelflow Undo; native cards
+  remain visible and usable.
+- Debug mode records concise correlation lifecycle events without message
+  content or formulas.
+
+PF2e Workbench can independently autoroll damage on hits. For predictable NPC
+automation, disable Workbench damage autoroll for users whose NPC Strikes
+Nelflow processes; other Workbench features may remain enabled. Nelflow does
+not automatically disable another module or claim its untagged damage cards.
+Dice So Nice rendering order does not affect document-level correlation.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -211,6 +245,15 @@ Undo Blocked.
 - If enhancement fails on an old placeholder-only stack before it receives a
   legitimate projection update, the client attempts a read-only fallback from
   flags but does not write a migration during page load.
+- Refreshing during an in-flight native damage call does not resume or transfer
+  its ephemeral correlation scope. Nelflow preserves the last durable state
+  and does not risk a second native roll.
+- Manual PF2e application after a correlation fallback is intentionally not
+  tracked as a Nelflow application and has no Nelflow Undo.
+- A third party that copies Nelflow's exact namespaced correlation option can
+  force safe ambiguity; Nelflow will not choose between two exact candidates.
+- The observed external `preUpdateActor` / unqualified `setProperty` console
+  error has no matching call or hook in Nelflow's source.
 
 ## Testing and design documentation
 
@@ -225,5 +268,7 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 2.2 runtime test plan](docs/SLICE_002_2_TEST_PLAN.md)
 - [Slice 2.2.1 reload rehydration](docs/SLICE_002_2_1_RELOAD_REHYDRATION.md)
 - [Slice 2.2.1 runtime test plan](docs/SLICE_002_2_1_TEST_PLAN.md)
+- [Slice 2.2.2 concurrent damage correlation](docs/SLICE_002_2_2_CONCURRENT_DAMAGE_CORRELATION.md)
+- [Slice 2.2.2 runtime test plan](docs/SLICE_002_2_2_TEST_PLAN.md)
 - [Slice 1 API findings](docs/SLICE_001_API_FINDINGS.md)
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)

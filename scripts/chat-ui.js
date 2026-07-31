@@ -58,6 +58,9 @@ function runControl(operation, stage) {
 }
 
 function rowState(row) {
+  if (row.manualApplicationRequired) {
+    return { key: "Nelflow.State.ManualApplicationRequired", className: "manual" };
+  }
   if (row.presentationError || row.transactionState === TRANSACTION_STATES.FAILED) {
     return { key: "Nelflow.State.Error", className: "error" };
   }
@@ -228,6 +231,9 @@ function renderRow(row, stack) {
   const stateLabel = document.createElement("span");
   stateLabel.className = "nelflow-stack__state";
   stateLabel.textContent = localize(state.key);
+  if (row.manualApplicationRequired && game.user.isGM) {
+    stateLabel.title = localize("Nelflow.State.DamageUnlinkedTitle");
+  }
   if (
     row.appliedAmount != null &&
     state.className === "applied" &&

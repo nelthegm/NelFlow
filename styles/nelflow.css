@@ -171,6 +171,11 @@
   color: var(--color-level-warning, #936b00);
 }
 
+.nelflow-stack__row--manual .nelflow-stack__state {
+  color: var(--color-level-warning, #936b00);
+  font-weight: 600;
+}
+
 .nelflow-stack__undo,
 .nelflow-stack__actions,
 .nelflow-stack__reference,

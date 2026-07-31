@@ -156,6 +156,8 @@ function makeRow(transaction) {
     outcome: snapshot.outcome,
     supplementalActions: snapshot.supplementalActions ?? null,
     damageSummary: transaction.damageSummary ?? null,
+    damageCorrelation: transaction.damageCorrelation ?? null,
+    manualApplicationRequired: transaction.manualApplicationRequired ?? false,
     appliedAmount: transaction.appliedAmount,
     transactionState: transaction.state,
     autoApplyRequested: transaction.autoApplyRequested ?? false,

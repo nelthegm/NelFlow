@@ -16,8 +16,9 @@ This baseline was recorded before Slice 2 implementation against commit
 4. Failure and critical failure transition directly from `processing` to
    `skipped`.
 5. Success and critical success call the prepared Strike's native `damage` or
-   `critical` method. A scoped `preCreateChatMessage` capture marks the exact
-   PF2e damage message and links it to the attack transaction.
+   `critical` method. Slice 2.2.2 gives each invocation a supported,
+   transaction-specific PF2e damage-context option, validates the exact created
+   damage message, claims it atomically, and links it to the attack transaction.
 6. With auto-application enabled, the PF2e DamageRoll is passed through the
    system's contextual-clone and native `applyDamage` pathway. The target's HP
    and temporary HP are recorded before and after application.

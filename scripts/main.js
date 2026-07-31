@@ -44,5 +44,5 @@ Hooks.once("ready", () => {
       );
     });
   });
-  logger.debug("Slice 2.2.1 ready");
+  logger.debug("Slice 2.2.2 ready");
 });

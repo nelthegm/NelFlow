@@ -113,13 +113,14 @@ critical success. It passes the recorded target, original check context, and
 recorded MAP increases.
 
 The native function returns a rolled `DamageRoll`, while `DamagePF2e.roll`
-creates the chat message internally and does not return that message. Nelflow
-therefore registers a scoped `preCreateChatMessage` capture before invoking the
-native function. It accepts only a PF2e `damage-roll` message with matching
-source actor, source item, and recorded target. The pending message receives a
-small Nelflow transaction marker through `updateSource`. After the awaited
-native call completes, the exact marked message is available—no timeout,
-"latest message" query, DOM click, or HTML parsing is used.
+creates the chat message internally and does not return that message. Slice 1
+initially used a scoped `preCreateChatMessage` capture with matching source
+actor, source item, and recorded target. Slice 2.2.2 supersedes that
+insufficient concurrent identity: it passes a transaction-specific namespaced
+option through PF2e's supported `DamageRollParams.options`, then resolves that
+exact persisted option in one central `createChatMessage` dispatcher. Strict
+structured context and atomic claim checks still apply. No timeout, "latest
+message" query, DOM click, or HTML parsing is used.
 
 ## Native damage application
 
@@ -168,8 +169,9 @@ Nelflow uses:
 - `init` to register settings;
 - `ready` to check the active system/runtime and attach runtime hooks;
 - `createChatMessage` to observe completed attack messages;
-- `preCreateChatMessage` only on the initiating client to mark exact native
-  damage and damage-taken messages before creation; and
+- `createChatMessage` on the initiating client to correlate the exact
+  namespaced native damage context and collect strictly matching damage-taken
+  messages; and
 - `renderChatMessageHTML(message, html)` to append compact status UI to the
   pending `HTMLElement`.
 

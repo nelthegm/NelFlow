@@ -66,6 +66,8 @@ export class TransactionStore {
       appliedAmount: null,
       targetName: null,
       damageSummary: null,
+      damageCorrelation: null,
+      manualApplicationRequired: false,
       autoApplyRequested: Boolean(snapshot.autoApplyRequested),
       undoBlocked: false,
       presentationError: null,

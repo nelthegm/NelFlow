@@ -49,6 +49,8 @@
   "Nelflow.State.NotApplied": "Not Applied",
   "Nelflow.State.Undone": "Undone",
   "Nelflow.State.UndoBlocked": "Undo Blocked",
+  "Nelflow.State.ManualApplicationRequired": "Damage rolled · Manual application required",
+  "Nelflow.State.DamageUnlinkedTitle": "Nelflow could not prove which native damage message belongs to this Strike. Use the visible native card manually.",
   "Nelflow.State.Error": "Error",
 
   "Nelflow.Stack.StoredContent": "Nelflow compact turn stack",
@@ -96,6 +98,9 @@
   "Nelflow.Reason.UnresolvedStrike": "the originating Strike could not be identified safely",
   "Nelflow.Reason.UnsupportedEnvironment": "this Foundry or PF2e version does not expose the verified APIs",
   "Nelflow.Reason.DamageMessageMissing": "PF2e created no identifiable damage message",
+  "Nelflow.Reason.DamageUnlinked": "the native damage message could not be linked safely",
+  "Nelflow.Reason.DamageAlreadyClaimed": "the native damage message is already linked to another transaction",
+  "Nelflow.Reason.NativeDamageCallFailed": "PF2e's native damage call failed",
   "Nelflow.Reason.NativeApplyUnavailable": "PF2e's native damage pathway is unavailable",
   "Nelflow.Reason.ProcessingError": "an unexpected error stopped automation",
 
@@ -104,6 +109,7 @@
   "Nelflow.Notification.TargetMismatch": "Nelflow skipped this Strike because its recorded target was ambiguous.",
   "Nelflow.Notification.UnresolvedStrike": "Nelflow could not identify the originating Strike safely.",
   "Nelflow.Notification.ApplyFailed": "Nelflow could not apply damage safely. Use PF2e's native damage controls.",
+  "Nelflow.Notification.ManualApplicationRequired": "Nelflow rolled damage but could not link the native damage card safely. Apply it manually using PF2e's native controls.",
   "Nelflow.Notification.UndoChanged": "Undo blocked: the target's HP or temporary HP changed after Nelflow applied damage.",
   "Nelflow.Notification.UndoUnavailable": "Undo is no longer available for this transaction.",
   "Nelflow.Notification.UndoFailed": "Nelflow could not restore the recorded HP safely.",

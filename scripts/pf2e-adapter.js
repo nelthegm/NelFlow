@@ -1,38 +1,59 @@
 import { DEGREE_OF_SUCCESS, MODULE_ID } from "./constants.js";
+import {
+  DAMAGE_CORRELATION_REASONS,
+  DamageCaptureRegistry,
+  DamageMessageClaimRegistry,
+  validateDamageCandidate,
+} from "./damage-correlation.js";
 import { logger } from "./logger.js";
 
-const pendingCaptures = new Map();
+const pendingApplicationCaptures = new Map();
 let hooksRegistered = false;
 
-function captureKey(transactionId, role) {
-  return `${transactionId}:${role}`;
+function shortId(value) {
+  const text = String(value ?? "");
+  return text.length > 10 ? text.slice(-10) : text;
 }
 
-function transactionMarker(capture) {
-  return {
-    id: capture.transactionId,
-    attackMessageId: capture.attackMessageId,
-    role: capture.role,
-  };
+function persistedDamageOwner(messageId) {
+  const attack = game.messages.find((message) => {
+    const transaction = message.getFlag?.(MODULE_ID, "transaction");
+    return transaction?.role === "attack" && transaction.damageMessageId === messageId;
+  });
+  if (attack) return attack.getFlag(MODULE_ID, "transaction")?.id ?? null;
+
+  const damage = game.messages.get(messageId);
+  const marker = damage?.getFlag?.(MODULE_ID, "transaction");
+  return marker?.role === "damage" ? marker.id : null;
 }
+
+const damageClaims = new DamageMessageClaimRegistry({
+  persistedOwner: persistedDamageOwner,
+});
+const damageCaptures = new DamageCaptureRegistry({
+  claims: damageClaims,
+  report(event, capture, details) {
+    logger.debug(event, {
+      transactionId: shortId(capture.transactionId),
+      attackMessageId: capture.attackMessageId,
+      candidateMessageId: details.candidateMessageId ?? null,
+      strategy: details.strategy ?? "scoped-roll-option",
+      reason: details.reason ?? null,
+      sourceActorUuid: capture.sourceActorUuid,
+      elapsedMs: Math.max(0, Date.now() - capture.startedAt),
+    });
+  },
+});
 
 function messageFlags(message) {
   return message?.flags?.pf2e ?? {};
 }
 
-function captureMatches(capture, document) {
+function applicationCaptureMatches(capture, document) {
   const flags = messageFlags(document);
   const context = flags.context;
-  const expectedType = capture.role === "damage" ? "damage-roll" : "damage-taken";
-  if (context?.type !== expectedType) return false;
+  if (context?.type !== "damage-taken") return false;
   if (flags.origin?.uuid !== capture.itemUuid) return false;
-
-  if (capture.role === "damage") {
-    return (
-      context.target?.token === capture.targetTokenUuid &&
-      flags.origin?.actor === capture.sourceActorUuid
-    );
-  }
 
   const speakerToken = document.speaker?.token ?? document._source?.speaker?.token;
   return (
@@ -43,41 +64,44 @@ function captureMatches(capture, document) {
   );
 }
 
-function onPreCreateChatMessage(document, _data, _options, userId) {
-  if (userId !== game.user.id) return;
-
-  const matches = Array.from(pendingCaptures.values()).filter(
-    (capture) =>
-      capture.role === "damage" && !capture.message && captureMatches(capture, document),
-  );
-  if (!matches.length) return;
-
-  // Damage-message capture is part of Slice 1 mechanics and retains its
-  // established pre-create marker behavior.
-  const capture = matches[0];
-  document.updateSource({
-    flags: {
-      [MODULE_ID]: {
-        transaction: transactionMarker(capture),
-      },
-    },
-  });
+function damageCandidate(message, correlationOption) {
+  const flags = messageFlags(message);
+  const context = flags.context;
+  const roll = message.rolls?.find((candidate) => Array.isArray(candidate?.instances));
+  return {
+    document: message,
+    messageId: message.id,
+    isChatMessage: message instanceof CONFIG.ChatMessage.documentClass,
+    isDamageRoll: message.isDamageRoll === true,
+    hasNativeDamageRoll: Boolean(roll),
+    authorUserId: message.author?.id ?? message.user?.id ?? message._source?.user ?? null,
+    visible: Boolean(message.visible && message.isContentVisible),
+    contextType: context?.type ?? null,
+    correlationOption,
+    sourceActorUuid: flags.origin?.actor ?? null,
+    sourceTokenUuid: message.token?.uuid ?? null,
+    itemUuid: flags.origin?.uuid ?? null,
+    targetActorUuid: context?.target?.actor ?? null,
+    targetTokenUuid: context?.target?.token ?? null,
+    outcome: context?.outcome ?? null,
+    degreeOfSuccess: roll?.options?.degreeOfSuccess,
+    existingTransactionId: message.flags?.[MODULE_ID]?.transaction?.id ?? null,
+  };
 }
 
 function onCreateChatMessage(message) {
-  const marker = message.flags?.[MODULE_ID]?.transaction;
-  if (marker?.id && marker.role) {
-    const capture = pendingCaptures.get(captureKey(marker.id, marker.role));
-    if (capture) capture.message = message;
+  const options = messageFlags(message).context?.options ?? [];
+  const correlationOption = options.find((option) => damageCaptures.getByOption(option));
+  if (correlationOption) {
+    damageCaptures.observe(damageCandidate(message, correlationOption));
   }
 
   // PF2e's application method does not return its ChatMessage. Collect every
   // structurally matching candidate during the awaited native call and accept
   // it only if the set is unique when that call finishes.
-  for (const capture of pendingCaptures.values()) {
+  for (const capture of pendingApplicationCaptures.values()) {
     if (
-      capture.role === "application" &&
-      captureMatches(capture, message) &&
+      applicationCaptureMatches(capture, message) &&
       !capture.candidates.some((candidate) => candidate.id === message.id)
     ) {
       capture.candidates.push(message);
@@ -85,34 +109,31 @@ function onCreateChatMessage(message) {
   }
 }
 
-function createCapture({ transactionId, attackMessageId, role, sourceActorUuid, itemUuid, targetToken }) {
+function createApplicationCapture({
+  transactionId,
+  attackMessageId,
+  sourceActorUuid,
+  itemUuid,
+  targetToken,
+}) {
   const capture = {
     transactionId,
     attackMessageId,
-    role,
+    role: "application",
     sourceActorUuid,
     itemUuid,
     targetTokenUuid: targetToken.document.uuid,
     targetTokenId: targetToken.document.id,
     targetActorUuid: targetToken.actor.uuid,
     candidates: [],
-    message: null,
   };
-  pendingCaptures.set(captureKey(transactionId, role), capture);
+  pendingApplicationCaptures.set(transactionId, capture);
   return capture;
 }
 
-function finishCapture(capture) {
-  pendingCaptures.delete(captureKey(capture.transactionId, capture.role));
-  if (capture.role === "application") {
-    return capture.candidates.length === 1 ? capture.candidates[0] : null;
-  }
-  if (capture.message) return capture.message;
-  return game.messages.find(
-    (candidate) =>
-      candidate.flags?.[MODULE_ID]?.transaction?.id === capture.transactionId &&
-      candidate.flags?.[MODULE_ID]?.transaction?.role === capture.role,
-  ) ?? null;
+function finishApplicationCapture(capture) {
+  pendingApplicationCaptures.delete(capture.transactionId);
+  return capture.candidates.length === 1 ? capture.candidates[0] : null;
 }
 
 function createSkipDialogEvent() {
@@ -213,8 +234,18 @@ export class PF2eAdapter {
   static initialize() {
     if (hooksRegistered) return;
     hooksRegistered = true;
-    Hooks.on("preCreateChatMessage", onPreCreateChatMessage);
     Hooks.on("createChatMessage", onCreateChatMessage);
+    Hooks.on("deleteChatMessage", (message) => {
+      damageClaims.forgetDeletedMessage(message.id);
+    });
+    for (const message of game.messages) {
+      const transaction = message.getFlag?.(MODULE_ID, "transaction");
+      if (transaction?.role === "attack" && transaction.damageMessageId) {
+        damageClaims.restore(transaction.damageMessageId, transaction.id);
+      } else if (transaction?.role === "damage") {
+        damageClaims.restore(message.id, transaction.id);
+      }
+    }
   }
 
   /** Check the target runtime before any PF2e-specific access occurs. */
@@ -304,36 +335,162 @@ export class PF2eAdapter {
 
   /**
    * Invoke the resolved Strike's native normal or critical damage function.
-   * A pre-create marker correlates the awaited roll call to the exact damage message,
-   * avoiding DOM clicks, timeouts, and "latest message" guesses.
+   * A supported namespaced PF2e roll option identifies the exact created
+   * damage document without DOM clicks, timeouts, or newest-message guesses.
    */
   static async rollStrikeDamage({ attackMessage, strike, targetToken, transactionId }) {
     const method = strike.outcome === "criticalSuccess" ? "critical" : "damage";
     const rollDamage = strike.attack?.[method];
-    if (typeof rollDamage !== "function") return null;
+    if (typeof rollDamage !== "function") {
+      return { ok: false, reason: DAMAGE_CORRELATION_REASONS.NATIVE_CALL_FAILED };
+    }
 
-    const capture = createCapture({
+    const capture = damageCaptures.begin({
       transactionId,
       attackMessageId: attackMessage.id,
-      role: "damage",
       sourceActorUuid: strike.actor.uuid,
+      sourceTokenUuid: strike.sourceTokenUuid,
       itemUuid: strike.item.uuid,
-      targetToken,
+      strikeIdentifier: strike.identifier,
+      targetActorUuid: targetToken.actor.uuid,
+      targetTokenUuid: targetToken.document.uuid,
+      expectedOutcome: strike.outcome,
+      processingUserId: game.user.id,
+      startState: "processing",
     });
 
     try {
-      const roll = await rollDamage({
+      const nativeResult = await rollDamage({
         target: targetToken,
         checkContext: strike.context,
         mapIncreases: strike.context.mapIncreases,
+        options: new Set([capture.correlationOption]),
         event: createSkipDialogEvent(),
       });
-      const damageMessage = finishCapture(capture);
-      if (!roll || !damageMessage?.isDamageRoll) return null;
-      return { roll, damageMessage };
-    } finally {
-      pendingCaptures.delete(captureKey(transactionId, "damage"));
+      const DirectChatMessage = CONFIG.ChatMessage.documentClass;
+      const directMessage =
+        nativeResult instanceof DirectChatMessage
+          ? nativeResult
+          : nativeResult?.message instanceof DirectChatMessage
+            ? nativeResult.message
+            : nativeResult?.chatMessage instanceof DirectChatMessage
+              ? nativeResult.chatMessage
+              : null;
+      logger.debug("native-damage-returned", {
+        transactionId: shortId(transactionId),
+        attackMessageId: attackMessage.id,
+        strategy: directMessage ? "direct-return" : "scoped-roll-option",
+        reason: nativeResult ? null : DAMAGE_CORRELATION_REASONS.NATIVE_CALL_FAILED,
+        sourceActorUuid: strike.actor.uuid,
+        elapsedMs: Math.max(0, Date.now() - capture.startedAt),
+      });
+      const correlation = damageCaptures.finish(transactionId, {
+        directCandidate: directMessage ? damageCandidate(directMessage, null) : null,
+      });
+      const roll =
+        directMessage?.rolls?.find((candidate) => Array.isArray(candidate?.instances)) ??
+        nativeResult;
+      if (!correlation.ok) {
+        return {
+          ...correlation,
+          ok: false,
+          roll,
+          nativeRollReturned: Boolean(roll?.instances),
+        };
+      }
+      if (!roll?.instances || !correlation.candidate?.document?.isDamageRoll) {
+        damageClaims.release(correlation.candidateMessageId, transactionId);
+        return {
+          ...correlation,
+          ok: false,
+          reason: DAMAGE_CORRELATION_REASONS.INVALID_ROLL,
+          nativeRollReturned: Boolean(roll?.instances),
+        };
+      }
+      return {
+        ...correlation,
+        ok: true,
+        roll,
+        damageMessage: correlation.candidate.document,
+      };
+    } catch (error) {
+      damageCaptures.fail(transactionId, DAMAGE_CORRELATION_REASONS.NATIVE_CALL_FAILED);
+      logger.debug("native-damage-call-failed", {
+        transactionId: shortId(transactionId),
+        attackMessageId: attackMessage.id,
+        strategy: "native-return",
+        reason: error instanceof Error ? error.message : String(error),
+        sourceActorUuid: strike.actor.uuid,
+        elapsedMs: Math.max(0, Date.now() - capture.startedAt),
+      });
+      return {
+        ok: false,
+        reason: DAMAGE_CORRELATION_REASONS.NATIVE_CALL_FAILED,
+        nativeRollReturned: false,
+        error,
+        sequence: capture.sequence,
+        correlationOption: capture.correlationOption,
+        elapsedMs: Math.max(0, Date.now() - capture.startedAt),
+      };
     }
+  }
+
+  static persistDamageClaim(messageId, transactionId) {
+    return damageClaims.markPersisted(messageId, transactionId);
+  }
+
+  static releaseDamageClaim(messageId, transactionId) {
+    return damageClaims.release(messageId, transactionId);
+  }
+
+  static damageClaimOwner(messageId) {
+    return damageClaims.owner(messageId);
+  }
+
+  static validateDamageForApplication({
+    attackMessage,
+    transaction,
+    damageMessage,
+    strike,
+    targetToken,
+  }) {
+    if (
+      !game.user.isGM ||
+      attackMessage.author?.id !== game.user.id ||
+      transaction.snapshot?.processingUserId !== game.user.id ||
+      transaction.state !== "damage-rolled" ||
+      transaction.id !== attackMessage.getFlag(MODULE_ID, "transaction")?.id ||
+      transaction.damageMessageId !== damageMessage?.id ||
+      damageClaims.owner(damageMessage?.id) !== transaction.id ||
+      transaction.snapshot.targetActorUuid !== targetToken.actor?.uuid ||
+      transaction.snapshot.targetTokenUuid !== targetToken.document?.uuid ||
+      transaction.snapshot.sourceActorUuid !== strike.actor?.uuid ||
+      transaction.snapshot.sourceItemUuid !== strike.item?.uuid ||
+      transaction.snapshot.outcome !== strike.outcome
+    ) {
+      return { ok: false, reason: DAMAGE_CORRELATION_REASONS.TRANSACTION_INELIGIBLE };
+    }
+
+    const correlationOption = transaction.damageCorrelation?.correlationOption ?? null;
+    const candidate = damageCandidate(damageMessage, correlationOption);
+    const validation = validateDamageCandidate(
+      {
+        transactionId: transaction.id,
+        correlationOption,
+        processingUserId: transaction.snapshot.processingUserId,
+        sourceActorUuid: transaction.snapshot.sourceActorUuid,
+        sourceTokenUuid: transaction.snapshot.sourceTokenUuid,
+        itemUuid: transaction.snapshot.sourceItemUuid,
+        targetActorUuid: transaction.snapshot.targetActorUuid,
+        targetTokenUuid: transaction.snapshot.targetTokenUuid,
+        expectedOutcome: transaction.snapshot.outcome,
+      },
+      candidate,
+      { requireCorrelationOption: Boolean(correlationOption) },
+    );
+    return validation.ok
+      ? { ok: true, reason: null }
+      : { ok: false, reason: validation.reason };
   }
 
   /**
@@ -428,10 +585,9 @@ export class PF2eAdapter {
       ...originRollOptions,
       ...contextClone.getSelfRollOptions(),
     ]);
-    const capture = createCapture({
+    const capture = createApplicationCapture({
       transactionId,
       attackMessageId: attackMessage.id,
-      role: "application",
       sourceActorUuid: strike.actor.uuid,
       itemUuid: strike.item.uuid,
       targetToken,
@@ -448,10 +604,10 @@ export class PF2eAdapter {
         outcome: context.outcome,
       });
       return {
-        applicationMessage: finishCapture(capture),
+        applicationMessage: finishApplicationCapture(capture),
       };
     } finally {
-      pendingCaptures.delete(captureKey(transactionId, "application"));
+      pendingApplicationCaptures.delete(transactionId);
     }
   }
 

@@ -42,6 +42,9 @@ function isGmOnlyAudience(visibility) {
 }
 
 function rowStateText(row, includePrivateData) {
+  if (row.manualApplicationRequired) {
+    return localize("Nelflow.State.ManualApplicationRequired");
+  }
   if (row.presentationError || row.transactionState === TRANSACTION_STATES.FAILED) {
     return localize("Nelflow.State.Error");
   }
