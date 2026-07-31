@@ -153,6 +153,7 @@ function makeRow(transaction) {
     targetActorUuid: snapshot.targetActorUuid,
     targetTokenUuid: snapshot.targetTokenUuid,
     outcome: snapshot.outcome,
+    supplementalActions: snapshot.supplementalActions ?? null,
     damageSummary: transaction.damageSummary ?? null,
     appliedAmount: transaction.appliedAmount,
     transactionState: transaction.state,
@@ -314,6 +315,7 @@ export class TurnStackService {
 
       const next = {
         ...stack,
+        schemaVersion: STACK_SCHEMA_VERSION,
         actor: stack.actor ?? actorProjection(transaction),
         rows: sortRows(rows),
         updatedAt: Date.now(),

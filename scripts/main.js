@@ -1,5 +1,6 @@
 import { renderNelflowChat } from "./chat-ui.js";
 import { logger } from "./logger.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { registerSettings } from "./settings.js";
 import { StrikeResolver } from "./strike-resolver.js";
@@ -22,6 +23,7 @@ Hooks.once("ready", () => {
 
   PF2eAdapter.initialize();
   TurnStackService.initialize();
+  NativeRecordsController.initialize();
   Hooks.on("createChatMessage", (message) => {
     void StrikeResolver.handleAttackMessage(message).catch((error) => {
       logger.error(
@@ -36,5 +38,5 @@ Hooks.once("ready", () => {
     });
   });
   Hooks.on("renderChatMessageHTML", renderNelflowChat);
-  logger.debug("Slice 2.1 ready");
+  logger.debug("Slice 2.2 ready");
 });

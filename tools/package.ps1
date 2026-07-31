@@ -21,8 +21,15 @@ New-Item -ItemType Directory -Path $stageDirectory | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $projectRoot "module.json") -Destination $stageDirectory
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $stageDirectory
-foreach ($directory in @("scripts", "styles", "lang", "docs")) {
+foreach ($directory in @("scripts", "styles", "lang")) {
   Copy-Item -LiteralPath (Join-Path $projectRoot $directory) -Destination $stageDirectory -Recurse
+}
+$stageDocs = Join-Path $stageDirectory "docs"
+New-Item -ItemType Directory -Path $stageDocs | Out-Null
+foreach ($document in Get-ChildItem -LiteralPath (Join-Path $projectRoot "docs") -File -Filter "*.md") {
+  if ($document.Name -notmatch "TEST_PLAN") {
+    Copy-Item -LiteralPath $document.FullName -Destination $stageDocs
+  }
 }
 
 if (Test-Path -LiteralPath $archivePath) {
@@ -62,7 +69,8 @@ try {
   }
   $forbidden = @($entries | Where-Object {
     $_ -match '(^|/)(?:\.git|dist|tools|node_modules|__pycache__)(/|$)' -or
-    $_ -match '\.(?:zip|pyc)$'
+    $_ -match '\.(?:zip|pyc)$' -or
+    $_ -match 'TEST_PLAN'
   })
   if ($forbidden.Count -gt 0) {
     throw "Packaged archive contains forbidden entries: $($forbidden -join ', ')"

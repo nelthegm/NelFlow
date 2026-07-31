@@ -127,6 +127,9 @@ for (const match of settingsBlock.matchAll(/^\s+([A-Z][A-Z0-9_]+):\s*"[^"]+",?$/
 for (const required of [
   "SETTINGS.COMPACT_TURN_STACKS",
   "SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS",
+  "SETTINGS.STACK_FIRST_NATIVE_RECORDS",
+  "STACK_FIRST_NATIVE_RECORD_MODES.ALWAYS_SHOW",
+  "STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK",
   "type: String",
   "choices:",
 ]) {
@@ -146,6 +149,17 @@ if ((adapter.match(/await\s+contextClone\.applyDamage\s*\(/g) ?? []).length !== 
 }
 if (/(?:ChatMessage|game\.messages|message)\s*\.\s*(?:delete|deleteDocuments)\s*\(/.test(runtimeSource)) {
   fail("runtime code appears to delete a native ChatMessage");
+}
+for (const relativePath of walk("scripts", ".js").filter(
+  (path) => !path.endsWith("turn-stack-service.js"),
+)) {
+  if (
+    /(?:ChatMessage|ChatMessageClass|CONFIG\.ChatMessage\.documentClass)\s*(?:\.|\?\.)\s*create\s*\(/.test(
+      read(relativePath),
+    )
+  ) {
+    fail(`${relativePath} appears to recreate a ChatMessage`);
+  }
 }
 
 const mechanicalSource = [
@@ -197,9 +211,91 @@ if (
   !compactor.includes("resolved.transaction.applicationMessageId") ||
   !compactor.includes("message.isContentVisible") ||
   !compactor.includes("standard direct message header/content not available") ||
-  !compactor.includes("if (existing) return")
+  !compactor.includes("if (existing) {")
 ) {
   fail("native-card linkage, visibility, fail-open, or duplicate-listener guard is missing");
+}
+
+const stackSource = read("scripts/turn-stack-service.js");
+if (
+  !constantsSource.includes("STACK_SCHEMA_VERSION = 2") ||
+  !stackSource.includes("supplementalActions: snapshot.supplementalActions ?? null") ||
+  !stackSource.includes("schemaVersion: STACK_SCHEMA_VERSION")
+) {
+  fail("optional Slice 2.2 stack schema compatibility is missing");
+}
+
+const awareness = read("scripts/supplemental-action-awareness.js");
+for (const required of [
+  "strike.attack?.additionalEffects",
+  "strike.item?.system?.attackEffects?.value",
+  "availabilityUnknown: true",
+  'detectionSource: "linked-attack-dom"',
+  "li.roll-note a[data-pf2-action]",
+  "li.roll-note a.inline-check[data-pf2-check]",
+]) {
+  if (!awareness.includes(required)) {
+    fail(`supplemental awareness is missing safe source or guard: ${required}`);
+  }
+}
+if (
+  /game\.pf2e\.actions|dispatchEvent\s*\(|\.click\s*\(|executeMacro|macro\.execute/.test(
+    awareness,
+  )
+) {
+  fail("supplemental awareness appears to execute or recreate a PF2e action");
+}
+if (
+  /Date\.now|createdTime|attackName|actorName|message\.flavor|message\.content|_source\.content/.test(
+    awareness,
+  )
+) {
+  fail("supplemental awareness appears to match by timing, names, or stored prose");
+}
+
+const recordsController = read("scripts/native-records-controller.js");
+for (const required of [
+  "TransactionStore.resolveCanonical(message)",
+  "resolved.transaction.stackRef?.id !== stack.id",
+  "message?.visible && message.isContentVisible",
+  "const hasControl = controls.length > 0",
+  "stackFirstEnabled() && hasControl && !visible",
+  "element.dataset.nelflowNativeStackId === stackId",
+]) {
+  if (!recordsController.includes(required)) {
+    fail(`stack-first exact-link or fail-open guard is missing: ${required}`);
+  }
+}
+if (
+  /\b(?:message|stackMessage)\.(?:update|setFlag)\s*\(/.test(recordsController) ||
+  /appendChild|insertBefore|replaceChildren/.test(recordsController)
+) {
+  fail("stack-first presentation must not mutate documents or relocate native message DOM");
+}
+if (
+  !recordsController.includes("if (initialized) return") ||
+  (runtimeSource.match(/Hooks\.on\(["']nelflowPresentationSettingChanged["']/g) ?? []).length !== 1
+) {
+  fail("presentation-setting listener is missing its duplicate-registration guard");
+}
+if (
+  !compactor.includes("NativeRecordsController.registerNative(html, message.id, linked)") ||
+  !read("scripts/chat-ui.js").includes(
+    "revealNativeMessage(row.attackMessageId, stackId, { focus: true, highlight: true })",
+  ) ||
+  !read("scripts/chat-ui.js").includes(
+    "if (message.visible && message.isContentVisible) renderStack(message, html, stack)",
+  ) ||
+  !read("scripts/chat-ui.js").includes(
+    "if (!message.visible || !message.isContentVisible) return",
+  )
+) {
+  fail("exact native registration, stack visibility, or Actions focus linkage is missing");
+}
+if (/async\s+(?:render|function\s+render)|await\s+NativeRecordsController/.test(
+  `${recordsController}\n${compactor}\n${read("scripts/chat-ui.js")}`,
+)) {
+  fail("chat presentation contains an unhandled asynchronous render update");
 }
 if (/rolls\s*:|["']rolls["']\s*:/.test(runtimeSource)) {
   fail("runtime code appears to replace native PF2e rolls");
@@ -229,7 +325,8 @@ if (
 
 const packageScript = read("tools/package.ps1");
 if (
-  !packageScript.includes('@("scripts", "styles", "lang", "docs")') ||
+  !packageScript.includes('@("scripts", "styles", "lang")') ||
+  !packageScript.includes('$document.Name -notmatch "TEST_PLAN"') ||
   !packageScript.includes("module.json") ||
   !packageScript.includes("README.md")
 ) {
@@ -237,6 +334,9 @@ if (
 }
 if (/Copy-Item[\s\S]*\$projectRoot\s+-Destination/.test(packageScript)) {
   fail("package script appears capable of recursively packaging the project root");
+}
+if (!packageScript.includes("$_ -match 'TEST_PLAN'")) {
+  fail("package verification does not exclude non-runtime test plans");
 }
 
 for (const relativePath of walkAll()) {

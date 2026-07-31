@@ -2,6 +2,7 @@ import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
+import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 
@@ -46,6 +47,7 @@ function makeSnapshot(attackMessage, strike, targetToken) {
     outcome: strike.outcome,
     mapIncreases: strike.mapIncreases,
     mapPenalty: strike.mapPenalty,
+    supplementalActions: SupplementalActionAwareness.fromStrike(strike),
     autoApplyRequested: getSetting(SETTINGS.AUTO_APPLY),
     processingUserId: game.user.id,
     timestamp: Date.now(),

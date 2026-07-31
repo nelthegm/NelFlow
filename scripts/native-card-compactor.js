@@ -1,9 +1,10 @@
 import { MODULE_ID, SETTINGS } from "./constants.js";
 import { logger } from "./logger.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
+import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
-import { TurnStackService } from "./turn-stack-service.js";
 
 const reportedFailures = new Set();
 
@@ -72,12 +73,12 @@ function identifyLinkedMessage(message) {
   return { marker, ...resolved };
 }
 
-function outcomeLabel(outcome) {
+export function strikeOutcomeLabel(outcome) {
   const keys = {
-    criticalFailure: "Nelflow.Outcome.CriticalFailure",
-    failure: "Nelflow.Outcome.Failure",
-    success: "Nelflow.Outcome.Success",
-    criticalSuccess: "Nelflow.Outcome.CriticalSuccess",
+    criticalFailure: "Nelflow.StrikeOutcome.CriticalMiss",
+    failure: "Nelflow.StrikeOutcome.Miss",
+    success: "Nelflow.StrikeOutcome.Hit",
+    criticalSuccess: "Nelflow.StrikeOutcome.CriticalHit",
   };
   return localize(keys[outcome] ?? "Nelflow.State.Error");
 }
@@ -101,12 +102,22 @@ function visibleApplicationTarget(message, transaction) {
   return localize("Nelflow.Native.Target");
 }
 
+function visibleRecordedTarget(transaction) {
+  if (!game.user.isGM) return localize("Nelflow.Native.Target");
+  return (
+    transaction.targetName ??
+    transaction.snapshot?.targetName ??
+    localize("Nelflow.Native.Target")
+  );
+}
+
 function summaryText(message, role, transaction) {
   const strike = transaction.snapshot?.strikeName ?? localize("Nelflow.Stack.UnknownStrike");
   if (role === "attack") {
     return format("Nelflow.Native.AttackSummary", {
       strike,
-      outcome: outcomeLabel(transaction.snapshot?.outcome),
+      target: visibleRecordedTarget(transaction),
+      outcome: strikeOutcomeLabel(transaction.snapshot?.outcome),
     });
   }
   if (role === "damage") {
@@ -163,10 +174,17 @@ function setExpanded(element, expanded) {
 }
 
 function restoreFullCard(html) {
-  html.classList.remove("nelflow-linked-native", "nelflow-native-collapsed");
+  NativeRecordsController.restoreNative(html);
+  html.classList.remove(
+    "nelflow-linked-native",
+    "nelflow-native-collapsed",
+    "nelflow-native-highlight",
+  );
   html.querySelector(":scope > .nelflow-native-summary")?.remove();
-  for (const element of html.querySelectorAll(".nelflow-native-detail")) {
-    element.classList.remove("nelflow-native-detail");
+  for (const element of html.querySelectorAll(
+    ".nelflow-native-detail, .nelflow-native-header",
+  )) {
+    element.classList.remove("nelflow-native-detail", "nelflow-native-header");
   }
 }
 
@@ -177,6 +195,10 @@ function compactCard(message, html, linked) {
   if (!header || !content) {
     debugFailureOnce(message, "standard direct message header/content not available");
     return;
+  }
+
+  if (linked.marker.role === "attack") {
+    SupplementalActionAwareness.inspectLinkedAttackDom(message, content, linked.transaction);
   }
 
   const summary = document.createElement("div");
@@ -194,8 +216,10 @@ function compactCard(message, html, linked) {
   // Mutate only the pending rendered HTMLElement. The stored PF2e content and
   // its native listener-bearing descendants remain untouched.
   header.after(summary);
+  header.classList.add("nelflow-native-header");
   content.classList.add("nelflow-native-detail");
   html.classList.add("nelflow-linked-native", "nelflow-native-collapsed");
+  NativeRecordsController.registerNative(html, message.id, linked);
 }
 
 function findRenderedMessage(messageId) {
@@ -207,17 +231,22 @@ function findRenderedMessage(messageId) {
 export class NativeCardCompactor {
   static render(message, html) {
     const existing = html.querySelector(":scope > .nelflow-native-summary");
-    if (!TurnStackService.enabled() || !getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
+    if (!getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
       if (existing) restoreFullCard(html);
+      else NativeRecordsController.restoreNative(html);
       return;
     }
 
     const linked = identifyLinkedMessage(message);
     if (!linked || !message.visible || !message.isContentVisible) {
       if (existing) restoreFullCard(html);
+      else NativeRecordsController.restoreNative(html);
       return;
     }
-    if (existing) return;
+    if (existing) {
+      NativeRecordsController.registerNative(html, message.id, linked);
+      return;
+    }
 
     try {
       compactCard(message, html, linked);
@@ -230,11 +259,20 @@ export class NativeCardCompactor {
     }
   }
 
-  static reveal(messageId) {
+  static reveal(messageId, { focus = false, highlight = false } = {}) {
     const element = findRenderedMessage(messageId);
     if (!element) return false;
     if (element.querySelector(":scope > .nelflow-native-summary")) setExpanded(element, true);
+    element.classList.remove("nelflow-native-highlight");
+    if (highlight) {
+      void element.offsetWidth;
+      element.classList.add("nelflow-native-highlight");
+    }
     element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (focus) {
+      if (!element.hasAttribute("tabindex")) element.setAttribute("tabindex", "-1");
+      element.focus({ preventScroll: true });
+    }
     return true;
   }
 }

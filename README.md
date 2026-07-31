@@ -5,20 +5,25 @@ Slice 1 safely continues one GM-authored NPC Strike against one recorded target
 through PF2e's native damage and optional application pathways. Slice 2 groups
 supported Strikes from one combatant turn into a durable compact chat stack.
 Slice 2.1 compacts each safely linked native audit card and reduces redundant
-space inside that stack.
+space inside that stack. Slice 2.2 makes the stack the primary visible record
+and warns the GM about structured PF2e Strike riders.
 
 ```text
 [Foundry speaker: Stone Giant]
-Round 3
-Greatclub → Vincent · Success · 24 bludgeoning · Applied · Undo
-Greatclub · MAP −5 → Vincent · Critical Success · 47 bludgeoning · Applied
-Fist · MAP −10 → Brynna · Failure
+Round 3                                  Native Records (7)
+Greatclub → Vincent
+Hit · 24 bludgeoning · Applied (24 HP) · Details · Undo
+Greatclub · MAP −5 → Vincent
+Critical Hit · 47 bludgeoning · Applied (47 HP) · Actions (1) · Details
+Fist · MAP −10 → Brynna
+Miss · Details
 ```
 
 Original PF2e attack, damage, and damage-taken messages remain intact. With
-native collapse enabled, Nelflow shows a concise structured summary and hides
-only the rendered native body until Show Details is selected. Stored content,
-rolls, PF2e flags, and native controls are not rewritten.
+stack-first native records enabled, those exact messages are visually hidden
+behind one viewer-local stack control. Revealing records shows compact audit
+stubs first; Show Details restores each complete native message. Stored
+content, rolls, PF2e flags, and native controls are never rewritten.
 
 ## Requirements
 
@@ -92,6 +97,33 @@ Compaction requires exact Nelflow message linkage, visible message content, and
 the standard direct Foundry message header/content structure. If any check
 fails, Nelflow leaves the full native card visible.
 
+## Slice 2.2 stack-first chat
+
+- **Native Records (N)** counts only exact linked attack, damage, and
+  application messages visible to the current viewer.
+- Records default hidden when compact stacks, native collapse, and the
+  stack-first setting are all enabled. The control reveals one-line audit stubs
+  without moving or cloning their ChatMessage documents.
+- Audit stubs hide the outer message header while collapsed. Expanding one
+  restores its complete Foundry header, native PF2e content, and all native or
+  companion-module controls.
+- Local show/hide state is independent per viewer and resets to the configured
+  default after reload. It never mutates transaction or stack mechanics.
+- Strike presentation uses **Critical Hit**, **Hit**, **Miss**, and **Critical
+  Miss** while preserving PF2e's stored outcome values.
+- PF2e NPC Strike `additionalEffects` and melee `attackEffects` produce a
+  GM-visible **Actions (N)** indicator. Clicking it reveals, expands, focuses,
+  and highlights the exact linked native attack message.
+- Supplemental awareness is advisory. Nelflow never evaluates legality,
+  executes a rider, or recreates an Improved Grab, Knockdown, Push, Whip
+  Reposition, or other action.
+- Row Details uses compact inline `Records: Attack · Damage · Application`
+  links. Guarded Undo remains the existing Slice 1 operation.
+
+When structured metadata is absent, Nelflow may locally recognize actual PF2e
+semantic controls inside visible roll notes on the already-linked attack
+message. It does not search prose or persist DOM-derived mechanics.
+
 ## Settings
 
 - **Enable NPC Strike Auto-Resolution** — master switch, enabled by default.
@@ -103,6 +135,10 @@ fails, Nelflow leaves the full native card visible.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
   stacks remain active, native PF2e cards stay fully expanded, and Nelflow adds
   no replacement collapse controls.
+- **Stack-First Native Records** — `Hide Behind Stack Control` by default;
+  choose `Always Show Audit Stubs` to keep compact native summaries visible.
+  This setting never hides messages when native collapse or compact stacks are
+  disabled.
 - **Enable Debug Logging** — disabled by default.
 
 ## Safety and Undo
@@ -140,6 +176,13 @@ Undo Blocked.
   durable row but does not replay it, avoiding a duplicate roll or application.
 - Chat modules that replace Foundry's standard message header/body structure
   may prevent visual collapse; Nelflow then leaves the native body visible.
+- Supplemental Strike metadata indicates associated options, not whether the
+  observed outcome currently makes them legal or useful.
+- Custom riders without structured PF2e attack effects or recognizable
+  semantic roll-note controls cannot be detected safely.
+- Native-message focus requires the exact message element to be present in
+  Foundry's rendered chat window; the stored record remains available even when
+  it is not currently mounted.
 
 ## Testing and design documentation
 
@@ -150,5 +193,7 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 2 runtime test plan](docs/SLICE_002_TEST_PLAN.md)
 - [Slice 2.1 native-card compaction](docs/SLICE_002_1_NATIVE_CARD_COMPACTION.md)
 - [Slice 2.1 runtime test plan](docs/SLICE_002_1_TEST_PLAN.md)
+- [Slice 2.2 stack-first chat](docs/SLICE_002_2_STACK_FIRST_CHAT.md)
+- [Slice 2.2 runtime test plan](docs/SLICE_002_2_TEST_PLAN.md)
 - [Slice 1 API findings](docs/SLICE_001_API_FINDINGS.md)
 - [Slice 1 regression plan](docs/SLICE_001_TEST_PLAN.md)

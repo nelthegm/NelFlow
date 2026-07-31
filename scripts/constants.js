@@ -8,6 +8,7 @@ export const SETTINGS = Object.freeze({
   ENABLE_UNDO: "enableUndo",
   COMPACT_TURN_STACKS: "compactTurnStacks",
   COLLAPSE_LINKED_NATIVE_CARDS: "collapseLinkedNativeCards",
+  STACK_FIRST_NATIVE_RECORDS: "stackFirstNativeRecords",
   DEBUG: "debug",
 });
 
@@ -16,7 +17,12 @@ export const COMPACT_STACK_MODES = Object.freeze({
   NPC_STRIKES: "npc-strikes",
 });
 
-export const STACK_SCHEMA_VERSION = 1;
+export const STACK_FIRST_NATIVE_RECORD_MODES = Object.freeze({
+  ALWAYS_SHOW: "always-show",
+  HIDE_BEHIND_STACK: "hide-behind-stack",
+});
+
+export const STACK_SCHEMA_VERSION = 2;
 
 export const TRANSACTION_STATES = Object.freeze({
   DETECTED: "detected",

@@ -1,4 +1,13 @@
-import { COMPACT_STACK_MODES, MODULE_ID, SETTINGS } from "./constants.js";
+import {
+  COMPACT_STACK_MODES,
+  MODULE_ID,
+  SETTINGS,
+  STACK_FIRST_NATIVE_RECORD_MODES,
+} from "./constants.js";
+
+function refreshPresentation() {
+  Hooks.callAll("nelflowPresentationSettingChanged");
+}
 
 const SETTING_DEFINITIONS = [
   {
@@ -29,12 +38,28 @@ const SETTING_DEFINITIONS = [
       [COMPACT_STACK_MODES.NPC_STRIKES]: "Nelflow.Settings.CompactTurnStacks.NpcStrikes",
     },
     default: COMPACT_STACK_MODES.NPC_STRIKES,
+    onChange: refreshPresentation,
   },
   {
     key: SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS,
     name: "Nelflow.Settings.CollapseLinkedNativeCards.Name",
     hint: "Nelflow.Settings.CollapseLinkedNativeCards.Hint",
     default: true,
+    onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.STACK_FIRST_NATIVE_RECORDS,
+    name: "Nelflow.Settings.StackFirstNativeRecords.Name",
+    hint: "Nelflow.Settings.StackFirstNativeRecords.Hint",
+    type: String,
+    choices: {
+      [STACK_FIRST_NATIVE_RECORD_MODES.ALWAYS_SHOW]:
+        "Nelflow.Settings.StackFirstNativeRecords.AlwaysShow",
+      [STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK]:
+        "Nelflow.Settings.StackFirstNativeRecords.HideBehindStack",
+    },
+    default: STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK,
+    onChange: refreshPresentation,
   },
   {
     key: SETTINGS.DEBUG,
@@ -56,6 +81,7 @@ export function registerSettings() {
       type: definition.type ?? Boolean,
       choices: definition.choices,
       default: definition.default,
+      onChange: definition.onChange,
     });
   }
 }
