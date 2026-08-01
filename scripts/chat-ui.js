@@ -17,6 +17,7 @@ import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { failOpenAutoDamageRoll, renderAutoDamageRoll } from "./auto-damage-roll-ui.js";
 import { renderTransactionDiagnostics } from "./transaction-diagnostics-ui.js";
+import { renderPlayerStrike } from "./player-strike-ui.js";
 
 const reportedRenderFailures = new Set();
 
@@ -483,6 +484,7 @@ export function renderNelflowChat(message, html) {
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
+    renderPlayerStrike(message, html);
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
     renderTransactionDiagnostics(message, html);

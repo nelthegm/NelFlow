@@ -16,6 +16,7 @@ export const SETTINGS = Object.freeze({
   TOOLBELT_BASIC_SAVE_SOURCES: "toolbeltBasicSaveSources",
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll",
   GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
+  PLAYER_STRIKE_AUTO_APPLY: "playerStrikeAutoApply",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });
@@ -61,10 +62,18 @@ export const AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES = Object.freeze({
   ALL: "all",
 });
 
+export const PLAYER_STRIKE_AUTO_APPLY_MODES = Object.freeze({
+  OFF: "off",
+  HOSTILE: "hostile",
+  ALL: "all",
+});
+
+export const PLAYER_STRIKE_TRANSACTION_SCHEMA_VERSION = 1;
+
 export const AUTO_DAMAGE_ROLL_SCHEMA_VERSION = 1;
 
 export const TOOLBELT_TRANSACTION_SCHEMA_VERSION = 1;
-export const SETTINGS_MIGRATION_VERSION = 3;
+export const SETTINGS_MIGRATION_VERSION = 4;
 
 export const SAVE_RESOLVER_SCHEMA_VERSION = 1;
 
@@ -79,6 +88,12 @@ export const TRANSACTION_STATES = Object.freeze({
   INTERRUPTED: "interrupted",
   MANUAL: "manual",
   ABANDONED: "abandoned",
+  WAITING_FOR_DAMAGE: "waiting-for-damage",
+  DAMAGE_OBSERVED: "damage-observed",
+  VALIDATING: "validating",
+  CLAIMED: "claimed",
+  APPLYING: "applying",
+  AMBIGUOUS: "ambiguous",
 });
 
 export const TERMINAL_OR_CLAIMED_STATES = new Set(Object.values(TRANSACTION_STATES));

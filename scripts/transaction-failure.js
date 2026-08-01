@@ -18,6 +18,13 @@ export const FAILURE_CODES = Object.freeze([
   "guard-target-control-missing", "guard-markup-unsupported", "guard-state-inconsistent", "transaction-stale",
   "transaction-interrupted", "transaction-conflict", "transaction-schema-unsupported", "internal-exception",
   "manual-review-required",
+  "player-strike-disabled", "player-strike-source-unsupported", "player-strike-target-missing",
+  "player-strike-multiple-targets", "player-strike-target-changed",
+  "player-strike-target-disposition-blocked", "player-strike-outcome-missing",
+  "player-strike-not-a-hit", "player-strike-damage-missing", "player-strike-damage-ambiguous",
+  "player-strike-damage-variant-mismatch", "player-strike-authority-missing",
+  "player-strike-application-failed", "player-strike-reaction-review-required",
+  "player-strike-interrupted",
 ]);
 
 const CODE_SET = new Set(FAILURE_CODES);

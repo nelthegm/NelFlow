@@ -9,6 +9,7 @@ import {
   TOOLBELT_APPLICATION_MODES,
   TOOLBELT_BASIC_SAVE_SOURCE_MODES,
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES,
+  PLAYER_STRIKE_AUTO_APPLY_MODES,
 } from "./constants.js";
 
 function refreshPresentation() {
@@ -143,6 +144,19 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.PLAYER_STRIKE_AUTO_APPLY,
+    name: "Nelflow.Settings.PlayerStrikeAutoApply.Name",
+    hint: "Nelflow.Settings.PlayerStrikeAutoApply.Hint",
+    type: String,
+    choices: {
+      [PLAYER_STRIKE_AUTO_APPLY_MODES.OFF]: "Nelflow.Settings.PlayerStrikeAutoApply.Off",
+      [PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE]: "Nelflow.Settings.PlayerStrikeAutoApply.Hostile",
+      [PLAYER_STRIKE_AUTO_APPLY_MODES.ALL]: "Nelflow.Settings.PlayerStrikeAutoApply.All",
+    },
+    default: PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",
@@ -187,6 +201,11 @@ export function getSetting(key) {
   return game.settings.get(MODULE_ID, key);
 }
 
+/** Pure migration policy used to prove existing-world opt-in is one-shot. */
+export function shouldDisablePlayerStrikeForMigration({ version, hasStoredMigration }) {
+  return hasStoredMigration === true && Number(version) < 4;
+}
+
 /** Versioned workflow migrations; never enable or replace the legacy resolver. */
 export async function migrateSettings({ toolbeltReady }) {
   if (!game.user?.isGM) return false;
@@ -223,6 +242,14 @@ export async function migrateSettings({ toolbeltReady }) {
       MODULE_ID,
       SETTINGS.AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL,
       AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.OFF,
+    );
+  }
+  if (shouldDisablePlayerStrikeForMigration({ version, hasStoredMigration })) {
+    // Existing campaigns explicitly opt in to player-authored HP changes.
+    await game.settings.set(
+      MODULE_ID,
+      SETTINGS.PLAYER_STRIKE_AUTO_APPLY,
+      PLAYER_STRIKE_AUTO_APPLY_MODES.OFF,
     );
   }
   await game.settings.set(MODULE_ID, SETTINGS.MIGRATION_VERSION, SETTINGS_MIGRATION_VERSION);

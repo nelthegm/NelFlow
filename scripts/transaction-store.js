@@ -22,6 +22,45 @@ const ALLOWED_TRANSITIONS = Object.freeze({
     TRANSACTION_STATES.INTERRUPTED,
     TRANSACTION_STATES.MANUAL,
     TRANSACTION_STATES.ABANDONED,
+    TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+  ]),
+  [TRANSACTION_STATES.WAITING_FOR_DAMAGE]: new Set([
+    TRANSACTION_STATES.DAMAGE_OBSERVED,
+    TRANSACTION_STATES.AMBIGUOUS,
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.INTERRUPTED,
+    TRANSACTION_STATES.ABANDONED,
+  ]),
+  [TRANSACTION_STATES.DAMAGE_OBSERVED]: new Set([
+    TRANSACTION_STATES.VALIDATING,
+    TRANSACTION_STATES.AMBIGUOUS,
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.FAILED,
+  ]),
+  [TRANSACTION_STATES.VALIDATING]: new Set([
+    TRANSACTION_STATES.CLAIMED,
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.FAILED,
+    TRANSACTION_STATES.INTERRUPTED,
+  ]),
+  [TRANSACTION_STATES.CLAIMED]: new Set([
+    TRANSACTION_STATES.APPLYING,
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.INTERRUPTED,
+  ]),
+  [TRANSACTION_STATES.APPLYING]: new Set([
+    TRANSACTION_STATES.APPLIED,
+    TRANSACTION_STATES.FAILED,
+    TRANSACTION_STATES.INTERRUPTED,
+  ]),
+  [TRANSACTION_STATES.AMBIGUOUS]: new Set([
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.ABANDONED,
+    TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+  ]),
+  [TRANSACTION_STATES.MANUAL]: new Set([
+    TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+    TRANSACTION_STATES.ABANDONED,
   ]),
 });
 
@@ -49,6 +88,7 @@ function marker(transaction, role) {
     attackMessageId: transaction.attackMessageId,
     role,
     state: transaction.state,
+    transactionType: transaction.transactionType ?? "strike",
   };
 }
 
@@ -78,6 +118,7 @@ export class TransactionStore {
     const transaction = {
       id: this.deterministicId(attackMessage),
       role: "attack",
+      transactionType: "npc-strike",
       state: TRANSACTION_STATES.PROCESSING,
       attackMessageId: attackMessage.id,
       damageMessageId: null,
@@ -116,6 +157,64 @@ export class TransactionStore {
     return this.get(attackMessage);
   }
 
+  /** Persist the authoritative projection of a player-authored native Strike. */
+  static async claimPlayerStrike(attackMessage, snapshot, { state, failureCode = null } = {}) {
+    const existing = this.get(attackMessage);
+    if (existing?.transactionType === "player-strike" && existing.role === "attack") return existing;
+    if (existing && !(existing.transactionType === "player-strike" && existing.role === "observation")) return null;
+    const timestamp = now();
+    const transaction = {
+      id: this.deterministicId(attackMessage),
+      role: "attack",
+      transactionType: "player-strike",
+      sourceKind: "character-strike",
+      schemaVersion: snapshot.schemaVersion,
+      state,
+      attackMessageId: attackMessage.id,
+      damageMessageId: null,
+      applicationMessageId: null,
+      stackRef: null,
+      snapshot,
+      sourceUserId: snapshot.authoringUserId,
+      processingUserId: snapshot.processingUserId,
+      settingMode: snapshot.settingMode,
+      preApplication: null,
+      postApplication: null,
+      appliedAmount: null,
+      damageVariant: snapshot.damageVariant,
+      damageCorrelation: { state: "waiting", candidateCount: 0 },
+      manualApplicationRequired: state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+      undoBlocked: false,
+      presentationError: null,
+      reasonKey: null,
+      errorStage: failureCode,
+      failure: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revision: 1,
+      activeOperation: null,
+    };
+    appendAudit(transaction, {
+      event: state === TRANSACTION_STATES.WAITING_FOR_DAMAGE ? "waiting-for-damage" : "classified",
+      state,
+      subsystem: "player-strike",
+      userRole: "gm",
+      safeReason: failureCode,
+      revision: 1,
+    });
+    if (failureCode) {
+      recordFailure(transaction, {
+        reason: failureCode,
+        subsystem: "player-strike",
+        operation: "attack-observation",
+        userRole: "gm",
+        context: { messageId: attackMessage.id, transactionId: transaction.id },
+      });
+    }
+    await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
+    return this.get(attackMessage);
+  }
+
   /** Move a transaction forward and synchronize compact markers on linked messages. */
   static async update(attackMessage, changes) {
     const current = this.get(attackMessage);
@@ -140,7 +239,7 @@ export class TransactionStore {
       appendAudit(transaction, {
         event: transitionEvent(nextState),
         state: nextState,
-        subsystem: "strike",
+        subsystem: current.transactionType === "player-strike" ? "player-strike" : "strike",
         userRole: game.user?.isGM ? "gm" : "player",
         safeReason: changes.errorStage ?? changes.reasonKey ?? null,
         revision: transaction.revision,
@@ -148,15 +247,19 @@ export class TransactionStore {
     }
     if (nextState === TRANSACTION_STATES.FAILED || changes.undoBlocked || changes.presentationError || changes.undoOperation?.state === "failed") {
       recordFailure(transaction, {
-        reason: changes.undoBlocked ? "health-changed" : changes.undoOperation?.reason ?? changes.errorStage ?? "internal-exception",
-        subsystem: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "undo" : "strike",
+        reason: changes.undoBlocked ? "health-changed" : changes.undoOperation?.reason ?? changes.failureCode ?? changes.errorStage ?? "internal-exception",
+        subsystem: changes.undoBlocked || changes.undoOperation?.state === "failed"
+          ? "undo"
+          : current.transactionType === "player-strike" ? "player-strike" : "strike",
         operation: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "guarded-undo" : changes.errorStage ?? "processing",
         event: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "undo-failed" : "application-failed",
         userRole: "gm",
         context: { messageId: attackMessage.id, transactionId: current.id },
       });
     }
-    if (![TRANSACTION_STATES.PROCESSING].includes(nextState)) transaction.activeOperation = null;
+    if (![TRANSACTION_STATES.PROCESSING, TRANSACTION_STATES.VALIDATING, TRANSACTION_STATES.CLAIMED, TRANSACTION_STATES.APPLYING].includes(nextState)) {
+      transaction.activeOperation = null;
+    }
     await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
 
     await updateLinkedMarker(transaction.damageMessageId, transaction, "damage");

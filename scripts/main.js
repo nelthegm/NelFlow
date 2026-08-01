@@ -13,6 +13,7 @@ import { runNelflowBoundary, runNelflowSyncBoundary } from "./nelflow-boundary.j
 import { initializeRuntimeSession } from "./runtime-session.js";
 import { TransactionDiagnosticsService } from "./transaction-diagnostics-service.js";
 import { TransactionStore } from "./transaction-store.js";
+import { PlayerStrikeService } from "./player-strike-service.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -56,7 +57,13 @@ async function initializeReady() {
   await runNelflowBoundary({ subsystem: "legacy-save-resolver", operation: "initialize", task: () => SaveResolverService.initialize() });
   await runNelflowBoundary({ subsystem: "toolbelt-application", operation: "initialize", task: () => ToolbeltBasicSaveService.initialize() });
   await runNelflowBoundary({ subsystem: "turn-stack", operation: "initialize", task: () => TurnStackService.initialize() });
+  await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });
   Hooks.on("createChatMessage", (message) => {
+    void runNelflowBoundary({
+      subsystem: "player-strike", operation: "create-chat-message", messageId: message.id,
+      transactionType: "player-strike", task: () => PlayerStrikeService.handleCreatedMessage(message),
+      onFailure: (failure) => TransactionStore.recordBoundaryFailure(message, failure),
+    });
     void runNelflowBoundary({
       subsystem: "autoroll", operation: "create-chat-message", messageId: message.id,
       transactionType: "autoroll", task: () => AutoDamageRollService.handleCreatedMessage(message),
@@ -91,5 +98,5 @@ async function initializeReady() {
     });
   });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Slice 3.4 ready");
+  logger.debug("Slice 4.0 ready");
 }

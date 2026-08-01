@@ -9,6 +9,8 @@ import { TOOLBELT_TARGET_STATES } from "./toolbelt-basic-save-model.js";
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { createFailureRecord, shortId } from "./transaction-failure.js";
+import { PlayerStrikeService } from "./player-strike-service.js";
+import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
 
 export const DIAGNOSTIC_EXPORT_SCHEMA_VERSION = 1;
 const healthNotified = new Set();
@@ -84,7 +86,9 @@ function strikeDescriptor(message) {
   const resolved = TransactionStore.resolveCanonical(message);
   if (!resolved?.transaction?.id) return null;
   return {
-    type: "strike",
+    type: resolved.transaction.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? PLAYER_STRIKE_TRANSACTION_TYPE
+      : "strike",
     message,
     ownerMessage: resolved.attackMessage,
     transaction: resolved.transaction,
@@ -210,13 +214,21 @@ export function transactionDiagnosticProjection(descriptor) {
     type: descriptor.type,
     state,
     revision: Number(transaction.revision ?? 0),
-    sourceKind: transaction.sourceKind ?? (descriptor.type === "strike" ? "strike" : "spell"),
+    sourceKind: transaction.sourceKind ?? (["strike", PLAYER_STRIKE_TRANSACTION_TYPE].includes(descriptor.type) ? "strike" : "spell"),
     sourceMessageIdShort: shortId(transaction.sourceMessageId ?? transaction.attackMessageId ?? descriptor.ownerMessage.id),
     damageMessageIdShort: shortId(damageMessageId),
     sourceAuthorRole: roleFor(sourceAuthorId),
     processingAuthorityRole: roleFor(processingId),
+    settingMode: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.settingMode ?? null : null,
+    attackOutcome: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.snapshot?.outcome ?? null : null,
+    damageLinkState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? damageMessageId ? "linked" : "waiting"
+      : null,
+    authorityState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? processingId ? "assigned" : "missing"
+      : null,
     ...counts,
-    undoAvailable: descriptor.type === "strike"
+    undoAvailable: ["strike", PLAYER_STRIKE_TRANSACTION_TYPE].includes(descriptor.type)
       ? transaction.state === TRANSACTION_STATES.APPLIED && !transaction.undoBlocked
       : Object.values(transaction.targets ?? {}).some((target) => target.undoState === "available" || target.applicationState === "applied"),
     autorollState: descriptor.type === "autoroll" ? state : null,
@@ -273,6 +285,7 @@ export function buildSanitizedDiagnostic(descriptor) {
       applicationTiming: safeSetting(SETTINGS.TOOLBELT_BASIC_SAVE_APPLICATION),
       compactTurnStacks: safeSetting(SETTINGS.COMPACT_TURN_STACKS),
       collapseLinkedNativeCards: safeSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS),
+      playerStrikeAutoApply: safeSetting(SETTINGS.PLAYER_STRIKE_AUTO_APPLY),
     },
     transaction: {
       type: projection.type,
@@ -283,6 +296,10 @@ export function buildSanitizedDiagnostic(descriptor) {
       damageMessageIdShort: projection.damageMessageIdShort,
       sourceAuthorRole: projection.sourceAuthorRole,
       processingAuthorityRole: projection.processingAuthorityRole,
+      settingMode: projection.settingMode,
+      attackOutcome: projection.attackOutcome,
+      damageLinkState: projection.damageLinkState,
+      authorityState: projection.authorityState,
       targetCount: projection.targetCount,
       saveCount: projection.saveCount,
       resolvedSaveCount: projection.resolvedSaveCount,
@@ -364,8 +381,10 @@ export class TransactionDiagnosticsService {
   }
 
   static candidates(descriptor) {
-    if (!game.user?.isGM || descriptor.type !== "autoroll") return [];
-    return AutoDamageRollService.compatibleDamageMessages(descriptor.ownerMessage.id);
+    if (!game.user?.isGM) return [];
+    if (descriptor.type === "autoroll") return AutoDamageRollService.compatibleDamageMessages(descriptor.ownerMessage.id);
+    if (descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE) return PlayerStrikeService.compatibleDamageMessages(descriptor.ownerMessage.id);
+    return [];
   }
 
   static async recover(descriptor, action, options = {}) {
@@ -382,15 +401,22 @@ export class TransactionDiagnosticsService {
       debug(scan.ok ? "transaction-recovery-completed" : "transaction-recovery-failed", descriptor, action, scan.result);
       return scan;
     }
+    if (action === "rescan-player-strike" && descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE) {
+      const scan = PlayerStrikeService.rescan(descriptor.ownerMessage.id);
+      debug(scan.ok ? "transaction-recovery-completed" : "transaction-recovery-failed", descriptor, action, scan.result);
+      return scan;
+    }
     if (action === "use-existing-damage" && descriptor.type === "autoroll") {
       result = await AutoDamageRollService.linkExistingDamage(descriptor.ownerMessage.id, options.damageMessageId);
+    } else if (action === "use-existing-damage" && descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE) {
+      result = await PlayerStrikeService.useExistingDamage(descriptor.ownerMessage.id, options.damageMessageId);
     } else if (descriptor.type === "autoroll") {
       result = await AutoDamageRollService.recover(descriptor.ownerMessage.id, action);
     } else if (descriptor.type === "toolbelt-application") {
       result = await ToolbeltBasicSaveService.recover(descriptor.ownerMessage.id, action);
     } else if (descriptor.type === "legacy-save-resolver" && action !== "clear-guard") {
       result = await SaveResolverService.recover(descriptor.ownerMessage.id, action);
-    } else if (descriptor.type === "strike" && action !== "clear-guard") {
+    } else if (["strike", PLAYER_STRIKE_TRANSACTION_TYPE].includes(descriptor.type) && action !== "clear-guard") {
       const updated = await TransactionStore.recover(descriptor.ownerMessage, action);
       result = Boolean(updated);
       if (updated) await TurnStackService.syncTransaction(descriptor.ownerMessage, updated);

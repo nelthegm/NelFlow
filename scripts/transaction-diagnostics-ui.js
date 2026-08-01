@@ -134,7 +134,13 @@ function recoveryControls(descriptor) {
       ui.notifications.info(localize("Nelflow.Notification.RescanResult", { result: result.result }));
     }));
   }
-  if (descriptor.type === "autoroll") {
+  if (descriptor.type === "player-strike") {
+    controls.append(actionButton("Nelflow.Diagnostics.RescanPlayerStrike", async () => {
+      const result = await TransactionDiagnosticsService.recover(descriptor, "rescan-player-strike");
+      ui.notifications.info(localize("Nelflow.Notification.PlayerStrikeRescanResult", { result: result.result }));
+    }));
+  }
+  if (["autoroll", "player-strike"].includes(descriptor.type)) {
     controls.append(actionButton(
       "Nelflow.Diagnostics.ExistingDamage",
       () => selectExistingDamage(descriptor),
@@ -177,13 +183,19 @@ function transactionPanel(descriptor) {
   const section = element("section", "nelflow-diagnostics__transaction");
   const list = element("dl", "nelflow-diagnostics__fields");
   field(list, "Nelflow.Diagnostics.Field.Version", projection.nelflowVersion);
-  field(list, "Nelflow.Diagnostics.Field.Type", projection.type);
+  field(list, "Nelflow.Diagnostics.Field.Type", projection.type === "player-strike" ? localize("Nelflow.PlayerStrike.Type") : projection.type);
   field(list, "Nelflow.Diagnostics.Field.State", stateKey ? localize(`Nelflow.Diagnostics.Status.${stateKey}`) : projection.state);
   field(list, "Nelflow.Diagnostics.Field.SourceKind", projection.sourceKind);
   field(list, "Nelflow.Diagnostics.Field.SourceMessage", projection.sourceMessageIdShort);
   field(list, "Nelflow.Diagnostics.Field.DamageMessage", projection.damageMessageIdShort);
   field(list, "Nelflow.Diagnostics.Field.AuthorRole", projection.sourceAuthorRole);
   field(list, "Nelflow.Diagnostics.Field.AuthorityRole", projection.processingAuthorityRole);
+  if (projection.type === "player-strike") {
+    field(list, "Nelflow.Diagnostics.Field.SettingMode", projection.settingMode);
+    field(list, "Nelflow.Diagnostics.Field.AttackOutcome", projection.attackOutcome);
+    field(list, "Nelflow.Diagnostics.Field.DamageLink", projection.damageLinkState);
+    field(list, "Nelflow.Diagnostics.Field.AuthorityState", projection.authorityState);
+  }
   field(list, "Nelflow.Diagnostics.Field.Targets", projection.targetCount);
   field(list, "Nelflow.Diagnostics.Field.Saves", `${projection.resolvedSaveCount}/${projection.saveCount}`);
   field(list, "Nelflow.Diagnostics.Field.Applications", `${projection.completedApplicationCount}/${projection.applicationCount}`);

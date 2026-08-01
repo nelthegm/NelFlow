@@ -58,6 +58,9 @@ function identifyLinkedMessage(message) {
   if (!marker?.id || !["attack", "damage", "application"].includes(marker.role)) return null;
   const resolved = TransactionStore.resolveCanonical(message);
   if (!resolved || resolved.transaction.id !== marker.id) return null;
+  // Slice 4 keeps player-facing native Damage/Critical Damage controls fully
+  // visible. Player Strike status is additive and never enters an NPC stack.
+  if (resolved.transaction.transactionType === "player-strike") return null;
 
   const expectedIds = {
     attack: resolved.transaction.attackMessageId,

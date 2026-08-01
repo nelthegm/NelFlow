@@ -24,6 +24,9 @@ damage message to the unchanged Slice 3.1/3.2 application workflow.
 Slice 3.4 adds GM-only transaction diagnostics, sanitized bug-report export,
 durable audit/recovery state, safe Toolbelt re-scan and existing-damage linking,
 and fail-open handling for interrupted work. It adds no new automation category.
+Slice 4.0 observes one player-owned character Strike and waits for the player to
+choose PF2e's native damage roll, then lets one authoritative GM apply that
+exact native DamageRoll to the attack's snapshotted target.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -47,6 +50,7 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 - Foundry VTT generation 14
 - Pathfinder Second Edition system (integration source-checked with PF2e 8.3.0)
 - A GM-authored NPC Strike with exactly one target, or
+- A non-GM player-owned character Strike with exactly one target, or
 - PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
   player- or GM-authored basic-save spell workflow, or a supported GM-authored
   NPC basic-save `action` ability
@@ -98,6 +102,33 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.md)
 and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
 must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
+
+## Slice 4.0 player Strike auto-apply
+
+Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. The
+player targets once and rolls the Strike normally. Nelflow snapshots the exact
+PF2e attack, source, target, author, action/index, MAP, and final outcome, then
+shows **Waiting for Damage**. It never calls Damage or Critical Damage. After
+the player clicks PF2e's native control and completes its dialog, one elected
+GM correlates the exact native damage message and applies its unchanged
+DamageRoll through PF2e's contextual `Actor#applyDamage` pathway.
+
+Current targeting cannot redirect damage. Hostile mode requires both the
+snapshotted and current exact token disposition to remain hostile; friendly,
+neutral, self, changed, missing, and indeterminate targets stay manual. All
+Targets still requires the exact original token and every authority/identity
+guard. Multiple targets, misses, mismatched normal/critical damage, healing,
+persistent damage, and structurally ambiguous concurrent attacks stay manual.
+
+Native cards, rolls, roll modes, damage dialogs, controls, and Dice So Nice
+animation remain intact. Player requests carry only a damage-message ID; the
+GM re-reads all source, target, outcome, setting, ownership, disposition, and
+state evidence. GM Undo is the existing guarded HP/temp-HP restoration.
+
+Existing worlds migrate this setting to **Off** once so an update cannot begin
+player-authored HP changes silently. Fresh worlds default to **Hostile
+Targets**. See [Slice 4.0 architecture](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
+and the [67-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
 
 ## Slice 2 behavior
 
@@ -322,6 +353,9 @@ targets, and ambiguous structures also remain manual.
 - **Automatically Apply Strike Damage** — enabled by default. Disable it to
   roll damage while retaining PF2e's native application controls.
 - **Show Undo for Automatically Applied Damage** — enabled by default.
+- **Player Strike Auto-Apply** — `Hostile Targets` in a fresh world, with
+  `Off` and `All Targets` alternatives. The version-4 migration sets existing
+  Nelflow worlds to Off once; a GM must explicitly opt in after updating.
 - **Compact Turn Stacks** — `NPC Strikes Only` by default; choose `Off` to keep
   Slice 1 per-message status presentation.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
@@ -368,9 +402,11 @@ Undo Blocked.
 
 ## Known limitations
 
-- Only GM-authored NPC Strikes with exactly one target are supported.
-- Spells, saves, areas, PC attacks, reaction handling, conditions, movement,
-  and action tracking are outside this slice.
+- NPC automation remains limited to GM-authored single-target Strikes. Player
+  automation supports only non-GM-owned character single-target Strikes after
+  the player creates native damage; familiars, companions, NPCs, hazards,
+  spell/impulse attacks, healing, persistent damage, and multiple targets stay
+  manual.
 - Automatic application can precede Shield Block, Champion reactions, or
   table-specific reaction handling.
 - Undo restores only guarded HP and temporary HP, not conditions, persistent
@@ -432,6 +468,13 @@ Undo Blocked.
 - External-roll correlation without Nelflow's inert origin marker must be
   structurally unique. Concurrent identical unmarked sources become Ambiguous
   and do not autoroll.
+- PF2e 8.3.0 player Strike damage cards do not persist their originating attack
+  message ID. If simultaneous cards are otherwise structurally identical,
+  Nelflow records Ambiguous rather than choosing by time or chat order.
+- PF2e exposes no conclusive structured Shield Block eligibility signal for
+  this workflow. Slice 4.0 adds no reaction prompt and uses no Shield Block;
+  tables requiring reaction decisions should keep Player Strike Auto-Apply Off.
+- Private/self-roll documents unavailable to the elected GM cannot be applied.
 
 ## Testing and design documentation
 
@@ -460,3 +503,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3.2 runtime test plan](docs/SLICE_003_2_TEST_PLAN.md)
 - [Slice 3.3 deterministic damage autoroll](docs/SLICE_003_3_DETERMINISTIC_DAMAGE_AUTOROLL.md)
 - [Slice 3.3 runtime test plan](docs/SLICE_003_3_TEST_PLAN.md)
+- [Slice 4.0 player Strike auto-apply](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
+- [Slice 4.0 runtime test plan](docs/SLICE_004_0_TEST_PLAN.md)

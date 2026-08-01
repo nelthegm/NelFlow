@@ -630,3 +630,24 @@
     box-shadow: none;
   }
 }
+.nelflow-player-strike {
+  align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #777) 55%, transparent);
+  display: flex;
+  font-size: var(--font-size-12, 0.75rem);
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+  padding-top: 0.3rem;
+}
+
+.nelflow-player-strike > span {
+  flex: 1;
+}
+
+.nelflow-player-strike__undo {
+  font-size: inherit;
+  line-height: 1.2;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.35rem;
+  width: auto;
+}

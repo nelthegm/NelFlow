@@ -152,6 +152,10 @@ for (const required of [
   "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.GM",
   "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL",
   "SETTINGS.MIGRATION_VERSION",
+  "SETTINGS.PLAYER_STRIKE_AUTO_APPLY",
+  "PLAYER_STRIKE_AUTO_APPLY_MODES.OFF",
+  "PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE",
+  "PLAYER_STRIKE_AUTO_APPLY_MODES.ALL",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
 }
@@ -195,6 +199,9 @@ const mechanicalSource = [
   "scripts/native-damage-action-adapter.js",
   "scripts/auto-damage-roll-model.js",
   "scripts/auto-damage-roll-service.js",
+  "scripts/player-strike-model.js",
+  "scripts/player-strike-adapter.js",
+  "scripts/player-strike-service.js",
 ]
   .map(read)
   .join("\n");
@@ -729,8 +736,55 @@ for (const required of [
 ]) {
   if (!settingsSource.includes(required)) fail(`Slice 3.2 source setting or migration is missing: ${required}`);
 }
-if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 3")) {
-  fail("Slice 3.3 settings migration version must be 3");
+if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 4")) {
+  fail("Slice 4.0 settings migration version must be 4");
+}
+
+const playerStrikeModel = read("scripts/player-strike-model.js");
+const playerStrikeAdapter = read("scripts/player-strike-adapter.js");
+const playerStrikeService = read("scripts/player-strike-service.js");
+const playerStrikeRuntime = `${playerStrikeAdapter}\n${playerStrikeService}`;
+for (const required of [
+  'PLAYER_STRIKE_TRANSACTION_TYPE = "player-strike"',
+  'PLAYER_STRIKE_SOCKET_ACTION = "player-strike-damage-observed"',
+  "validatePlayerStrikeAttack",
+  "validatePlayerStrikeDamage",
+  "validatePlayerStrikeSnapshot",
+  "correlatePlayerStrikeDamage",
+  "validatePlayerStrikeSocketPayload",
+  "reconcilePlayerStrikeReload",
+]) {
+  if (!playerStrikeModel.includes(required)) fail(`player Strike model is missing ${required}`);
+}
+for (const required of [
+  "PF2eAdapter.applyDamageRollToRecordedTarget",
+  "PF2eAdapter.persistDamageClaim",
+  "TransactionStore.claimPlayerStrike",
+  "electProcessingGm",
+  'normalized.evidence.actorType !== "character" || normalized.evidence.authorIsGm',
+  'game.socket?.on?.(SOCKET_NAMESPACE',
+  'game.socket?.emit?.(SOCKET_NAMESPACE',
+]) {
+  if (!playerStrikeService.includes(required)) fail(`player Strike service is missing ${required}`);
+}
+for (const required of [
+  'role: "observation"',
+  "normalizePlayerStrikeAttack",
+  "normalizePlayerStrikeDamage",
+  "capturePlayerStrikeObservation",
+]) {
+  if (!playerStrikeRuntime.includes(required)) fail(`player Strike adapter is missing ${required}`);
+}
+if (/rollStrikeDamage|\.critical\s*\(|\.damage\s*\(/.test(playerStrikeService)) {
+  fail("player Strike workflow must not invoke native damage rolling");
+}
+if (/\.innerHTML\b|\.querySelector\s*\(|DOMParser|message\.content|_source\.content|\.formula\b/.test(
+  `${playerStrikeModel}\n${playerStrikeRuntime}`,
+)) {
+  fail("player Strike mechanics appear to inspect HTML or formulas");
+}
+if (!settingsSource.includes("shouldDisablePlayerStrikeForMigration") || !settingsSource.includes("PLAYER_STRIKE_AUTO_APPLY_MODES.OFF")) {
+  fail("existing-world player Strike opt-in migration is missing");
 }
 for (const required of [
   "sourceKind: normalized.sourceKind",
