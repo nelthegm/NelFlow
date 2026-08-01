@@ -28,6 +28,13 @@ import {
   targetEntryIdFor,
 } from "./save-resolver-model.js";
 import { getSetting } from "./settings.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
+import {
+  appendAudit,
+  recordFailure,
+  RECOVERY_STATUSES,
+  updateRecovery,
+} from "./transaction-failure.js";
 
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const mutationQueues = new Map();
@@ -242,7 +249,7 @@ function makeTarget(token, resolverId, sequence, saveType, saveDC) {
 
 function makeResolver(sourceMessage, eligibility, targets) {
   const resolverId = resolverIdFor(sourceMessage.id);
-  return {
+  const resolver = {
     schemaVersion: SAVE_RESOLVER_SCHEMA_VERSION,
     resolverId,
     sourceMessageId: sourceMessage.id,
@@ -273,6 +280,14 @@ function makeResolver(sourceMessage, eligibility, targets) {
     nativeRecords: { sourceMessageId: sourceMessage.id },
     revision: 1,
   };
+  appendAudit(resolver, {
+    event: "observed",
+    state: resolver.phase,
+    subsystem: "legacy-save-resolver",
+    userRole: "gm",
+    revision: resolver.revision,
+  });
+  return resolver;
 }
 
 function messageForResolverId(resolverId) {
@@ -299,6 +314,39 @@ async function persistResolver(message, transform) {
   next.authoringUserId = current.authoringUserId;
   next.processingUserId = current.processingUserId;
   next.revision = (current.revision ?? 0) + 1;
+  const active = [RESOLVER_PHASES.ROLLING_DAMAGE, RESOLVER_PHASES.APPLYING_DAMAGE].includes(next.phase) ||
+    next.undoOperation?.state === "undoing";
+  next.activeOperation = active
+    ? {
+        ownerUserId: next.processingUserId,
+        enteredRevision: current.activeOperation?.enteredRevision ?? next.revision,
+        sessionId: current.activeOperation?.sessionId ?? getRuntimeSessionId(),
+      }
+    : null;
+  const event = {
+    [RESOLVER_PHASES.COLLECTING]: "awaiting-targets",
+    [RESOLVER_PHASES.READY]: "saves-ready",
+    [RESOLVER_PHASES.ROLLING_DAMAGE]: "rolling",
+    [RESOLVER_PHASES.APPLYING_DAMAGE]: "application-started",
+    [RESOLVER_PHASES.COMPLETE]: "application-complete",
+    [RESOLVER_PHASES.PARTIAL]: "application-failed",
+    [RESOLVER_PHASES.ERROR]: "application-failed",
+    [RESOLVER_PHASES.INTERRUPTED]: "interrupted",
+    [RESOLVER_PHASES.MANUAL]: "manual",
+    [RESOLVER_PHASES.ABANDONED]: "abandoned",
+  }[next.phase] ?? "classified";
+  appendAudit(next, { event, state: next.phase, subsystem: "legacy-save-resolver", userRole: "gm", revision: next.revision });
+  if ([RESOLVER_PHASES.PARTIAL, RESOLVER_PHASES.ERROR, RESOLVER_PHASES.INTERRUPTED].includes(next.phase)) {
+    const targetReason = next.targets?.find((target) => target.diagnosticReason)?.diagnosticReason;
+    recordFailure(next, {
+      reason: targetReason ?? (next.phase === RESOLVER_PHASES.INTERRUPTED ? "transaction-interrupted" : "manual-review-required"),
+      subsystem: "legacy-save-resolver",
+      operation: event,
+      event,
+      userRole: "gm",
+      context: { messageId: message.id, transactionId: next.resolverId },
+    });
+  }
   await message.update({
     content: buildSaveResolverFallback(next),
     [`flags.${MODULE_ID}.saveResolver`]: next,
@@ -503,11 +551,14 @@ export class SaveResolverService {
       for (const target of resolver?.targets ?? []) {
         if (target.saveMessageId) saveClaims.restore(target.saveMessageId, target.saveAttempt?.id);
       }
-      if (canProcess(resolver) && ["rolling-damage", "applying-damage"].includes(resolver.phase)) {
+      if (canProcess(resolver) && (["rolling-damage", "applying-damage"].includes(resolver.phase) || resolver.undoOperation?.state === "undoing")) {
         void enqueue(resolver.resolverId, () =>
           persistResolver(message, (draft) => {
             draft.phase = RESOLVER_PHASES.INTERRUPTED;
             draft.damage.state = "manual";
+            draft.undoOperation = resolver.undoOperation?.state === "undoing"
+              ? { ...resolver.undoOperation, state: "interrupted" }
+              : resolver.undoOperation ?? null;
             for (const target of draft.targets) {
               if (target.applicationState === "pending") {
                 target.applicationState = "manual";
@@ -984,6 +1035,19 @@ export class SaveResolverService {
       !getSetting(SETTINGS.ENABLE_UNDO) ||
       target?.applicationState !== "applied"
     ) return;
+    await enqueue(resolver.resolverId, () =>
+      persistResolver(resolverMessage, (draft) => {
+        draft.undoOperation = {
+          state: "undoing",
+          targetEntryIdShort: targetEntryId.slice(-10),
+          ownerUserId: game.user.id,
+          sessionId: getRuntimeSessionId(),
+          enteredRevision: Number(draft.revision ?? 0) + 1,
+        };
+        appendAudit(draft, { event: "undo-started", state: draft.phase, subsystem: "undo", userRole: "gm" });
+        return draft;
+      }),
+    );
     const restored = await guardedHealthRestore({
       resolveToken: (uuid) => PF2eAdapter.resolveToken(uuid),
       healthSnapshot: (actor) => PF2eAdapter.healthSnapshot(actor),
@@ -1001,6 +1065,27 @@ export class SaveResolverService {
           entry.applicationState = "undo-blocked";
           entry.undoBlocked = true;
         }
+        draft.undoOperation = {
+          ...(draft.undoOperation ?? {}),
+          state: restored.ok ? "complete" : "failed",
+        };
+        appendAudit(draft, {
+          event: restored.ok ? "undo-complete" : "undo-failed",
+          state: draft.phase,
+          subsystem: "undo",
+          userRole: "gm",
+          safeReason: restored.reason,
+        });
+        if (!restored.ok) {
+          recordFailure(draft, {
+            reason: restored.reason,
+            subsystem: "undo",
+            operation: "guarded-undo",
+            event: "undo-failed",
+            userRole: "gm",
+            context: { messageId: resolverMessage.id, transactionId: draft.resolverId },
+          });
+        }
         return draft;
       }),
     );
@@ -1015,6 +1100,45 @@ export class SaveResolverService {
 
   static getSource(message) {
     return sourceFlag(message);
+  }
+
+  static recover(messageId, action) {
+    const message = game.messages?.get(messageId);
+    const resolver = resolverFlag(message);
+    if (!message || !resolver || !game.user?.isGM || !canProcess(resolver)) return Promise.resolve(false);
+    return enqueue(resolver.resolverId, () =>
+      persistResolver(message, (draft) => {
+        const abandoned = action === "abandon";
+        draft.phase = abandoned ? RESOLVER_PHASES.ABANDONED : RESOLVER_PHASES.MANUAL;
+        draft.damage.state = "manual";
+        draft.activeOperation = null;
+        for (const target of draft.targets) {
+          if (target.applicationState === "pending") target.applicationState = "manual";
+        }
+        updateRecovery(draft, {
+          status: abandoned ? RECOVERY_STATUSES.ABANDONED : RECOVERY_STATUSES.MANUAL,
+          action,
+        });
+        appendAudit(draft, { event: abandoned ? "abandoned" : "manual", state: draft.phase, subsystem: "recovery", userRole: "gm", safeReason: action });
+        return draft;
+      }).then(() => true),
+    );
+  }
+
+  static recordBoundaryFailure(messageId, failure) {
+    const message = game.messages?.get(messageId);
+    const resolver = resolverFlag(message);
+    if (!message || !resolver || !game.user?.isGM || !canProcess(resolver)) return Promise.resolve(false);
+    return enqueue(resolver.resolverId, () =>
+      persistResolver(message, (draft) => {
+        recordFailure(draft, { ...failure, event: "application-failed", userRole: "gm" });
+        if ([RESOLVER_PHASES.ROLLING_DAMAGE, RESOLVER_PHASES.APPLYING_DAMAGE].includes(draft.phase)) {
+          draft.phase = RESOLVER_PHASES.INTERRUPTED;
+          draft.activeOperation = null;
+        }
+        return draft;
+      }).then(() => true),
+    );
   }
 
   static damageText(summary) {

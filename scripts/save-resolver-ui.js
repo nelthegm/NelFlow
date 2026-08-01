@@ -8,6 +8,7 @@ import {
 } from "./save-resolver-model.js";
 import { SaveResolverService } from "./save-resolver-service.js";
 import { getSetting } from "./settings.js";
+import { runNelflowBoundary } from "./nelflow-boundary.js";
 
 const nativeVisibility = new Map();
 
@@ -33,8 +34,11 @@ function button(label, className, iconClass) {
 }
 
 function run(operation) {
-  void operation().catch((error) => {
-    console.error("Nelflow | Save resolver control failed", error);
+  void runNelflowBoundary({
+    subsystem: "legacy-save-resolver-control",
+    operation: "chat-control",
+    transactionType: "legacy-save-resolver",
+    task: operation,
   });
 }
 

@@ -222,7 +222,11 @@ const setupBlock =
   mainSource.match(/Hooks\.once\(["']setup["'][\s\S]*?\n\}\);/)?.[0] ?? "";
 const readyBlock =
   mainSource.match(/Hooks\.once\(["']ready["'][\s\S]*?\n\}\);/)?.[0] ?? "";
-if (!setupBlock.includes('Hooks.on("renderChatMessageHTML", renderNelflowChat)')) {
+if (
+  !setupBlock.includes('Hooks.on("renderChatMessageHTML"') ||
+  !setupBlock.includes("runNelflowSyncBoundary") ||
+  !setupBlock.includes("renderNelflowChat(message, html)")
+) {
   fail("chat renderer must be registered during setup so initial history can rehydrate");
 }
 if (readyBlock.includes("renderChatMessageHTML")) {
@@ -920,12 +924,65 @@ if ((autoDamageTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 78) {
   fail("Slice 3.3 runtime test plan must include at least 78 scenarios");
 }
 
+for (const path of [
+  "scripts/transaction-failure.js",
+  "scripts/transaction-reconciliation.js",
+  "scripts/transaction-diagnostics-service.js",
+  "scripts/transaction-diagnostics-ui.js",
+  "scripts/nelflow-boundary.js",
+  "scripts/runtime-session.js",
+  "docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.md",
+  "docs/SLICE_003_4_TEST_PLAN.md",
+  "tests/transaction-diagnostics.test.mjs",
+  "LICENSE",
+]) {
+  if (!existsSync(join(root, path))) fail(`Slice 3.4 required file is missing: ${path}`);
+}
+const failureSource = read("scripts/transaction-failure.js");
+const reconciliationSource = read("scripts/transaction-reconciliation.js");
+const diagnosticsSource = `${read("scripts/transaction-diagnostics-service.js")}\n${read("scripts/transaction-diagnostics-ui.js")}\n${read("scripts/nelflow-boundary.js")}`;
+const failureArraySource = failureSource.match(/FAILURE_CODES\s*=\s*Object\.freeze\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+const failureCodes = [...failureArraySource.matchAll(/"([a-z][a-z0-9-]+)"/g)].map((match) => match[1]);
+for (const code of failureCodes) {
+  if (!translations?.[`Nelflow.Failure.${code}`]) fail(`failure code lacks localization: ${code}`);
+}
+if (!failureSource.includes("MAX_AUDIT_ENTRIES = 24") || !failureSource.includes("audit.slice(-MAX_AUDIT_ENTRIES)")) {
+  fail("Slice 3.4 audit trail must remain capped");
+}
+if (/querySelector|innerHTML|outerHTML|textContent|rollDamage|applyDamage|healthSnapshot/.test(reconciliationSource)) {
+  fail("structured transaction reconciliation must not inspect HTML, roll, apply, or inspect HP");
+}
+for (const event of [
+  "transaction-failure-recorded", "transaction-details-opened", "transaction-diagnostic-copied",
+  "transaction-recovery-started", "transaction-recovery-completed", "transaction-recovery-failed",
+  "transaction-rescan-started", "transaction-rescan-completed", "transaction-existing-damage-linked",
+  "transaction-marked-manual", "transaction-abandoned", "transaction-guard-cleared",
+  "transaction-interrupted", "transaction-reconciled", "transaction-health-summary",
+  "hook-boundary-failed", "control-restored-fail-open",
+]) {
+  if (!`${runtimeSource}\n${diagnosticsSource}\n${autoDamageService}\n${read("scripts/toolbelt-basic-save-service.js")}`.includes(event)) {
+    fail(`safe Slice 3.4 diagnostic is missing: ${event}`);
+  }
+}
+if (!diagnosticsSource.includes("if (!game.user?.isGM") || !diagnosticsSource.includes("buildSanitizedDiagnostic")) {
+  fail("transaction details and recovery must be GM-only and diagnostics must be sanitized");
+}
+const diagnosticsTests = read("tests/transaction-diagnostics.test.mjs");
+if ((diagnosticsTests.match(/\btest\s*\(/g) ?? []).length < 70) {
+  fail("Slice 3.4 mocked coverage must include at least 70 focused scenarios");
+}
+const diagnosticsTestPlan = read("docs/SLICE_003_4_TEST_PLAN.md");
+if ((diagnosticsTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 55) {
+  fail("Slice 3.4 runtime test plan must include at least 55 scenarios");
+}
+
 const packageScript = read("tools/package.ps1");
 if (
   !packageScript.includes('@("scripts", "styles", "lang")') ||
   !packageScript.includes('$document.Name -notmatch "TEST_PLAN"') ||
   !packageScript.includes("module.json") ||
-  !packageScript.includes("README.md")
+  !packageScript.includes("README.md") ||
+  !packageScript.includes("LICENSE")
 ) {
   fail("package script runtime/documentation allowlist is incomplete");
 }

@@ -21,6 +21,9 @@ saves and one exact native damage roll.
 Slice 3.3 automatically invokes PF2e's native spell damage API once for live,
 deterministic Toolbelt basic-save spell cards, then hands the resulting native
 damage message to the unchanged Slice 3.1/3.2 application workflow.
+Slice 3.4 adds GM-only transaction diagnostics, sanitized bug-report export,
+durable audit/recovery state, safe Toolbelt re-scan and existing-damage linking,
+and fail-open handling for interrupted work. It adds no new automation category.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -71,6 +74,30 @@ powershell -ExecutionPolicy Bypass -File tools/package.ps1
 ```
 
 The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
+
+## Slice 3.4 diagnostics and recovery
+
+- Relevant Nelflow cards expose a compact GM-only **Transaction Details** panel
+  with safe state, count, role, guard, failure, recovery, revision, and recent
+  audit fields.
+- **Copy Nelflow Diagnostic** exports sanitized JSON; clipboard failure opens a
+  manual-copy dialog. Names, formulas, totals, full UUIDs/IDs, target lists,
+  raw flags, credentials, URLs, and stack traces are excluded.
+- **Re-scan Toolbelt State** reads structured flags without rolling, applying,
+  or inspecting HP. **Use Existing Damage Message** requires structural
+  compatibility, explicit selection, and confirmation.
+- **Mark Manual** stops automation but permits ordinary native/manual work.
+  **Abandon Transaction** permanently ends Nelflow management for that record.
+  **Clear Nelflow Guard** restores presentation controls only.
+- Active work records include a client-session marker. Work left claimed,
+  rolling, processing, applying, or undoing by a prior session becomes review
+  state on ready and is never automatically rerolled, reapplied, or undone.
+- No new setting or migration disables existing functionality. Diagnostics and
+  recovery controls are always GM-only.
+
+See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.md)
+and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
+must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
 
 ## Slice 2 behavior
 

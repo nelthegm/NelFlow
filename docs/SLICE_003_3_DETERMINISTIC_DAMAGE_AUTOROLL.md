@@ -1,5 +1,10 @@
 # Slice 3.3: Deterministic Basic-Save Damage Autoroll
 
+> Slice 3.4 supplements this workflow with session-owned active-operation
+> markers, durable audit/failure/recovery data, GM diagnostics, and fail-open
+> ready reconciliation. Autoroll identity and native invocation rules are
+> unchanged; previous-session `claimed`/`rolling` work never resumes.
+
 ## Purpose
 
 Slice 3.3 removes the extra Roll Damage click only when Nelflow can prove one

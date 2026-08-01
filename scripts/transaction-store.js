@@ -1,11 +1,10 @@
 import { MODULE_ID, TRANSACTION_STATES } from "./constants.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
+import { appendAudit, recordFailure, updateRecovery, RECOVERY_STATUSES } from "./transaction-failure.js";
+
+const recoveryQueues = new Map();
 
 const ALLOWED_TRANSITIONS = Object.freeze({
-  [TRANSACTION_STATES.PROCESSING]: new Set([
-    TRANSACTION_STATES.SKIPPED,
-    TRANSACTION_STATES.DAMAGE_ROLLED,
-    TRANSACTION_STATES.FAILED,
-  ]),
   [TRANSACTION_STATES.DAMAGE_ROLLED]: new Set([
     TRANSACTION_STATES.APPLIED,
     TRANSACTION_STATES.FAILED,
@@ -14,7 +13,31 @@ const ALLOWED_TRANSITIONS = Object.freeze({
     TRANSACTION_STATES.UNDONE,
     TRANSACTION_STATES.FAILED,
   ]),
+  [TRANSACTION_STATES.INTERRUPTED]: new Set([TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.ABANDONED]),
+  [TRANSACTION_STATES.FAILED]: new Set([TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.ABANDONED]),
+  [TRANSACTION_STATES.PROCESSING]: new Set([
+    TRANSACTION_STATES.SKIPPED,
+    TRANSACTION_STATES.DAMAGE_ROLLED,
+    TRANSACTION_STATES.FAILED,
+    TRANSACTION_STATES.INTERRUPTED,
+    TRANSACTION_STATES.MANUAL,
+    TRANSACTION_STATES.ABANDONED,
+  ]),
 });
+
+function transitionEvent(state) {
+  return {
+    [TRANSACTION_STATES.PROCESSING]: "claimed",
+    [TRANSACTION_STATES.SKIPPED]: "application-complete",
+    [TRANSACTION_STATES.DAMAGE_ROLLED]: "damage-message-linked",
+    [TRANSACTION_STATES.APPLIED]: "application-complete",
+    [TRANSACTION_STATES.FAILED]: "application-failed",
+    [TRANSACTION_STATES.UNDONE]: "undo-complete",
+    [TRANSACTION_STATES.INTERRUPTED]: "interrupted",
+    [TRANSACTION_STATES.MANUAL]: "manual",
+    [TRANSACTION_STATES.ABANDONED]: "abandoned",
+  }[state] ?? "classified";
+}
 
 function now() {
   return Date.now();
@@ -75,7 +98,20 @@ export class TransactionStore {
       errorStage: null,
       createdAt: timestamp,
       updatedAt: timestamp,
+      revision: 1,
+      activeOperation: {
+        ownerUserId: game.user.id,
+        enteredRevision: 1,
+        sessionId: getRuntimeSessionId(),
+      },
     };
+    appendAudit(transaction, {
+      event: "claimed",
+      state: transaction.state,
+      subsystem: "strike",
+      userRole: "gm",
+      revision: transaction.revision,
+    });
     await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
     return this.get(attackMessage);
   }
@@ -86,7 +122,8 @@ export class TransactionStore {
     if (!current?.id) throw new Error("Missing Nelflow transaction");
 
     const nextState = changes.state ?? current.state;
-    if (nextState !== current.state && !ALLOWED_TRANSITIONS[current.state]?.has(nextState)) {
+    const recoveryTerminal = [TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.ABANDONED].includes(nextState);
+    if (nextState !== current.state && !recoveryTerminal && !ALLOWED_TRANSITIONS[current.state]?.has(nextState)) {
       throw new Error(`Invalid transaction transition: ${current.state} -> ${nextState}`);
     }
 
@@ -97,7 +134,29 @@ export class TransactionStore {
       id: current.id,
       attackMessageId: current.attackMessageId,
       updatedAt: now(),
+      revision: Number(current.revision ?? 0) + 1,
     };
+    if (nextState !== current.state) {
+      appendAudit(transaction, {
+        event: transitionEvent(nextState),
+        state: nextState,
+        subsystem: "strike",
+        userRole: game.user?.isGM ? "gm" : "player",
+        safeReason: changes.errorStage ?? changes.reasonKey ?? null,
+        revision: transaction.revision,
+      });
+    }
+    if (nextState === TRANSACTION_STATES.FAILED || changes.undoBlocked || changes.presentationError || changes.undoOperation?.state === "failed") {
+      recordFailure(transaction, {
+        reason: changes.undoBlocked ? "health-changed" : changes.undoOperation?.reason ?? changes.errorStage ?? "internal-exception",
+        subsystem: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "undo" : "strike",
+        operation: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "guarded-undo" : changes.errorStage ?? "processing",
+        event: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "undo-failed" : "application-failed",
+        userRole: "gm",
+        context: { messageId: attackMessage.id, transactionId: current.id },
+      });
+    }
+    if (![TRANSACTION_STATES.PROCESSING].includes(nextState)) transaction.activeOperation = null;
     await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
 
     await updateLinkedMarker(transaction.damageMessageId, transaction, "damage");
@@ -121,5 +180,55 @@ export class TransactionStore {
     const attackMessage = game.messages.get(local.attackMessageId);
     const transaction = this.get(attackMessage);
     return transaction?.id === local.id ? { attackMessage, transaction } : null;
+  }
+
+  static enqueueRecovery(attackMessage, operation) {
+    const prior = recoveryQueues.get(attackMessage.id) ?? Promise.resolve();
+    const current = prior.catch(() => undefined).then(operation);
+    recoveryQueues.set(attackMessage.id, current);
+    return current.finally(() => {
+      if (recoveryQueues.get(attackMessage.id) === current) recoveryQueues.delete(attackMessage.id);
+    });
+  }
+
+  static recover(attackMessage, action) {
+    return this.enqueueRecovery(attackMessage, async () => {
+      const current = this.get(attackMessage);
+      if (!game.user?.isGM || !current?.id) return null;
+      const state = action === "abandon" ? TRANSACTION_STATES.ABANDONED : TRANSACTION_STATES.MANUAL;
+      const next = await this.update(attackMessage, {
+        state,
+        manualApplicationRequired: action !== "abandon",
+        activeOperation: null,
+      });
+      updateRecovery(next, {
+        status: action === "abandon" ? RECOVERY_STATUSES.ABANDONED : RECOVERY_STATUSES.MANUAL,
+        action,
+      });
+      appendAudit(next, {
+        event: "recovery-complete",
+        state,
+        subsystem: "strike",
+        userRole: "gm",
+        safeReason: action,
+        revision: next.revision,
+      });
+      await attackMessage.setFlag(MODULE_ID, "transaction", next);
+      return this.get(attackMessage);
+    });
+  }
+
+  static recordBoundaryFailure(message, failure) {
+    const resolved = this.resolveCanonical(message);
+    if (!resolved || !game.user?.isGM) return Promise.resolve(false);
+    return this.enqueueRecovery(resolved.attackMessage, async () => {
+      const current = this.get(resolved.attackMessage);
+      if (!current?.id) return false;
+      const changes = current.state === TRANSACTION_STATES.PROCESSING
+        ? { state: TRANSACTION_STATES.INTERRUPTED, errorStage: failure.code, activeOperation: null }
+        : { presentationError: failure.code, errorStage: failure.code };
+      await this.update(resolved.attackMessage, changes);
+      return true;
+    });
   }
 }

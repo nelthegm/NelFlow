@@ -25,6 +25,13 @@ import {
   isTerminalAutoDamageState,
   liveInvocationAllowed,
 } from "./auto-damage-roll-model.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
+import {
+  appendAudit,
+  recordFailure,
+  RECOVERY_STATUSES,
+  updateRecovery,
+} from "./transaction-failure.js";
 
 const FLAG = "autoDamageRoll";
 const ORIGIN_FLAG = "autoDamageRollOrigin";
@@ -78,6 +85,52 @@ function transaction(message) {
 async function persist(message, draft) {
   draft.revision = Number(draft.revision ?? 0) + 1;
   draft.updatedAt = Date.now();
+  const active = [AUTO_DAMAGE_ROLL_STATES.CLAIMED, AUTO_DAMAGE_ROLL_STATES.ROLLING].includes(draft.state);
+  draft.activeOperation = active
+    ? {
+        ownerUserId: draft.rollingUserId,
+        enteredRevision: draft.activeOperation?.enteredRevision ?? draft.revision,
+        sessionId: draft.activeOperation?.sessionId ?? getRuntimeSessionId(),
+      }
+    : null;
+  const event = {
+    [AUTO_DAMAGE_ROLL_STATES.OBSERVED]: "observed",
+    [AUTO_DAMAGE_ROLL_STATES.AWAITING_TARGETS]: "awaiting-targets",
+    [AUTO_DAMAGE_ROLL_STATES.ELIGIBLE]: "eligible",
+    [AUTO_DAMAGE_ROLL_STATES.CLAIMED]: "claimed",
+    [AUTO_DAMAGE_ROLL_STATES.ROLLING]: "rolling",
+    [AUTO_DAMAGE_ROLL_STATES.COMPLETED]: "damage-message-linked",
+    [AUTO_DAMAGE_ROLL_STATES.EXTERNAL]: "damage-message-linked",
+    [AUTO_DAMAGE_ROLL_STATES.AMBIGUOUS]: "ambiguous",
+    [AUTO_DAMAGE_ROLL_STATES.MANUAL]: "manual",
+    [AUTO_DAMAGE_ROLL_STATES.INTERRUPTED]: "interrupted",
+    [AUTO_DAMAGE_ROLL_STATES.ERROR]: "application-failed",
+    [AUTO_DAMAGE_ROLL_STATES.ABANDONED]: "abandoned",
+  }[draft.state] ?? "classified";
+  appendAudit(draft, {
+    event,
+    state: draft.state,
+    subsystem: "autoroll",
+    userRole: draft.rollingUserRole ?? "unknown",
+    safeReason: draft.failureReason,
+    revision: draft.revision,
+  });
+  if ([AUTO_DAMAGE_ROLL_STATES.AMBIGUOUS, AUTO_DAMAGE_ROLL_STATES.INTERRUPTED, AUTO_DAMAGE_ROLL_STATES.ERROR].includes(draft.state)) {
+    recordFailure(draft, {
+      reason: draft.failureReason,
+      subsystem: "autoroll",
+      operation: event,
+      event,
+      userRole: draft.rollingUserRole,
+      context: {
+        messageId: message.id,
+        transactionId: draft.integrationId,
+        sourceKind: draft.sourceKind,
+        rollIndex: draft.damageRollIndex,
+        userRole: draft.rollingUserRole,
+      },
+    });
+  }
   await message.update({ [`flags.${MODULE_ID}.${FLAG}`]: draft });
   return draft;
 }
@@ -111,7 +164,7 @@ function createTransaction(normalized, state, reason = null) {
   const nonce = foundry.utils.randomID(12);
   const author = game.users?.get(normalized.sourceUserId);
   const isSpell = normalized.sourceKind === "spell";
-  return {
+  const created = {
     schemaVersion: AUTO_DAMAGE_ROLL_SCHEMA_VERSION,
     integrationId: autoDamageIntegrationId(normalized.sourceMessageId, nonce),
     sourceMessageId: normalized.sourceMessageId,
@@ -147,6 +200,14 @@ function createTransaction(normalized, state, reason = null) {
     updatedAt: Date.now(),
     revision: 0,
   };
+  appendAudit(created, {
+    event: "observed",
+    state,
+    subsystem: "autoroll",
+    userRole: author?.isGM ? "gm" : "player",
+    safeReason: reason,
+  });
+  return created;
 }
 
 function sourceIdentityMatches(draft, normalized) {
@@ -334,11 +395,31 @@ function scheduleInvocation(sourceMessageId, integrationId) {
   const operation = invocationQueue
     .catch(() => undefined)
     .then(() => queue(sourceMessageId, () => runInvocation(sourceMessageId, integrationId)))
-    .catch((error) => {
+    .catch(async (error) => {
       logger.error("Automatic damage invocation failed", {
         stage: "auto-damage-invocation",
         reason: error instanceof Error ? error.message : String(error),
       }, error);
+      const message = game.messages?.get(sourceMessageId);
+      if (message) {
+        await queue(sourceMessageId, async () => {
+          const draft = transaction(message);
+          if (!draft || draft.integrationId !== integrationId || isTerminalAutoDamageState(draft.state)) return;
+          draft.state = AUTO_DAMAGE_ROLL_STATES.ERROR;
+          draft.failureReason = "autoroll-native-call-failed";
+          draft.guardSourceControl = false;
+          recordFailure(draft, {
+            code: "autoroll-native-call-failed",
+            subsystem: "autoroll",
+            operation: "native-invocation",
+            event: "application-failed",
+            userRole: draft.rollingUserRole,
+            context: { messageId: sourceMessageId, transactionId: integrationId, sourceKind: draft.sourceKind, rollIndex: draft.damageRollIndex },
+          });
+          await persist(message, draft);
+          activeSourceIds.delete(integrationId);
+        });
+      }
     })
     .finally(() => scheduled.delete(integrationId));
   invocationQueue = operation;
@@ -753,6 +834,113 @@ export class AutoDamageRollService {
         rollIndex: draft.damageRollIndex,
         rollingUserId: draft.rollingUserId,
       });
+      return true;
+    });
+  }
+
+  static getTransaction(message) {
+    return transaction(message);
+  }
+
+  static compatibleDamageMessages(sourceMessageId) {
+    if (!game.user?.isGM) return [];
+    const sourceMessage = game.messages?.get(sourceMessageId);
+    const draft = transaction(sourceMessage);
+    if (!draft) return [];
+    const candidates = [];
+    for (const message of game.messages ?? []) {
+      if (!message?.isDamageRoll || message.id === draft.damageMessageId) continue;
+      if (damageClaims.owner(message.id) && damageClaims.owner(message.id) !== draft.integrationId) continue;
+      const normalized = ToolbeltTargetHelperAdapter.normalizeDamageMessage(message);
+      if (!autoDamageCandidateMatches(draft, normalized)) continue;
+      candidates.push({
+        messageId: message.id,
+        messageIdShort: shortId(message.id),
+        sourceKind: normalized.sourceKind,
+        authorRole: game.users?.get(normalized.sourceUserId)?.isGM ? "gm" : "player",
+        targetCount: normalized.targets?.length ?? 0,
+        createdAt: message._stats?.createdTime ?? null,
+      });
+    }
+    return candidates;
+  }
+
+  static linkExistingDamage(sourceMessageId, damageMessageId) {
+    const sourceMessage = game.messages?.get(sourceMessageId);
+    if (!sourceMessage || !game.user?.isGM) return Promise.resolve(false);
+    return queue(sourceMessage.id, async () => {
+      const draft = transaction(sourceMessage);
+      const damageMessage = game.messages?.get(damageMessageId);
+      const normalized = ToolbeltTargetHelperAdapter.normalizeDamageMessage(damageMessage);
+      if (!draft || !damageMessage || !autoDamageCandidateMatches(draft, normalized)) return false;
+      if (!claimDamageMessage(damageMessage.id, draft.integrationId)) return false;
+      draft.state = AUTO_DAMAGE_ROLL_STATES.EXTERNAL;
+      draft.damageMessageId = damageMessage.id;
+      draft.candidateMessageIds = [damageMessage.id];
+      draft.completedAt = Date.now();
+      draft.guardSourceControl = true;
+      draft.manualRollEnabled = false;
+      draft.failureReason = null;
+      updateRecovery(draft, { status: RECOVERY_STATUSES.COMPLETED, action: "use-existing-damage-message" });
+      appendAudit(draft, { event: "recovery-complete", state: draft.state, subsystem: "recovery", userRole: "gm", safeReason: "use-existing-damage-message" });
+      await persist(sourceMessage, draft);
+      activeSourceIds.delete(draft.integrationId);
+      diagnostic("transaction-existing-damage-linked", {
+        integrationId: draft.integrationId,
+        messageId: damageMessage.id,
+        sourceKind: draft.sourceKind,
+        sourceItemType: draft.sourceItemType,
+        rollIndex: draft.damageRollIndex,
+        rollingUserId: draft.rollingUserId,
+      });
+      return true;
+    });
+  }
+
+  static recover(messageId, action) {
+    const message = game.messages?.get(messageId);
+    if (!message || !game.user?.isGM) return Promise.resolve(false);
+    return queue(message.id, async () => {
+      const draft = transaction(message);
+      if (!draft) return false;
+      if (action === "clear-guard") {
+        draft.manualRollEnabled = true;
+        draft.guardSourceControl = false;
+        updateRecovery(draft, { status: RECOVERY_STATUSES.COMPLETED, action });
+        appendAudit(draft, { event: "guard-restored", state: draft.state, subsystem: "guards", userRole: "gm", safeReason: action });
+        diagnostic("control-restored-fail-open", { messageId, integrationId: draft.integrationId, reason: action });
+      } else {
+        const abandoned = action === "abandon";
+        draft.state = abandoned ? AUTO_DAMAGE_ROLL_STATES.ABANDONED : AUTO_DAMAGE_ROLL_STATES.MANUAL;
+        draft.failureReason = abandoned ? "transaction-abandoned" : "manual-review-required";
+        draft.guardSourceControl = false;
+        draft.manualRollEnabled = true;
+        draft.activeOperation = null;
+        updateRecovery(draft, {
+          status: abandoned ? RECOVERY_STATUSES.ABANDONED : RECOVERY_STATUSES.MANUAL,
+          action,
+        });
+        appendAudit(draft, { event: abandoned ? "abandoned" : "manual", state: draft.state, subsystem: "recovery", userRole: "gm", safeReason: action });
+      }
+      await persist(message, draft);
+      activeSourceIds.delete(draft.integrationId);
+      return true;
+    });
+  }
+
+  static recordBoundaryFailure(messageId, failure) {
+    const message = game.messages?.get(messageId);
+    if (!message || !game.user?.isGM) return Promise.resolve(false);
+    return queue(message.id, async () => {
+      const draft = transaction(message);
+      if (!draft) return false;
+      recordFailure(draft, { ...failure, event: "application-failed", userRole: "gm" });
+      if ([AUTO_DAMAGE_ROLL_STATES.CLAIMED, AUTO_DAMAGE_ROLL_STATES.ROLLING].includes(draft.state)) {
+        draft.state = AUTO_DAMAGE_ROLL_STATES.INTERRUPTED;
+        draft.failureReason = failure.code;
+        draft.guardSourceControl = false;
+      }
+      await persist(message, draft);
       return true;
     });
   }

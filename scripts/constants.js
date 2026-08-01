@@ -76,6 +76,9 @@ export const TRANSACTION_STATES = Object.freeze({
   APPLIED: "applied",
   FAILED: "failed",
   UNDONE: "undone",
+  INTERRUPTED: "interrupted",
+  MANUAL: "manual",
+  ABANDONED: "abandoned",
 });
 
 export const TERMINAL_OR_CLAIMED_STATES = new Set(Object.values(TRANSACTION_STATES));

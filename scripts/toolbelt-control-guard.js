@@ -1,4 +1,4 @@
-import { MODULE_ID, SETTINGS } from "./constants.js";
+import { MODULE_ID, SETTINGS, TOOLBELT_TRANSACTION_SCHEMA_VERSION } from "./constants.js";
 import { logger } from "./logger.js";
 import { getSetting } from "./settings.js";
 import { applicationId, TOOLBELT_TARGET_STATES } from "./toolbelt-basic-save-model.js";
@@ -158,6 +158,8 @@ function exactGuardIdentity(control) {
   const record = draft?.targets?.[control.dataset.nelflowGuardTargetKey];
   if (
     !draft ||
+    draft.schemaVersion !== TOOLBELT_TRANSACTION_SCHEMA_VERSION ||
+    ["manual", "abandoned", "interrupted"].includes(draft.phase) ||
     message.visible === false ||
     message.isContentVisible === false ||
     draft.damageMessageId !== messageId ||
@@ -244,6 +246,9 @@ export class ToolbeltControlGuard {
     ensureInterceptors(html);
     const guarded = new Set();
     if (!getSetting(SETTINGS.GUARD_TOOLBELT_DAMAGE_CONTROLS)) return guarded;
+    if (draft.schemaVersion !== TOOLBELT_TRANSACTION_SCHEMA_VERSION || ["manual", "abandoned", "interrupted"].includes(draft.phase)) {
+      return guarded;
+    }
     if (html.dataset.messageId !== message.id || draft.damageMessageId !== message.id || !normalized.ok) {
       reportOnce("toolbelt-control-guard-skipped", {
         integrationId: draft.integrationId,

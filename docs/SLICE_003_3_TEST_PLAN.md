@@ -1,5 +1,9 @@
 # Slice 3.3 Runtime Test Plan
 
+Slice 3.4 adds interruption, diagnostic-redaction, recovery, and guard
+reconciliation coverage in `SLICE_003_4_TEST_PLAN.md`; rerun this baseline plan
+to confirm deterministic autoroll behavior remains unchanged.
+
 Run in a disposable Foundry V14 world with PF2e 8.3.0 and PF2e Toolbelt
 3.52.0, then repeat compatibility-sensitive cases with 3.52.1. Enable Nelflow
 debug logging and inspect the console after each concurrency group. These are

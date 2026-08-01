@@ -7,6 +7,7 @@ import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
 
 const inFlight = new Set();
 
@@ -64,7 +65,7 @@ async function syncStack(attackMessage, transaction, stage) {
   try {
     await TurnStackService.syncTransaction(attackMessage, transaction);
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = "internal-exception";
     logger.error(
       "Compact stack projection failed",
       logContext(attackMessage, transaction, `stack-${stage}`, reason),
@@ -322,7 +323,7 @@ export class StrikeResolver {
         appliedAmount: transaction.appliedAmount,
       });
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = "internal-exception";
       logger.error(
         "Strike automation failed",
         logContext(message, transaction, stage, reason),
@@ -375,6 +376,14 @@ export class StrikeResolver {
     }
 
     try {
+      await TransactionStore.update(attackMessage, {
+        undoOperation: {
+          state: "undoing",
+          ownerUserId: game.user.id,
+          sessionId: getRuntimeSessionId(),
+          enteredRevision: Number(transaction.revision ?? 0) + 1,
+        },
+      });
       const restored = await guardedHealthRestore({
         resolveToken: (uuid) => PF2eAdapter.resolveToken(uuid),
         healthSnapshot: (actor) => PF2eAdapter.healthSnapshot(actor),
@@ -385,6 +394,9 @@ export class StrikeResolver {
         postApplication: transaction.postApplication,
       });
       if (restored.reason === "target-unavailable") {
+        await TransactionStore.update(attackMessage, {
+          undoOperation: { state: "failed", reason: "target-unavailable" },
+        });
         notify("Nelflow.Notification.UndoUnavailable");
         logger.warn("Undo target unavailable", {
           ...context,
@@ -398,13 +410,17 @@ export class StrikeResolver {
           ...context,
           reason: "Target HP or temporary HP changed after application",
         });
-        const blocked = await TransactionStore.update(attackMessage, { undoBlocked: true });
+        const blocked = await TransactionStore.update(attackMessage, {
+          undoBlocked: true,
+          undoOperation: { state: "failed", reason: "health-changed" },
+        });
         await syncStack(attackMessage, blocked, "undo-blocked");
         return;
       }
       const undone = await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.UNDONE,
         undoBlocked: false,
+        undoOperation: { state: "complete" },
       });
       await syncStack(attackMessage, undone, "undone");
       logger.debug("Transaction undone", {
@@ -417,6 +433,7 @@ export class StrikeResolver {
       try {
         const marked = await TransactionStore.update(attackMessage, {
           presentationError: error instanceof Error ? error.message : String(error),
+          undoOperation: { state: "failed", reason: "undo-native-call-failed" },
         });
         await syncStack(attackMessage, marked, "undo-error");
       } catch (stateError) {

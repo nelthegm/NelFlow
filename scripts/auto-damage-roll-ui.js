@@ -6,6 +6,8 @@ import {
 } from "./auto-damage-roll-service.js";
 import { logger } from "./logger.js";
 import { shouldGuardSourceDamageControl } from "./auto-damage-roll-model.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
+import { runNelflowBoundary } from "./nelflow-boundary.js";
 
 const originals = new WeakMap();
 const listenerRoots = new WeakSet();
@@ -35,11 +37,12 @@ function stateKey(state) {
     [AUTO_DAMAGE_ROLL_STATES.MANUAL]: "Manual",
     [AUTO_DAMAGE_ROLL_STATES.INTERRUPTED]: "Interrupted",
     [AUTO_DAMAGE_ROLL_STATES.ERROR]: "Unavailable",
+    [AUTO_DAMAGE_ROLL_STATES.ABANDONED]: "Abandoned",
   }[state] ?? "Unavailable";
 }
 
 function shouldGuard(draft) {
-  return shouldGuardSourceDamageControl(draft);
+  return shouldGuardSourceDamageControl(draft, getRuntimeSessionId());
 }
 
 function restore(control) {
@@ -191,11 +194,13 @@ function overrideButton(message, draft) {
     const operation = enabled
       ? AutoDamageRollService.setManualRoll(message.id, false)
       : confirmManualRoll(message);
-    void operation.catch((error) => {
-      logger.warn("auto-damage-manual-roll-update-failed", {
-        stage: "auto-damage-source-ui",
-        reason: error instanceof Error ? error.message : String(error),
-      }, error);
+    void runNelflowBoundary({
+      subsystem: "autoroll-control",
+      operation: enabled ? "reguard" : "enable-manual-roll",
+      messageId: message.id,
+      transactionType: "autoroll",
+      task: () => operation,
+      onFailure: (failure) => AutoDamageRollService.recordBoundaryFailure(message.id, failure),
     }).finally(() => {
       button.disabled = false;
     });

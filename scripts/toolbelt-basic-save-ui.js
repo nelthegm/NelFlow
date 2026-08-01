@@ -10,6 +10,18 @@ import { ToolbeltBasicSaveService, TOOLBELT_BASIC_SAVE_FLAG } from "./toolbelt-b
 import { isConclusiveGuardRecord, ToolbeltControlGuard } from "./toolbelt-control-guard.js";
 import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
 import { logger } from "./logger.js";
+import { runNelflowBoundary } from "./nelflow-boundary.js";
+
+function runToolbeltControl(message, operation, name) {
+  return runNelflowBoundary({
+    subsystem: "toolbelt-control",
+    operation: name,
+    messageId: message.id,
+    transactionType: "toolbelt-application",
+    task: operation,
+    onFailure: (failure) => ToolbeltBasicSaveService.recordBoundaryFailure(message.id, failure),
+  });
+}
 
 function localize(key, data) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -178,7 +190,14 @@ function statusRow(message, draft, normalizedTarget, record, number) {
     const undo = element("button", null, localize("Nelflow.Toolbelt.Undo"));
     undo.type = "button";
     undo.setAttribute("aria-label", localize("Nelflow.Toolbelt.UndoAria", { target: targetName(record, number) }));
-    undo.addEventListener("click", () => void ToolbeltBasicSaveService.undo(message.id, record.toolbeltTargetKey));
+    undo.addEventListener("click", () => {
+      undo.disabled = true;
+      void runToolbeltControl(
+        message,
+        () => ToolbeltBasicSaveService.undo(message.id, record.toolbeltTargetKey),
+        "undo",
+      ).finally(() => { undo.disabled = false; });
+    });
     controls.append(undo);
   }
   const native = nativeRecordButton(record);
@@ -233,7 +252,8 @@ export function renderToolbeltBasicSave(message, html) {
     apply.disabled = !allPrimarySavesResolved(normalized.targets) || draft.phase === "applying" || draft.phase === "complete";
     apply.addEventListener("click", () => {
       apply.disabled = true;
-      void ToolbeltBasicSaveService.confirm(message.id);
+      void runToolbeltControl(message, () => ToolbeltBasicSaveService.confirm(message.id), "confirm-application")
+        .finally(() => { apply.disabled = false; });
     });
     footer.append(apply);
     wrapper.append(footer);

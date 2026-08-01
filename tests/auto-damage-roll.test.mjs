@@ -185,13 +185,13 @@ test("Wrong roll index damage message is rejected", () => assert.equal(autoDamag
 test("External manual damage can claim a pending transaction once", () => { const r = new AutoDamageMessageClaimRegistry(); assert.equal(r.claim("external", "source"), true); });
 test("External Workbench-style damage cannot be claimed twice", () => { const r = new AutoDamageMessageClaimRegistry(); r.claim("external", "workbench-source"); assert.equal(r.claim("external", "nelflow-source"), false); });
 test("Ambiguous external correlation prevents unique ownership", () => { const r = new AutoDamageMessageClaimRegistry(); r.claim("a", "i1"); r.claim("b", "i2"); assert.notEqual(r.owner("a"), r.owner("b")); });
-test("Manual activation after claim is guardable", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage" }), true));
+test("Manual activation after current-session claim is guardable", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", state: S.CLAIMED, activeOperation: { sessionId: "session-1" } }, "session-1"), true));
 test("Manual activation before claim remains allowed", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: false, damageActionId: "spell-damage" }), false));
-test("Successful auto-roll guards source damage control", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", state: S.COMPLETED }), true));
+test("Successful auto-roll guards source damage control", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", damageMessageId: "damage-1", state: S.COMPLETED }), true));
 test("Error before message creation restores source control", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: false, damageActionId: "spell-damage", state: S.ERROR }), false));
 test("Completed roll permits confirmed Manual Roll Override", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", manualRollEnabled: true }), false));
 test("Manual Roll Override persists as data", () => assert.equal({ manualRollEnabled: true }.manualRollEnabled, true));
-test("Re-guard persists as data", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", manualRollEnabled: false }), true));
+test("Re-guard persists as data", () => assert.equal(shouldGuardSourceDamageControl({ guardSourceControl: true, damageActionId: "spell-damage", damageMessageId: "damage-1", manualRollEnabled: false, state: S.COMPLETED }), true));
 test("Completed transaction is terminal after reload", () => assert.equal(isTerminalAutoDamageState(S.COMPLETED), true));
 test("Rolling transaction is not resumable without live claim", () => assert.equal(liveInvocationAllowed({ live: false, state: S.ROLLING, currentUserId: "u1", rollingUserId: "u1" }), false));
 test("Interrupted transaction does not resume", () => assert.equal(isTerminalAutoDamageState(S.INTERRUPTED), true));

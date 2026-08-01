@@ -16,6 +16,7 @@ import { SupplementalActionAwareness } from "./supplemental-action-awareness.js"
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { failOpenAutoDamageRoll, renderAutoDamageRoll } from "./auto-damage-roll-ui.js";
+import { renderTransactionDiagnostics } from "./transaction-diagnostics-ui.js";
 
 const reportedRenderFailures = new Set();
 
@@ -61,6 +62,17 @@ function runControl(operation, stage) {
 }
 
 function rowState(row) {
+  if (row.transactionState === TRANSACTION_STATES.ABANDONED) {
+    return { key: "Nelflow.Diagnostics.Status.Abandoned", className: "manual" };
+  }
+  if ([TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.INTERRUPTED].includes(row.transactionState)) {
+    return {
+      key: row.transactionState === TRANSACTION_STATES.INTERRUPTED
+        ? "Nelflow.Diagnostics.Status.Interrupted"
+        : "Nelflow.Diagnostics.Status.Manual",
+      className: "manual",
+    };
+  }
   if (row.manualApplicationRequired) {
     return { key: "Nelflow.State.ManualApplicationRequired", className: "manual" };
   }
@@ -459,17 +471,23 @@ export function renderNelflowChat(message, html) {
   try {
     renderAutoDamageRoll(message, html);
     renderToolbeltBasicSave(message, html);
-    if (renderSaveResolverChat(message, html)) return;
+    if (renderSaveResolverChat(message, html)) {
+      renderTransactionDiagnostics(message, html);
+      return;
+    }
     stack = message.getFlag(MODULE_ID, "stack");
     if (stack) {
       if (!validStackProjection(stack)) throw new Error("Invalid persisted stack projection");
       if (canRenderStackForViewer(message)) renderStack(message, html, stack);
+      renderTransactionDiagnostics(message, html);
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
+    renderTransactionDiagnostics(message, html);
   } catch (error) {
+    html.querySelectorAll(".nelflow-diagnostics").forEach((node) => node.remove());
     failOpenAutoDamageRoll(html);
     html.classList.remove(
       "nelflow-native-record-hidden",

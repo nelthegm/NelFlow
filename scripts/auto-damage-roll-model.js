@@ -10,6 +10,7 @@ export const AUTO_DAMAGE_ROLL_STATES = Object.freeze({
   MANUAL: "manual",
   INTERRUPTED: "interrupted",
   ERROR: "error",
+  ABANDONED: "abandoned",
 });
 
 const TERMINAL_STATES = new Set([
@@ -19,6 +20,7 @@ const TERMINAL_STATES = new Set([
   AUTO_DAMAGE_ROLL_STATES.MANUAL,
   AUTO_DAMAGE_ROLL_STATES.INTERRUPTED,
   AUTO_DAMAGE_ROLL_STATES.ERROR,
+  AUTO_DAMAGE_ROLL_STATES.ABANDONED,
 ]);
 
 export function isTerminalAutoDamageState(state) {
@@ -34,11 +36,19 @@ export function liveInvocationAllowed({ live, state, currentUserId, rollingUserI
   );
 }
 
-export function shouldGuardSourceDamageControl(draft) {
+export function shouldGuardSourceDamageControl(draft, currentSessionId = null) {
+  if (
+    draft?.guardSourceControl !== true ||
+    draft.manualRollEnabled === true ||
+    draft.damageActionId !== "spell-damage"
+  ) return false;
+  if ([AUTO_DAMAGE_ROLL_STATES.COMPLETED, AUTO_DAMAGE_ROLL_STATES.EXTERNAL].includes(draft.state)) {
+    return Boolean(draft.damageMessageId);
+  }
   return Boolean(
-    draft?.guardSourceControl === true &&
-      draft.manualRollEnabled !== true &&
-      draft.damageActionId === "spell-damage",
+    [AUTO_DAMAGE_ROLL_STATES.CLAIMED, AUTO_DAMAGE_ROLL_STATES.ROLLING].includes(draft.state) &&
+      currentSessionId &&
+      draft.activeOperation?.sessionId === currentSessionId,
   );
 }
 

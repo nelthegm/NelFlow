@@ -514,6 +514,69 @@
   opacity: 0.65;
 }
 
+.nelflow-diagnostics {
+  margin-top: 0.3rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--color-border-light-2, #bbb);
+  font-size: var(--font-size-11, 0.6875rem);
+}
+
+.nelflow-diagnostics__summary {
+  cursor: pointer;
+  color: var(--color-text-subtle, #555);
+  font-weight: 600;
+}
+
+.nelflow-diagnostics__transaction {
+  margin-top: 0.35rem;
+  padding: 0.35rem;
+  background: color-mix(in srgb, var(--color-cool-5, #ddd) 18%, transparent);
+  border-radius: 3px;
+}
+
+.nelflow-diagnostics__fields {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: 0.1rem 0.45rem;
+  margin: 0;
+}
+
+.nelflow-diagnostics__fields dt {
+  font-weight: 600;
+}
+
+.nelflow-diagnostics__fields dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.nelflow-diagnostics__audit {
+  margin: 0.2rem 0 0.35rem 1.2rem;
+  padding: 0;
+}
+
+.nelflow-diagnostics__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+
+.nelflow-diagnostics__action {
+  width: auto;
+  min-height: 1.4rem;
+  padding: 0.1rem 0.3rem;
+  font-size: inherit;
+  line-height: 1.1;
+}
+
+.nelflow-diagnostic-fallback textarea {
+  width: 100%;
+  min-height: 18rem;
+  font-family: monospace;
+  font-size: var(--font-size-11, 0.6875rem);
+}
+
 .nelflow-toolbelt__guard,
 .nelflow-toolbelt__manual-enabled {
   color: var(--color-level-info, #315a7d);

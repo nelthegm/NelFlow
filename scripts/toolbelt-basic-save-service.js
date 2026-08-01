@@ -10,6 +10,7 @@ import { sourceModeAllows } from "./basic-save-source-classifier.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { isConclusiveGuardRecord } from "./toolbelt-control-guard.js";
 import {
@@ -25,6 +26,14 @@ import {
   electProcessingGm,
   ToolbeltTargetHelperAdapter,
 } from "./toolbelt-target-helper-adapter.js";
+import {
+  appendAudit,
+  failureCodeFor,
+  recordFailure,
+  RECOVERY_STATUSES,
+  updateRecovery,
+} from "./transaction-failure.js";
+import { reconcileToolbeltTransaction } from "./transaction-reconciliation.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -115,6 +124,50 @@ function mechanicalFingerprint(draft) {
 async function persist(message, draft) {
   draft.revision = Number(draft.revision ?? 0) + 1;
   draft.updatedAt = Date.now();
+  const records = Object.values(draft.targets ?? {});
+  const active = draft.phase === "applying" || records.some((record) =>
+    [TOOLBELT_TARGET_STATES.CLAIMED, TOOLBELT_TARGET_STATES.APPLYING].includes(record.state));
+  draft.activeOperation = active
+    ? {
+        ownerUserId: draft.processingUserId,
+        enteredRevision: draft.activeOperation?.enteredRevision ?? draft.revision,
+        sessionId: draft.activeOperation?.sessionId ?? getRuntimeSessionId(),
+      }
+    : null;
+  const transition = records.some((record) => record.state === TOOLBELT_TARGET_STATES.APPLYING)
+    ? "application-started"
+    : records.some((record) => record.state === TOOLBELT_TARGET_STATES.APPLIED)
+      ? "target-applied"
+      : draft.phase === "complete"
+        ? "application-complete"
+        : draft.phase === "interrupted"
+          ? "interrupted"
+          : records.some((record) => record.state === TOOLBELT_TARGET_STATES.READY)
+            ? "saves-ready"
+            : "observed";
+  appendAudit(draft, {
+    event: transition,
+    state: draft.phase,
+    subsystem: "toolbelt-application",
+    userRole: "gm",
+    revision: draft.revision,
+  });
+  const failedRecord = records.find((record) => [
+    TOOLBELT_TARGET_STATES.ERROR,
+    TOOLBELT_TARGET_STATES.INTERRUPTED,
+    TOOLBELT_TARGET_STATES.UNDO_BLOCKED,
+    TOOLBELT_TARGET_STATES.RESULT_CHANGED,
+  ].includes(record.state));
+  if (failedRecord) {
+    recordFailure(draft, {
+      reason: failedRecord.reason ?? "manual-review-required",
+      subsystem: failedRecord.state === TOOLBELT_TARGET_STATES.UNDO_BLOCKED ? "undo" : "toolbelt-application",
+      operation: failedRecord.state,
+      event: failedRecord.state === TOOLBELT_TARGET_STATES.INTERRUPTED ? "interrupted" : "application-failed",
+      userRole: "gm",
+      context: { messageId: message.id, transactionId: draft.integrationId, rollIndex: draft.rollIndex },
+    });
+  }
   await message.update({ [`flags.${MODULE_ID}.${FLAG}`]: draft });
   return draft;
 }
@@ -147,6 +200,7 @@ function createTransaction(message, normalized, processingUserId) {
     processingUserId,
     toolbeltVersion: normalized.status.version,
     toolbeltSchemaFingerprint: normalized.schemaFingerprint,
+    targetFingerprint: normalized.targetFingerprint,
     phase: "observing",
     targetOrder: normalized.targets.map((target) => target.toolbeltTargetKey),
     targets: {},
@@ -156,6 +210,12 @@ function createTransaction(message, normalized, processingUserId) {
     updatedAt: Date.now(),
     revision: 0,
   };
+  appendAudit(base, {
+    event: "observed",
+    state: base.phase,
+    subsystem: "toolbelt-application",
+    userRole: "gm",
+  });
   for (const target of normalized.targets) {
     base.targets[target.toolbeltTargetKey] = createTargetRecord(base, target);
     diagnostic("toolbelt-target-normalized", { integrationId: id, targetKey: target.toolbeltTargetKey });
@@ -257,6 +317,17 @@ async function markInterrupted(message, draft, reason) {
       record.state = TOOLBELT_TARGET_STATES.INTERRUPTED;
       record.reason = reason;
     }
+  }
+  if (draft.undoOperation?.state === "undoing") {
+    draft.undoOperation = { ...draft.undoOperation, state: "interrupted" };
+    recordFailure(draft, {
+      code: "transaction-interrupted",
+      subsystem: "undo",
+      operation: "reload-reconciliation",
+      event: "interrupted",
+      userRole: "gm",
+      context: { messageId: message.id, transactionId: draft.integrationId },
+    });
   }
   draft.phase = "interrupted";
   await persist(message, draft);
@@ -468,7 +539,7 @@ async function applyOne(message, draft, targetKey) {
     }
   } catch (error) {
     record.state = TOOLBELT_TARGET_STATES.ERROR;
-    record.reason = error instanceof Error ? error.message : String(error);
+    record.reason = "application-native-call-failed";
     await persist(message, draft);
     logger.error("Toolbelt target application failed", {
       stage: "toolbelt-application",
@@ -576,6 +647,7 @@ async function observe(message, { confirmed = false } = {}) {
     persistedNew = true;
   }
   if (!currentUserOwns(draft)) return;
+  if (["manual", "abandoned"].includes(draft.phase)) return;
   if (draft.phase === "applying") {
     await markInterrupted(message, draft, "reload-or-unobserved-application");
     return;
@@ -612,7 +684,7 @@ export class ToolbeltBasicSaveService {
     }
     for (const message of game.messages ?? []) {
       const draft = transaction(message);
-      if (!draft || draft.phase !== "applying" || !currentUserOwns(draft)) continue;
+      if (!draft || (draft.phase !== "applying" && draft.undoOperation?.state !== "undoing") || !currentUserOwns(draft)) continue;
       void queue(message.id, () => markInterrupted(message, draft, "reload-during-application")).catch((error) => {
         logger.error("Toolbelt interrupted-state persistence failed", {
           stage: "toolbelt-reload",
@@ -642,6 +714,14 @@ export class ToolbeltBasicSaveService {
         record?.state === TOOLBELT_TARGET_STATES.APPLIED ||
         (record?.state === TOOLBELT_TARGET_STATES.RESULT_CHANGED && Number.isFinite(record.preApplicationHp));
       if (!draft || !record || !currentUserOwns(draft) || !undoableState) return;
+      draft.undoOperation = {
+        state: "undoing",
+        ownerUserId: game.user.id,
+        sessionId: getRuntimeSessionId(),
+        enteredRevision: Number(draft.revision ?? 0) + 1,
+      };
+      appendAudit(draft, { event: "undo-started", state: draft.phase, subsystem: "undo", userRole: "gm" });
+      await persist(message, draft);
       const restored = await guardedHealthRestore({
         resolveToken: (uuid) => PF2eAdapter.resolveToken(uuid),
         healthSnapshot: (actor) => PF2eAdapter.healthSnapshot(actor),
@@ -658,6 +738,28 @@ export class ToolbeltBasicSaveService {
       } else {
         record.state = TOOLBELT_TARGET_STATES.UNDONE;
         record.undoState = "used";
+      }
+      draft.undoOperation = {
+        ...(draft.undoOperation ?? {}),
+        state: restored.ok ? "complete" : "failed",
+        reason: restored.reason ?? null,
+      };
+      appendAudit(draft, {
+        event: restored.ok ? "undo-complete" : "undo-failed",
+        state: draft.phase,
+        subsystem: "undo",
+        userRole: "gm",
+        safeReason: restored.reason,
+      });
+      if (!restored.ok) {
+        recordFailure(draft, {
+          reason: restored.reason,
+          subsystem: "undo",
+          operation: "guarded-undo",
+          event: "undo-failed",
+          userRole: "gm",
+          context: { messageId, transactionId: draft.integrationId },
+        });
       }
       await persist(message, draft);
     });
@@ -689,6 +791,123 @@ export class ToolbeltBasicSaveService {
         integrationId: draft.integrationId,
         targetKey,
       });
+      return true;
+    });
+  }
+
+  static getTransaction(message) {
+    return transaction(message);
+  }
+
+  static rescan(messageId) {
+    const message = messageById(messageId);
+    if (!message || !game.user?.isGM) return Promise.resolve({ ok: false, result: "unsupported" });
+    return queue(message.id, async () => {
+      diagnostic("transaction-rescan-started", { damageMessageId: messageId, reason: "structured-toolbelt-state" });
+      let draft = transaction(message);
+      if (!draft || !currentUserOwns(draft) || ["manual", "abandoned"].includes(draft.phase)) {
+        return { ok: false, result: "manual-required" };
+      }
+      updateRecovery(draft, { status: RECOVERY_STATUSES.RUNNING, action: "rescan-toolbelt-state" });
+      appendAudit(draft, { event: "recovery-started", state: draft.phase, subsystem: "recovery", userRole: "gm", safeReason: "rescan-toolbelt-state" });
+      await persist(message, draft);
+      const normalized = ToolbeltTargetHelperAdapter.normalizeDamageMessage(messageById(messageId) ?? message);
+      draft = transaction(messageById(messageId) ?? message);
+      let result = "unsupported";
+      const reconciliation = reconcileToolbeltTransaction(draft, normalized);
+      if (!normalized.ok) {
+        result = reconciliation.status;
+        recordFailure(draft, {
+          reason: normalized.reason,
+          subsystem: "recovery",
+          operation: "rescan-toolbelt-state",
+          event: "recovery-failed",
+          userRole: "gm",
+          context: { messageId, transactionId: draft.integrationId, rollIndex: draft.rollIndex },
+        });
+      } else if (reconciliation.status === "ambiguous") {
+        result = reconciliation.status;
+        recordFailure(draft, {
+          code: reconciliation.reason,
+          subsystem: "recovery",
+          operation: "rescan-toolbelt-state",
+          event: "recovery-failed",
+          userRole: "gm",
+          context: { messageId, transactionId: draft.integrationId, rollIndex: draft.rollIndex },
+        });
+      } else {
+        updateProjection(draft, normalized);
+        result = reconciliation.status;
+      }
+      updateRecovery(draft, {
+        status: ["ambiguous", "unsupported"].includes(result) ? RECOVERY_STATUSES.FAILED : RECOVERY_STATUSES.COMPLETED,
+        action: "rescan-toolbelt-state",
+        failureCode: ["ambiguous", "unsupported"].includes(result) ? failureCodeFor(result) : null,
+      });
+      appendAudit(draft, {
+        event: ["ambiguous", "unsupported"].includes(result) ? "recovery-failed" : "recovery-complete",
+        state: draft.phase,
+        subsystem: "recovery",
+        userRole: "gm",
+        safeReason: result,
+      });
+      await persist(messageById(messageId) ?? message, draft);
+      diagnostic("transaction-reconciled", { damageMessageId: messageId, integrationId: draft.integrationId, reason: result });
+      diagnostic("transaction-rescan-completed", { damageMessageId: messageId, integrationId: draft.integrationId, reason: result });
+      return { ok: !["ambiguous", "unsupported"].includes(result), result };
+    });
+  }
+
+  static recover(messageId, action) {
+    const message = messageById(messageId);
+    if (!message || !game.user?.isGM) return Promise.resolve(false);
+    return queue(message.id, async () => {
+      const draft = transaction(message);
+      if (!draft || !currentUserOwns(draft)) return false;
+      if (action === "clear-guard") {
+        for (const record of Object.values(draft.targets)) record.manualControlsEnabled = true;
+        updateRecovery(draft, { status: RECOVERY_STATUSES.COMPLETED, action });
+        appendAudit(draft, { event: "guard-restored", state: draft.phase, subsystem: "guards", userRole: "gm", safeReason: action });
+        diagnostic("control-restored-fail-open", { damageMessageId: messageId, integrationId: draft.integrationId, reason: action });
+      } else {
+        const abandoned = action === "abandon";
+        draft.phase = abandoned ? "abandoned" : "manual";
+        draft.activeOperation = null;
+        for (const record of Object.values(draft.targets)) {
+          record.manualControlsEnabled = true;
+          if (![TOOLBELT_TARGET_STATES.APPLIED, TOOLBELT_TARGET_STATES.NO_DAMAGE,
+            TOOLBELT_TARGET_STATES.EXTERNAL, TOOLBELT_TARGET_STATES.UNDONE,
+            TOOLBELT_TARGET_STATES.UNDO_BLOCKED, TOOLBELT_TARGET_STATES.RESULT_CHANGED].includes(record.state)) {
+            record.state = TOOLBELT_TARGET_STATES.MANUAL;
+            record.reason = abandoned ? "transaction-abandoned" : "manual-review-required";
+          }
+        }
+        updateRecovery(draft, {
+          status: abandoned ? RECOVERY_STATUSES.ABANDONED : RECOVERY_STATUSES.MANUAL,
+          action,
+        });
+        appendAudit(draft, { event: abandoned ? "abandoned" : "manual", state: draft.phase, subsystem: "recovery", userRole: "gm", safeReason: action });
+      }
+      await persist(message, draft);
+      return true;
+    });
+  }
+
+  static recordBoundaryFailure(messageId, failure) {
+    const message = messageById(messageId);
+    if (!message || !game.user?.isGM) return Promise.resolve(false);
+    return queue(message.id, async () => {
+      const draft = transaction(message);
+      if (!draft || !currentUserOwns(draft)) return false;
+      recordFailure(draft, { ...failure, event: "application-failed", userRole: "gm" });
+      draft.phase = draft.phase === "applying" ? "interrupted" : draft.phase;
+      for (const record of Object.values(draft.targets)) {
+        if ([TOOLBELT_TARGET_STATES.CLAIMED, TOOLBELT_TARGET_STATES.APPLYING].includes(record.state)) {
+          record.state = TOOLBELT_TARGET_STATES.INTERRUPTED;
+          record.manualControlsEnabled = true;
+        }
+      }
+      await persist(message, draft);
       return true;
     });
   }

@@ -22,6 +22,8 @@ export const RESOLVER_PHASES = Object.freeze({
   CANCELLED: "cancelled",
   ERROR: "error",
   INTERRUPTED: "interrupted",
+  MANUAL: "manual",
+  ABANDONED: "abandoned",
 });
 
 export const TERMINAL_APPLICATION_STATES = new Set([
@@ -71,7 +73,8 @@ export function refreshResolverPhase(resolver) {
     [RESOLVER_PHASES.CANCELLED, RESOLVER_PHASES.ROLLING_DAMAGE,
       RESOLVER_PHASES.APPLYING_DAMAGE, RESOLVER_PHASES.COMPLETE,
       RESOLVER_PHASES.PARTIAL, RESOLVER_PHASES.ERROR,
-      RESOLVER_PHASES.INTERRUPTED].includes(resolver.phase)
+      RESOLVER_PHASES.INTERRUPTED, RESOLVER_PHASES.MANUAL,
+      RESOLVER_PHASES.ABANDONED].includes(resolver.phase)
   ) {
     return resolver.phase;
   }

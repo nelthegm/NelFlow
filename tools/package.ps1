@@ -21,6 +21,7 @@ New-Item -ItemType Directory -Path $stageDirectory | Out-Null
 
 Copy-Item -LiteralPath (Join-Path $projectRoot "module.json") -Destination $stageDirectory
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination $stageDirectory
+Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination $stageDirectory
 foreach ($directory in @("scripts", "styles", "lang")) {
   Copy-Item -LiteralPath (Join-Path $projectRoot $directory) -Destination $stageDirectory -Recurse
 }
