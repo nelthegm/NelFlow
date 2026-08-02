@@ -57,6 +57,16 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 
 ## Install or update
 
+Foundry or Forge users can install this release candidate using this manifest
+URL:
+
+```text
+https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
+```
+
+The current release asset is **v0.6.0-rc1**. It is intended for runtime testing;
+Foundry V14/PF2e 8.3.0 runtime acceptance is not yet claimed.
+
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
 folder. Restart Foundry, enable **Nelflow** in a disposable PF2e world, and
