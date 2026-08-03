@@ -65,9 +65,8 @@ URL:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-The current published release candidate remains **v0.6.1-rc1**. This local
-0.6.2 build prepares the future **v0.6.2-rc1** and is not published by this
-coding task. Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
+The current release candidate is **v0.6.2-rc1**. It is intended for runtime
+testing; Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
