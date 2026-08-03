@@ -640,8 +640,20 @@
   padding-top: 0.3rem;
 }
 
-.nelflow-player-strike > span {
+.nelflow-player-strike__body {
   flex: 1;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.nelflow-player-strike__body > strong,
+.nelflow-player-strike__target {
+  display: block;
+}
+
+.nelflow-player-strike__target {
+  color: var(--color-text-subtle, #666);
+  overflow-wrap: anywhere;
 }
 
 .nelflow-player-strike__undo {

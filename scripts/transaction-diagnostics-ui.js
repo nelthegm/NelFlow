@@ -128,35 +128,43 @@ function actionButton(labelKey, handler, { disabled = false } = {}) {
 
 function recoveryControls(descriptor) {
   const controls = element("div", "nelflow-diagnostics__actions");
+  const state = descriptor.transaction.state ?? descriptor.transaction.phase;
+  const playerStrikeRecovery = descriptor.type === "player-strike" && [
+    "manual", "ambiguous", "failed", "interrupted",
+  ].includes(state);
   if (descriptor.type === "toolbelt-application") {
     controls.append(actionButton("Nelflow.Diagnostics.Rescan", async () => {
       const result = await TransactionDiagnosticsService.recover(descriptor, "rescan-toolbelt");
       ui.notifications.info(localize("Nelflow.Notification.RescanResult", { result: result.result }));
     }));
   }
-  if (descriptor.type === "player-strike") {
+  if (playerStrikeRecovery) {
     controls.append(actionButton("Nelflow.Diagnostics.RescanPlayerStrike", async () => {
       const result = await TransactionDiagnosticsService.recover(descriptor, "rescan-player-strike");
       ui.notifications.info(localize("Nelflow.Notification.PlayerStrikeRescanResult", { result: result.result }));
     }));
   }
-  if (["autoroll", "player-strike"].includes(descriptor.type)) {
+  if (descriptor.type === "autoroll" || playerStrikeRecovery) {
     controls.append(actionButton(
       "Nelflow.Diagnostics.ExistingDamage",
       () => selectExistingDamage(descriptor),
       { disabled: TransactionDiagnosticsService.candidates(descriptor).length === 0 },
     ));
   }
-  controls.append(actionButton("Nelflow.Diagnostics.MarkManual", () =>
-    TransactionDiagnosticsService.recover(descriptor, "mark-manual")));
+  if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
+    controls.append(actionButton("Nelflow.Diagnostics.MarkManual", () =>
+      TransactionDiagnosticsService.recover(descriptor, "mark-manual")));
+  }
   if (["autoroll", "toolbelt-application"].includes(descriptor.type)) {
     controls.append(actionButton("Nelflow.Diagnostics.ClearGuard", () =>
       TransactionDiagnosticsService.recover(descriptor, "clear-guard")));
   }
-  controls.append(actionButton("Nelflow.Diagnostics.Abandon", async () => {
-    if (await confirmAbandon()) return TransactionDiagnosticsService.recover(descriptor, "abandon");
-    return false;
-  }));
+  if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
+    controls.append(actionButton("Nelflow.Diagnostics.Abandon", async () => {
+      if (await confirmAbandon()) return TransactionDiagnosticsService.recover(descriptor, "abandon");
+      return false;
+    }));
+  }
   controls.append(actionButton("Nelflow.Diagnostics.Copy", () => copyDiagnostic(descriptor)));
   return controls;
 }
@@ -195,6 +203,19 @@ function transactionPanel(descriptor) {
     field(list, "Nelflow.Diagnostics.Field.AttackOutcome", projection.attackOutcome);
     field(list, "Nelflow.Diagnostics.Field.DamageLink", projection.damageLinkState);
     field(list, "Nelflow.Diagnostics.Field.AuthorityState", projection.authorityState);
+    field(list, "Nelflow.Diagnostics.Field.ActorType", projection.actorType);
+    field(list, "Nelflow.Diagnostics.Field.MessageAuthor", projection.messageAuthorIdShort);
+    field(list, "Nelflow.Diagnostics.Field.MessageAuthorRole", projection.messageAuthorRole);
+    field(list, "Nelflow.Diagnostics.Field.RequestSender", projection.requestSenderIdShort);
+    field(list, "Nelflow.Diagnostics.Field.ProcessingAuthority", projection.processingAuthorityIdShort);
+    field(list, "Nelflow.Diagnostics.Field.AuthorIsGm", projection.authorIsGm ? localize("Nelflow.Diagnostics.Yes") : localize("Nelflow.Diagnostics.No"));
+    field(list, "Nelflow.Diagnostics.Field.RecordedTarget", projection.recordedTargetIdShort);
+    field(list, "Nelflow.Diagnostics.Field.DamageVariant", projection.observedDamageVariant);
+    field(list, "Nelflow.Diagnostics.Field.CorrelationMethod", projection.correlationMethod);
+    field(list, "Nelflow.Diagnostics.Field.Eligibility", projection.eligibilityResult);
+    field(list, "Nelflow.Diagnostics.Field.ApplicationAttempts", projection.applicationAttemptCount);
+    field(list, "Nelflow.Diagnostics.Field.FinalState", projection.finalState);
+    field(list, "Nelflow.Diagnostics.Field.ManualReason", projection.manualReason);
   }
   field(list, "Nelflow.Diagnostics.Field.Targets", projection.targetCount);
   field(list, "Nelflow.Diagnostics.Field.Saves", `${projection.resolvedSaveCount}/${projection.saveCount}`);

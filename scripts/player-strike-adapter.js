@@ -36,6 +36,16 @@ function ownsSource(actor, user) {
   return actor.testUserPermission?.(user, owner) === true;
 }
 
+function authorRole(user) {
+  if (!user) return null;
+  const roles = globalThis.CONST?.USER_ROLES ?? {};
+  if (user.role === roles.GAMEMASTER) return "gamemaster";
+  if (user.role === roles.ASSISTANT) return "assistant-gm";
+  if (user.role === roles.TRUSTED) return "trusted-player";
+  if (user.role === roles.PLAYER) return "player";
+  return user.isGM ? "gm" : "player";
+}
+
 function tokenDocument(uuid) {
   if (!uuid || typeof fromUuidSync !== "function") return null;
   const document = fromUuidSync(uuid, { strict: false });
@@ -90,6 +100,7 @@ export function normalizePlayerStrikeAttack(message) {
       itemType: item?.type ?? null,
       damaging: roll?.options?.damaging === true,
       authorIsGm: author?.isGM === true,
+      authorRole: authorRole(author),
       authorActive: author?.active === true,
       authorOwnsSource: ownsSource(actor, author),
       sourceActorUuid: actor?.uuid ?? null,
@@ -144,7 +155,7 @@ export function normalizePlayerStrikeDamage(message) {
 }
 
 export function capturePlayerStrikeObservation(document, userId) {
-  if (userId !== game.user?.id || game.user?.isGM) return;
+  if (userId !== game.user?.id) return;
   if (getSetting(SETTINGS.PLAYER_STRIKE_AUTO_APPLY) === PLAYER_STRIKE_AUTO_APPLY_MODES.OFF) return;
   if (!isPlayerStrikeCandidate(document) || document.actor?.type !== "character") return;
   const context = pf2eFlags(document).context;

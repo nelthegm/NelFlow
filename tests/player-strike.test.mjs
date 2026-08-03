@@ -18,7 +18,9 @@ import {
   validatePlayerStrikeSnapshot,
 } from "../scripts/player-strike-model.js";
 import { PLAYER_STRIKE_AUTO_APPLY_MODES, TRANSACTION_STATES } from "../scripts/constants.js";
+import { guardedHealthRestore } from "../scripts/guarded-health-restore.js";
 import { shouldDisablePlayerStrikeForMigration } from "../scripts/settings.js";
+import { electProcessingGm } from "../scripts/toolbelt-target-helper-adapter.js";
 
 const cases = [];
 const add = (name, run) => cases.push({ name, run });
@@ -30,6 +32,7 @@ const attack = (changes = {}) => ({
   itemType: "weapon",
   damaging: true,
   authorIsGm: false,
+  authorRole: "player",
   authorActive: true,
   authorOwnsSource: true,
   sourceActorUuid: "Actor.source",
@@ -84,8 +87,8 @@ const transaction = (changes = {}) => ({
   ...changes,
 });
 
-add("module version is 0.6.0", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.6.0"));
-add("package version is 0.6.0", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.6.0"));
+add("module version is 0.6.1", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.6.1"));
+add("package version is 0.6.1", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.6.1"));
 add("module id remains nelflow", () => assert.equal(JSON.parse(rootFile("module.json")).id, "nelflow"));
 add("player Strike setting registers", () => assert.match(rootFile("scripts/settings.js"), /SETTINGS\.PLAYER_STRIKE_AUTO_APPLY/));
 add("new-world default is hostile", () => assert.match(rootFile("scripts/settings.js"), /default: PLAYER_STRIKE_AUTO_APPLY_MODES\.HOSTILE/));
@@ -123,6 +126,7 @@ for (const [count, reason] of [
 ]) add(`target count ${String(count)} classification`, () => assert.equal(targetCountFailure(count), reason));
 
 add("character Strike is eligible", () => assert.equal(validatePlayerStrikeAttack(attack()).ok, true));
+add("GM-authored character Strike is eligible", () => assert.equal(validatePlayerStrikeAttack(attack({ authorIsGm: true, authorRole: "gm", authorUserId: "gm1" })).ok, true));
 for (const [field, value, reason] of [
   ["actorType", "npc", PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["actorType", "hazard", PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
@@ -133,7 +137,6 @@ for (const [field, value, reason] of [
   ["itemType", "spell", PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["itemType", "action", PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["damaging", false, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
-  ["authorIsGm", true, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["authorActive", false, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["authorOwnsSource", false, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["sourceActorUuid", null, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
@@ -169,6 +172,8 @@ add("snapshot stores action index", () => assert.equal(snapshot().actionIndex, 0
 add("snapshot stores MAP", () => assert.equal(snapshot().mapIncreases, 0));
 add("snapshot stores disposition", () => assert.equal(snapshot().targetDisposition, -1));
 add("snapshot stores author", () => assert.equal(snapshot().authoringUserId, "player1"));
+add("snapshot stores actor type", () => assert.equal(snapshot().actorType, "character"));
+add("snapshot stores author role", () => assert.equal(snapshot().authorRole, "player"));
 add("snapshot stores processing GM", () => assert.equal(snapshot().processingUserId, "gm1"));
 add("snapshot stores fingerprints", () => assert.match(snapshot().targetFingerprint, /^[0-9a-f]{8}$/));
 add("snapshot contains no names", () => assert.equal(Object.keys(snapshot()).some((key) => /name/i.test(key)), false));
@@ -198,11 +203,19 @@ add("exact critical damage validates", () => assert.equal(validatePlayerStrikeDa
   snapshot({ outcome: "criticalSuccess", damageVariant: "critical" }),
   damage({ outcome: "criticalSuccess" }),
 ).ok, true));
+add("critical hit accepts ordinary native damage", () => assert.deepEqual(
+  validatePlayerStrikeDamage(snapshot({ outcome: "criticalSuccess", damageVariant: "critical" }), damage({ outcome: "success" })),
+  { ok: true, reason: null, variant: "ordinary" },
+));
+add("ordinary hit accepts native critical damage", () => assert.deepEqual(
+  validatePlayerStrikeDamage(snapshot(), damage({ outcome: "criticalSuccess" })),
+  { ok: true, reason: null, variant: "critical" },
+));
+add("native healing damage roll remains eligible", () => assert.equal(validatePlayerStrikeDamage(snapshot(), damage({ isHealing: true })).ok, true));
+add("native persistent damage component remains eligible", () => assert.equal(validatePlayerStrikeDamage(snapshot(), damage({ hasPersistentDamage: true })).ok, true));
 for (const [field, value, reason] of [
   ["isNativeDamageRoll", false, PLAYER_STRIKE_FAILURES.DAMAGE_MISSING],
   ["contextType", "check", PLAYER_STRIKE_FAILURES.DAMAGE_MISSING],
-  ["isHealing", true, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
-  ["hasPersistentDamage", true, PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED],
   ["sourceActorUuid", "Actor.other", PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
   ["sourceTokenUuid", "Scene.s.Token.other", PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
   ["sourceItemUuid", "Actor.source.Item.other", PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
@@ -212,7 +225,6 @@ for (const [field, value, reason] of [
   ["actionIndex", 1, PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
   ["altUsage", "thrown", PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
   ["mapIncreases", 1, PLAYER_STRIKE_FAILURES.TARGET_CHANGED],
-  ["outcome", "criticalSuccess", PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH],
   ["outcome", "failure", PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH],
   ["outcome", null, PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH],
 ]) add(`damage rejects changed ${field}`, () => {
@@ -300,6 +312,10 @@ for (const value of ["one", "two", "Actor.abc", "Scene.s.Token.t", {}, [], null,
 
 const serviceSource = rootFile("scripts/player-strike-service.js");
 const modelSource = rootFile("scripts/player-strike-model.js");
+const adapterSource = rootFile("scripts/player-strike-adapter.js");
+const storeSource = rootFile("scripts/transaction-store.js");
+const diagnosticsSource = rootFile("scripts/transaction-diagnostics-service.js");
+const diagnosticsUiSource = rootFile("scripts/transaction-diagnostics-ui.js");
 for (const [name, pattern, expected] of [
   ["service does not auto-roll Strike damage", /rollStrikeDamage/, false],
   ["service does not call critical method", /\.critical\s*\(/, false],
@@ -320,6 +336,121 @@ for (const [name, pattern, expected] of [
   ["model contains no title correlation", /attackTitle/, false],
   ["model contains no timestamp correlation", /createdTime/, false],
 ]) add(name, () => assert.equal(pattern.test(name.startsWith("model") ? modelSource : serviceSource), expected));
+
+// Nelflow 0.6.1 focused character-Strike correction matrix.
+add("0.6.1 non-GM character success plus Damage auto-validates", () => {
+  assert.equal(validatePlayerStrikeAttack(attack()).ok, true);
+  assert.equal(validatePlayerStrikeDamage(snapshot(), damage()).ok, true);
+});
+add("0.6.1 non-GM character critical success plus Critical Damage auto-validates", () => {
+  const critical = snapshot({ outcome: "criticalSuccess", damageVariant: "critical" });
+  assert.equal(validatePlayerStrikeDamage(critical, damage({ outcome: "criticalSuccess" })).variant, "critical");
+});
+add("0.6.1 non-GM critical success plus ordinary Damage applies exact variant", () => {
+  const critical = snapshot({ outcome: "criticalSuccess", damageVariant: "critical" });
+  assert.equal(validatePlayerStrikeDamage(critical, damage({ outcome: "success" })).variant, "ordinary");
+});
+add("0.6.1 GM-authored character success plus Damage auto-validates", () => {
+  assert.equal(validatePlayerStrikeAttack(attack({ authorIsGm: true, authorRole: "gm", authorUserId: "gm1" })).ok, true);
+  assert.equal(validatePlayerStrikeDamage(snapshot({ authoringUserId: "gm1", authorIsGm: true, authorRole: "gm" }), damage({ authorUserId: "gm1" })).ok, true);
+});
+add("0.6.1 GM-authored character critical plus Critical Damage auto-validates", () => {
+  const gmCritical = snapshot({ outcome: "criticalSuccess", damageVariant: "critical", authoringUserId: "gm1", authorIsGm: true, authorRole: "gm" });
+  assert.equal(validatePlayerStrikeDamage(gmCritical, damage({ outcome: "criticalSuccess", authorUserId: "gm1" })).variant, "critical");
+});
+add("0.6.1 GM-authored character critical plus ordinary Damage applies exact variant", () => {
+  const gmCritical = snapshot({ outcome: "criticalSuccess", damageVariant: "critical", authoringUserId: "gm1", authorIsGm: true, authorRole: "gm" });
+  assert.equal(validatePlayerStrikeDamage(gmCritical, damage({ outcome: "success", authorUserId: "gm1" })).variant, "ordinary");
+});
+add("0.6.1 assistant-GM character author elects one authority", () => assert.equal(electProcessingGm([
+  { id: "assistant", active: true, isGM: true },
+  { id: "gm", active: true, isGM: true },
+], "assistant"), "assistant"));
+add("0.6.1 changed current targeting cannot replace recorded target", () => {
+  const recorded = snapshot();
+  assert.equal(recorded.targetTokenUuid, "Scene.s.Token.target");
+  assert.equal(validatePlayerStrikeDamage(recorded, damage()).ok, true);
+  assert.doesNotMatch(serviceSource, /game\.user\??\.targets/);
+});
+add("0.6.1 deleted recorded target enters explicit manual failure", () => {
+  assert.match(serviceSource, /targetToken\?\.actor[\s\S]*PLAYER_STRIKE_FAILURES\.TARGET_CHANGED/);
+  assert.match(serviceSource, /manualReason: reason/);
+});
+add("0.6.1 zero recorded targets never auto-apply", () => assert.equal(validatePlayerStrikeAttack(attack({ targetCount: 0 })).reason, PLAYER_STRIKE_FAILURES.TARGET_MISSING));
+add("0.6.1 multiple recorded targets never auto-apply", () => assert.equal(validatePlayerStrikeAttack(attack({ targetCount: 2 })).reason, PLAYER_STRIKE_FAILURES.MULTIPLE_TARGETS));
+add("0.6.1 miss plus manual damage remains ineligible", () => assert.equal(validatePlayerStrikeAttack(attack({ outcome: "failure" })).terminal, true));
+add("0.6.1 critical failure plus manual damage remains ineligible", () => assert.equal(validatePlayerStrikeAttack(attack({ outcome: "criticalFailure" })).terminal, true));
+add("0.6.1 duplicate damage observation has one durable application path", () => {
+  assert.match(serviceSource, /observedDamage\.has\(message\.id\)/);
+  assert.match(serviceSource, /persistDamageClaim\(damageMessage\.id, transaction\.id\)/);
+});
+add("0.6.1 two rapid same-character attacks correlate by MAP", () => {
+  const first = transaction({ id: "first", snapshot: snapshot({ mapIncreases: 0 }) });
+  const second = transaction({ id: "second", snapshot: snapshot({ mapIncreases: 1 }) });
+  assert.equal(correlatePlayerStrikeDamage([first, second], damage({ mapIncreases: 0 })).transaction.id, "first");
+  assert.equal(correlatePlayerStrikeDamage([first, second], damage({ mapIncreases: 1 })).transaction.id, "second");
+});
+add("0.6.1 two characters cannot cross-correlate", () => {
+  const first = transaction({ id: "first" });
+  const second = transaction({ id: "second", snapshot: snapshot({ sourceActorUuid: "Actor.second" }) });
+  assert.equal(correlatePlayerStrikeDamage([first, second], damage()).transaction.id, "first");
+  assert.equal(correlatePlayerStrikeDamage([first, second], damage({ sourceActorUuid: "Actor.second" })).transaction.id, "second");
+});
+add("0.6.1 reload between attack and damage continues waiting", () => assert.equal(reconcilePlayerStrikeReload(transaction(), "new-session"), "wait"));
+add("0.6.1 GM and player render one durable canonical transaction", () => {
+  assert.match(storeSource, /updateLinkedMarker/);
+  assert.match(storeSource, /resolveCanonical/);
+  assert.match(storeSource, /finalState: nextState/);
+});
+add("0.6.1 hostile mode rejects neutral and friendly targets", () => {
+  assert.equal(playerStrikeModeAllows({ mode: "hostile", snapshotDisposition: 0, currentDisposition: 0 }), false);
+  assert.equal(playerStrikeModeAllows({ mode: "hostile", snapshotDisposition: 1, currentDisposition: 1 }), false);
+});
+add("0.6.1 all-target mode accepts hostile neutral and friendly", () => {
+  for (const disposition of [-1, 0, 1]) assert.equal(playerStrikeModeAllows({ mode: "all", snapshotDisposition: disposition, currentDisposition: disposition }), true);
+});
+add("0.6.1 Off mode never auto-applies", () => assert.equal(playerStrikeModeAllows({ mode: "off", snapshotDisposition: -1, currentDisposition: -1 }), false));
+add("0.6.1 guarded Undo restores exact HP and temporary HP", async () => {
+  const actor = { uuid: "Actor.target" };
+  let restored = null;
+  const result = await guardedHealthRestore({
+    resolveToken: async () => ({ actor }), healthSnapshot: () => ({ hp: 8, tempHp: 2 }),
+    restoreHealth: async (_actor, value) => { restored = value; }, targetTokenUuid: "Token.target",
+    targetActorUuid: actor.uuid, preApplication: { hp: 20, tempHp: 0 }, postApplication: { hp: 8, tempHp: 2 },
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(restored, { hp: 20, tempHp: 0 });
+});
+add("0.6.1 later HP mutation safely blocks Undo", async () => {
+  const actor = { uuid: "Actor.target" };
+  const result = await guardedHealthRestore({
+    resolveToken: async () => ({ actor }), healthSnapshot: () => ({ hp: 9, tempHp: 2 }),
+    restoreHealth: async () => assert.fail("restore must not run"), targetTokenUuid: "Token.target",
+    targetActorUuid: actor.uuid, preApplication: { hp: 20, tempHp: 0 }, postApplication: { hp: 8, tempHp: 2 },
+  });
+  assert.deepEqual(result, { ok: false, reason: "health-changed" });
+});
+add("0.6.1 existing NPC Strike classification remains actor-based", () => {
+  assert.match(rootFile("scripts/pf2e-adapter.js"), /actor\?\.isOfType\?\.\("npc"\)/);
+  assert.match(serviceSource, /evidence\.actorType !== "character"/);
+});
+add("0.6.1 existing Toolbelt basic-save workflow remains isolated", () => {
+  assert.match(rootFile("scripts/toolbelt-basic-save-service.js"), /TOOLBELT_TARGET_STATES/);
+  assert.equal(PLAYER_STRIKE_TRANSACTION_TYPE, "player-strike");
+});
+add("0.6.1 Manual diagnostics always carry a reason", () => {
+  assert.match(diagnosticsSource, /state === "manual" \? "manual-review-required"/);
+  assert.match(storeSource, /TRANSACTION_STATES\.MANUAL, TRANSACTION_STATES\.AMBIGUOUS/);
+  assert.match(storeSource, /changes\.failureCode/);
+});
+add("0.6.1 recovery controls are hidden for valid applied transactions", () => {
+  assert.match(diagnosticsUiSource, /playerStrikeRecovery/);
+  assert.match(diagnosticsUiSource, /descriptor\.type !== "player-strike" \|\| playerStrikeRecovery/);
+});
+add("0.6.1 GM pre-create capture is not author-role gated", () => {
+  assert.doesNotMatch(adapterSource, /userId !== game\.user\?\.id \|\| game\.user\?\.isGM/);
+  assert.match(adapterSource, /userId !== game\.user\?\.id/);
+});
 
 add("test matrix contains at least 127 mocked/static scenarios", () => assert.ok(cases.length >= 127));
 

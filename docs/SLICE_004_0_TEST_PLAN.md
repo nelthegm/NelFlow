@@ -1,8 +1,8 @@
-# Slice 4.0 Runtime Test Plan
+# Nelflow 0.6.1 Character Strike Runtime Test Plan
 
-Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Start with PF2e and Nelflow only, then repeat the compatibility cases with PF2e Toolbelt 3.52.0-3.52.1 and the named chat modules. Record settings, message IDs privately, HP/temp HP before and after, diagnostics, screenshots, console output, and reload results. These cases were documented but not executed by the Node test suite.
+Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e and Nelflow only, then repeat the compatibility cases with PF2e Toolbelt 3.52.0-3.52.1 and the named chat modules. Record settings, message IDs privately, HP/temp HP before and after, diagnostics, screenshots, console output, and reload results. These cases are runtime acceptance and were not executed by the Node test suite.
 
-1. Install `nelflow.zip` in a copied world and confirm version 0.6.0 loads with `module.json` at the archive root.
+1. Install `nelflow.zip` in a copied world and confirm version 0.6.1 loads with `module.json` at the archive root.
 2. Update an existing Nelflow 0.5.1 world and confirm Player Strike Auto-Apply migrates to Off once.
 3. Refresh twice and confirm the migration is idempotent.
 4. Create a fresh test world and confirm the setting defaults to Hostile Targets.
@@ -21,8 +21,8 @@ Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Start with PF2e and N
 17. Apply unrelated healing after another automated Strike, then confirm guarded Undo refuses and records Undo Blocked.
 18. Roll a critical success and confirm no damage is rolled automatically.
 19. Click native Critical Damage and confirm one application with no second doubling.
-20. Deliberately create ordinary damage for a critical-success attack and confirm Manual Review.
-21. Deliberately create critical damage for a normal-success attack and confirm Manual Review.
+20. Select ordinary Damage for a critical-success attack and confirm that exact native ordinary roll auto-applies.
+21. Select Critical Damage for a normal-success attack and confirm that exact native critical roll auto-applies.
 22. Roll a failure, manually create damage where possible, and confirm Nelflow never applies it.
 23. Repeat for critical failure.
 24. Produce an attack without a conclusive structured outcome and confirm manual behavior.
@@ -50,7 +50,7 @@ Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Start with PF2e and N
 46. Attempt a request for another player's damage message and confirm GM document/ownership validation prevents arbitrary mechanics.
 47. Make a valid attack outside combat and confirm exact application without a fake stack.
 48. Confirm the workflow does not change combat turn, initiative, or active combatant.
-49. Confirm player Strikes never appear in NPC compact turn stacks.
+49. Confirm character Strikes never appear in NPC compact turn stacks.
 50. Refresh while Waiting for Damage and confirm the transaction reconstructs and can accept one later exact damage message.
 51. Refresh during Applying where feasible and confirm Interrupted/Manual Review with no replay.
 52. Refresh after Applied and confirm status plus guarded Undo reconstruct.
@@ -66,6 +66,31 @@ Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Start with PF2e and N
 62. Test public, GM, blind, self, and whispered roll modes where the elected GM can access the native documents; confirm visibility is not broadened.
 63. Enable Dice So Nice and repeat rapid normal/critical attacks; confirm native animation and no duplicate application.
 64. Enable Better Chat Message, then Workbench, then both; confirm structured-data loss fails manual and native cards remain usable.
-65. Enable Toolbelt and repeat its existing Fireball plus NPC basic-save ability workflows; confirm no player-Strike cross-claim.
+65. Enable Toolbelt and repeat its existing Fireball plus NPC basic-save ability workflows; confirm no character-Strike cross-claim.
 66. Repeat one GM-authored NPC three-Strike turn and confirm its compact stack, native correlation, application, and Undo are unchanged.
 67. Inspect consoles on player and both GM clients; confirm no unhandled Nelflow rejection, duplicate application, Shield/reaction prompt, target disclosure, or permanently guarded native control.
+68. Player character success plus native Damage automatically applies and becomes Applied without recovery controls.
+69. Player character critical success plus native Critical Damage automatically applies the exact roll.
+70. Player character critical success plus ordinary Damage automatically applies the ordinary roll unchanged.
+71. GM-authored character success plus native Damage follows the character workflow and becomes Applied.
+72. GM-authored character critical success plus native Critical Damage follows the character workflow.
+73. GM-authored character critical success plus ordinary Damage applies the exact ordinary roll unchanged.
+74. Assistant-GM-authored character Strike elects exactly one active authoritative GM and applies once.
+75. Change current targeting after the attack; confirm only the attack's recorded target is affected.
+76. Delete the recorded target before damage; confirm no application and a meaningful target failure/manual reason.
+77. Roll with zero targets; confirm no character auto-application transaction becomes eligible.
+78. Roll with multiple targets; confirm no target is silently selected or damaged.
+79. Generate damage after a miss; confirm it is not auto-applied.
+80. Generate damage after a critical failure; confirm it is not auto-applied.
+81. Deliver duplicate create hooks/socket wake-ups for one damage message; confirm one native application attempt.
+82. Make two rapid same-character Strikes with distinct MAP and roll each damage; confirm exact independent linkage.
+83. Make two characters attack concurrently; confirm no cross-correlation.
+84. Reload between attack and damage; confirm the waiting transaction rehydrates and later applies once.
+85. Observe from player and GM clients; confirm both render the same final durable state.
+86. In Hostile Targets mode, confirm neutral and friendly recorded targets are refused.
+87. In All Targets mode, confirm hostile, neutral, and friendly exact targets are accepted.
+88. In Off mode, confirm player-, assistant-GM-, and GM-authored character Strikes remain native/manual.
+89. Undo an applied character Strike with unchanged HP/temp HP; confirm the exact pre-state is restored.
+90. Mutate HP or temp HP after application; confirm Undo safely refuses.
+91. Repeat a GM NPC Strike and confirm the existing NPC resolver/stack behavior is unchanged.
+92. Repeat Toolbelt spell and NPC basic-save flows and confirm their transaction behavior is unchanged.

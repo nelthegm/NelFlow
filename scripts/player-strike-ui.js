@@ -5,8 +5,23 @@ import { StrikeResolver } from "./strike-resolver.js";
 import { TransactionStore } from "./transaction-store.js";
 import { logger } from "./logger.js";
 
-function localize(key) {
-  return game.i18n.localize(key);
+function localize(key, data = null) {
+  return data ? game.i18n.format(key, data) : game.i18n.localize(key);
+}
+
+function targetLabel(transaction) {
+  const targetTokenUuid = transaction.snapshot?.targetTokenUuid;
+  const tokenDocument = targetTokenUuid && typeof globalThis.fromUuidSync === "function"
+    ? globalThis.fromUuidSync(targetTokenUuid, { strict: false })
+    : null;
+  const token = tokenDocument?.object ?? tokenDocument;
+  if (!token) return localize("Nelflow.PlayerStrike.TargetUnavailable");
+  const nameVisible =
+    game.user?.isGM ||
+    token.actor?.isOwner ||
+    !game.pf2e?.settings?.tokens?.nameVisibility ||
+    token.playersCanSeeName;
+  return nameVisible ? token.name : localize("Nelflow.PlayerStrike.RecordedTarget");
 }
 
 function statusKey(transaction) {
@@ -35,9 +50,20 @@ export function renderPlayerStrike(message, html) {
   const icon = document.createElement("i");
   icon.className = "fa-solid fa-crosshairs";
   icon.setAttribute("aria-hidden", "true");
-  const label = document.createElement("span");
+  const body = document.createElement("span");
+  body.className = "nelflow-player-strike__body";
+  const label = document.createElement("strong");
   label.textContent = localize(statusKey(transaction));
-  status.append(icon, label);
+  const target = document.createElement("small");
+  target.className = "nelflow-player-strike__target";
+  const amount = Number.isFinite(transaction.appliedAmount)
+    ? localize("Nelflow.PlayerStrike.AppliedAmount", { amount: transaction.appliedAmount })
+    : null;
+  target.textContent = amount
+    ? localize("Nelflow.PlayerStrike.TargetAndAmount", { target: targetLabel(transaction), amount })
+    : targetLabel(transaction);
+  body.append(label, target);
+  status.append(icon, body);
 
   if (
     game.user?.isGM &&

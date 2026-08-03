@@ -761,11 +761,24 @@ for (const required of [
   "PF2eAdapter.persistDamageClaim",
   "TransactionStore.claimPlayerStrike",
   "electProcessingGm",
-  'normalized.evidence.actorType !== "character" || normalized.evidence.authorIsGm',
+  'normalized.evidence.actorType !== "character"',
   'game.socket?.on?.(SOCKET_NAMESPACE',
   'game.socket?.emit?.(SOCKET_NAMESPACE',
 ]) {
   if (!playerStrikeService.includes(required)) fail(`player Strike service is missing ${required}`);
+}
+if (/actorType !== "character"\s*\|\|\s*normalized\.evidence\.authorIsGm/.test(playerStrikeService) ||
+    /if\s*\(evidence\.authorIsGm\s*\|\|/.test(playerStrikeModel) ||
+    /userId !== game\.user\?\.id\s*\|\|\s*game\.user\?\.isGM/.test(playerStrikeAdapter)) {
+  fail("character Strike eligibility must not be gated by the authoring user's GM role");
+}
+for (const required of [
+  "observedDamageVariant",
+  "correlationMethod",
+  "applicationAttemptCount",
+  "manualReason",
+]) {
+  if (!playerStrikeRuntime.includes(required)) fail(`character Strike diagnostics are missing ${required}`);
 }
 for (const required of [
   'role: "observation"',

@@ -24,9 +24,10 @@ damage message to the unchanged Slice 3.1/3.2 application workflow.
 Slice 3.4 adds GM-only transaction diagnostics, sanitized bug-report export,
 durable audit/recovery state, safe Toolbelt re-scan and existing-damage linking,
 and fail-open handling for interrupted work. It adds no new automation category.
-Slice 4.0 observes one player-owned character Strike and waits for the player to
-choose PF2e's native damage roll, then lets one authoritative GM apply that
-exact native DamageRoll to the attack's snapshotted target.
+Slice 4.0, corrected in Nelflow 0.6.1, observes one character Strike regardless
+of whether its active OWNER author is a player or GM. The user chooses PF2e's
+native damage roll, then one authoritative GM applies that exact DamageRoll to
+the attack's snapshotted target.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -48,9 +49,9 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 ## Requirements
 
 - Foundry VTT generation 14
-- Pathfinder Second Edition system (integration source-checked with PF2e 8.3.0)
+- Pathfinder Second Edition system (character Strike integration source-checked with PF2e 8.4.0)
 - A GM-authored NPC Strike with exactly one target, or
-- A non-GM player-owned character Strike with exactly one target, or
+- An active player- or GM-owned character Strike with exactly one target, or
 - PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
   player- or GM-authored basic-save spell workflow, or a supported GM-authored
   NPC basic-save `action` ability
@@ -64,8 +65,9 @@ URL:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-The current release asset is **v0.6.0-rc1**. It is intended for runtime testing;
-Foundry V14/PF2e 8.3.0 runtime acceptance is not yet claimed.
+The current published release asset remains **v0.6.0-rc1**. The local 0.6.1
+build is not published by this coding task. Foundry 14.365/PF2e 8.4.0 runtime
+acceptance is not yet claimed.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
@@ -113,22 +115,34 @@ See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.m
 and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
 must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
 
-## Slice 4.0 player Strike auto-apply
+## Nelflow 0.6.1 character Strike auto-apply
 
-Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. The
-player targets once and rolls the Strike normally. Nelflow snapshots the exact
-PF2e attack, source, target, author, action/index, MAP, and final outcome, then
-shows **Waiting for Damage**. It never calls Damage or Critical Damage. After
-the player clicks PF2e's native control and completes its dialog, one elected
-GM correlates the exact native damage message and applies its unchanged
-DamageRoll through PF2e's contextual `Actor#applyDamage` pathway.
+Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. A
+character's player or GM user targets once and rolls the Strike normally.
+Nelflow snapshots the exact PF2e attack, source, target, author, action/index,
+MAP, and final outcome, then shows **Waiting for Damage**. It never calls Damage
+or Critical Damage. After the user clicks either native control and completes
+its dialog, one elected GM correlates that exact native damage message and
+applies its unchanged DamageRoll through PF2e's contextual `Actor#applyDamage`
+pathway.
 
 Current targeting cannot redirect damage. Hostile mode requires both the
 snapshotted and current exact token disposition to remain hostile; friendly,
 neutral, self, changed, missing, and indeterminate targets stay manual. All
 Targets still requires the exact original token and every authority/identity
-guard. Multiple targets, misses, mismatched normal/critical damage, healing,
-persistent damage, and structurally ambiguous concurrent attacks stay manual.
+guard. Multiple targets, misses, missing targets, stale transactions, and
+structurally ambiguous concurrent attacks stay manual. For a hit, the native
+ordinary or critical damage variant selected by the user is authoritative and
+is never transformed. Native healing, persistent, splash, category, and
+material semantics present in that roll remain PF2e's responsibility.
+
+### Nelflow 0.6.1 changes
+
+- Character Strike damage now auto-applies without GM approval when the transaction is valid.
+- GM-authored player-character Strikes use the same workflow as player-authored Strikes.
+- Successful Strikes apply the exact native PF2e damage variant selected by the user.
+- Manual Review is reserved for actual ambiguity, failure, or recovery cases.
+- Character Strike compatibility was revalidated against PF2e 8.4.0.
 
 Native cards, rolls, roll modes, damage dialogs, controls, and Dice So Nice
 animation remain intact. Player requests carry only a damage-message ID; the
@@ -412,10 +426,10 @@ Undo Blocked.
 
 ## Known limitations
 
-- NPC automation remains limited to GM-authored single-target Strikes. Player
-  automation supports only non-GM-owned character single-target Strikes after
-  the player creates native damage; familiars, companions, NPCs, hazards,
-  spell/impulse attacks, healing, persistent damage, and multiple targets stay
+- NPC automation remains limited to GM-authored single-target Strikes. Character
+  automation supports active OWNER player-, assistant-GM-, or GM-authored
+  single-target Strikes after the user creates native damage; familiars,
+  companions, NPCs, hazards, spell/impulse attacks, and multiple targets stay
   manual.
 - Automatic application can precede Shield Block, Champion reactions, or
   table-specific reaction handling.
@@ -478,11 +492,11 @@ Undo Blocked.
 - External-roll correlation without Nelflow's inert origin marker must be
   structurally unique. Concurrent identical unmarked sources become Ambiguous
   and do not autoroll.
-- PF2e 8.3.0 player Strike damage cards do not persist their originating attack
+- PF2e 8.4.0 character Strike damage cards do not persist their originating attack
   message ID. If simultaneous cards are otherwise structurally identical,
   Nelflow records Ambiguous rather than choosing by time or chat order.
 - PF2e exposes no conclusive structured Shield Block eligibility signal for
-  this workflow. Slice 4.0 adds no reaction prompt and uses no Shield Block;
+  this workflow. Nelflow 0.6.1 adds no reaction prompt and uses no Shield Block;
   tables requiring reaction decisions should keep Player Strike Auto-Apply Off.
 - Private/self-roll documents unavailable to the elected GM cannot be applied.
 
@@ -513,5 +527,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3.2 runtime test plan](docs/SLICE_003_2_TEST_PLAN.md)
 - [Slice 3.3 deterministic damage autoroll](docs/SLICE_003_3_DETERMINISTIC_DAMAGE_AUTOROLL.md)
 - [Slice 3.3 runtime test plan](docs/SLICE_003_3_TEST_PLAN.md)
-- [Slice 4.0 player Strike auto-apply](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
-- [Slice 4.0 runtime test plan](docs/SLICE_004_0_TEST_PLAN.md)
+- [Slice 4.0 / Nelflow 0.6.1 character Strike auto-apply](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
+- [Nelflow 0.6.1 character Strike runtime test plan](docs/SLICE_004_0_TEST_PLAN.md)

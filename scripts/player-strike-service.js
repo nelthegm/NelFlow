@@ -51,14 +51,24 @@ function enqueue(id, operation) {
 }
 
 function appliedAmount(before, after) {
-  return Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp);
+  return before.hp + before.tempHp - after.hp - after.tempHp;
 }
 
-async function markManual(attackMessage, transaction, failureCode, state = TRANSACTION_STATES.MANUAL) {
+async function markManual(
+  attackMessage,
+  transaction,
+  failureCode,
+  state = TRANSACTION_STATES.MANUAL,
+  details = {},
+) {
+  const reason = failureCode ?? "manual-review-required";
   return TransactionStore.update(attackMessage, {
+    ...details,
     state,
-    failureCode,
-    errorStage: failureCode,
+    failureCode: reason,
+    errorStage: reason,
+    manualReason: reason,
+    eligibilityResult: "manual-review",
     manualApplicationRequired: true,
     activeOperation: null,
   });
@@ -77,13 +87,6 @@ function waitingTransactions() {
   return results;
 }
 
-function identityCandidates(evidence) {
-  return waitingTransactions().filter(({ transaction }) => validatePlayerStrikeDamage(
-    transaction.snapshot,
-    { ...evidence, outcome: transaction.snapshot.outcome },
-  ).ok);
-}
-
 async function processDamage(message) {
   const normalized = normalizeDamage(message);
   if (!normalized) return false;
@@ -99,18 +102,10 @@ async function processDamage(message) {
             TransactionStore.get(owner.message),
             PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS,
             TRANSACTION_STATES.AMBIGUOUS,
-          ));
-        }
-      }
-    } else {
-      const near = identityCandidates(normalized.evidence);
-      if (near.length === 1 && currentUserIsAuthority(near[0].transaction.sourceUserId)) {
-        const validation = validatePlayerStrikeDamage(near[0].transaction.snapshot, normalized.evidence);
-        if (validation.reason === PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH) {
-          await enqueue(near[0].message.id, () => markManual(
-            near[0].message,
-            TransactionStore.get(near[0].message),
-            validation.reason,
+            {
+              damageCorrelation: { state: "ambiguous", candidateCount: correlation.candidates.length },
+              correlationMethod: "pf2e-structured-strike-context",
+            },
           ));
         }
       }
@@ -148,7 +143,13 @@ async function processDamage(message) {
       state: TRANSACTION_STATES.DAMAGE_OBSERVED,
       damageMessageId: damageMessage.id,
       damageVariant: damageValidation.variant,
+      observedDamageVariant: damageValidation.variant,
       damageCorrelation: { state: "unique", candidateCount: 1 },
+      correlationMethod: "pf2e-structured-strike-context",
+      requestSenderId: damage.evidence.authorUserId,
+      eligibilityResult: "eligible",
+      failureCode: null,
+      manualReason: null,
       manualApplicationRequired: false,
     });
     if (!PF2eAdapter.persistDamageClaim(damageMessage.id, transaction.id)) {
@@ -211,6 +212,7 @@ async function processDamage(message) {
     transaction = await TransactionStore.update(attackMessage, {
       state: TRANSACTION_STATES.APPLYING,
       preApplication,
+      applicationAttemptCount: Number(transaction.applicationAttemptCount ?? 0) + 1,
     });
     try {
       const applied = await PF2eAdapter.applyDamageRollToRecordedTarget({
@@ -236,6 +238,9 @@ async function processDamage(message) {
         preApplication,
         postApplication,
         appliedAmount: appliedAmount(preApplication, postApplication),
+        eligibilityResult: "applied",
+        failureCode: null,
+        manualReason: null,
         manualApplicationRequired: false,
         activeOperation: null,
       });
@@ -252,6 +257,8 @@ async function processDamage(message) {
         state: TRANSACTION_STATES.INTERRUPTED,
         failureCode: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,
         errorStage: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,
+        manualReason: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,
+        eligibilityResult: "manual-review",
         manualApplicationRequired: true,
         activeOperation: null,
       });
@@ -271,7 +278,7 @@ async function observeAttack(message) {
   if (!normalized) return false;
   // This early partition is what keeps Slice 1 NPC transactions completely
   // outside the player observer even though both share the central hook.
-  if (normalized.evidence.actorType !== "character" || normalized.evidence.authorIsGm) return false;
+  if (normalized.evidence.actorType !== "character") return false;
   const mode = getSetting(SETTINGS.PLAYER_STRIKE_AUTO_APPLY);
   if (mode === PLAYER_STRIKE_AUTO_APPLY_MODES.OFF) return false;
   const authority = currentAuthority(normalized.evidence.authorUserId);
@@ -317,6 +324,8 @@ async function reconcileExisting() {
       failureCode: PLAYER_STRIKE_FAILURES.INTERRUPTED,
       errorStage: PLAYER_STRIKE_FAILURES.INTERRUPTED,
       manualApplicationRequired: true,
+      manualReason: PLAYER_STRIKE_FAILURES.INTERRUPTED,
+      eligibilityResult: "manual-review",
       activeOperation: null,
     });
     count += 1;
@@ -419,7 +428,10 @@ export class PlayerStrikeService {
       state: TRANSACTION_STATES.WAITING_FOR_DAMAGE,
       manualApplicationRequired: false,
       failure: null,
+      failureCode: null,
       errorStage: null,
+      manualReason: null,
+      eligibilityResult: "eligible",
     });
     const damageMessage = game.messages.get(damageMessageId);
     return damageMessage ? processDamage(damageMessage) : false;

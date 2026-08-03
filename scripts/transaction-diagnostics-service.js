@@ -189,9 +189,10 @@ function guardState(descriptor) {
 function inferredFailure(descriptor) {
   if (descriptor.transaction.failure?.code) return descriptor.transaction.failure;
   const state = descriptor.transaction.state ?? descriptor.transaction.phase ?? "unknown";
-  if (!["failed", "error", "interrupted", "ambiguous", "partial"].includes(state)) return null;
+  const explicitReason = descriptor.transaction.failureCode ?? descriptor.transaction.manualReason ?? descriptor.transaction.errorStage;
+  if (!["failed", "error", "interrupted", "ambiguous", "partial", "manual"].includes(state)) return null;
   return createFailureRecord({
-    reason: descriptor.transaction.failureReason ?? descriptor.transaction.errorStage ?? state,
+    reason: descriptor.transaction.failureReason ?? explicitReason ?? (state === "manual" ? "manual-review-required" : state),
     subsystem: descriptor.type,
     operation: "projection",
     state,
@@ -227,6 +228,19 @@ export function transactionDiagnosticProjection(descriptor) {
     authorityState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
       ? processingId ? "assigned" : "missing"
       : null,
+    actorType: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.actorType ?? transaction.snapshot?.actorType ?? null : null,
+    messageAuthorIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? shortId(transaction.messageAuthorId ?? sourceAuthorId) : null,
+    messageAuthorRole: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.messageAuthorRole ?? roleFor(sourceAuthorId) : null,
+    requestSenderIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? shortId(transaction.requestSenderId) : null,
+    processingAuthorityIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? shortId(processingId) : null,
+    authorIsGm: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.authorIsGm === true : null,
+    recordedTargetIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? shortId(transaction.snapshot?.targetTokenUuid) : null,
+    observedDamageVariant: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.observedDamageVariant ?? null : null,
+    correlationMethod: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.correlationMethod ?? null : null,
+    eligibilityResult: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.eligibilityResult ?? null : null,
+    applicationAttemptCount: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? Number(transaction.applicationAttemptCount ?? 0) : null,
+    finalState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.finalState ?? state : null,
+    manualReason: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.manualReason ?? null : null,
     ...counts,
     undoAvailable: ["strike", PLAYER_STRIKE_TRANSACTION_TYPE].includes(descriptor.type)
       ? transaction.state === TRANSACTION_STATES.APPLIED && !transaction.undoBlocked
@@ -300,6 +314,19 @@ export function buildSanitizedDiagnostic(descriptor) {
       attackOutcome: projection.attackOutcome,
       damageLinkState: projection.damageLinkState,
       authorityState: projection.authorityState,
+      actorType: projection.actorType,
+      messageAuthorIdShort: projection.messageAuthorIdShort,
+      messageAuthorRole: projection.messageAuthorRole,
+      requestSenderIdShort: projection.requestSenderIdShort,
+      processingAuthorityIdShort: projection.processingAuthorityIdShort,
+      authorIsGm: projection.authorIsGm,
+      recordedTargetIdShort: projection.recordedTargetIdShort,
+      observedDamageVariant: projection.observedDamageVariant,
+      correlationMethod: projection.correlationMethod,
+      eligibilityResult: projection.eligibilityResult,
+      applicationAttemptCount: projection.applicationAttemptCount,
+      finalState: projection.finalState,
+      manualReason: projection.manualReason,
       targetCount: projection.targetCount,
       saveCount: projection.saveCount,
       resolvedSaveCount: projection.resolvedSaveCount,

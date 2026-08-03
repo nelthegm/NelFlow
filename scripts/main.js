@@ -98,5 +98,5 @@ async function initializeReady() {
     });
   });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Slice 4.0 ready");
+  logger.debug("Nelflow 0.6.1 ready");
 }

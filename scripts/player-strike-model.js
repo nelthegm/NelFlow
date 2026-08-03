@@ -72,7 +72,9 @@ export function validatePlayerStrikeAttack(evidence) {
   ) {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED };
   }
-  if (evidence.authorIsGm || !evidence.authorActive || !evidence.authorOwnsSource) {
+  // Character eligibility is document-based. GM status affects authority
+  // election, not whether a native character Strike belongs in this workflow.
+  if (!evidence.authorActive || !evidence.authorOwnsSource) {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED };
   }
   if (
@@ -133,7 +135,10 @@ export function buildPlayerStrikeSnapshot(evidence, { processingUserId, settingM
     outcome: evidence.outcome,
     damageVariant: expectedDamageVariant(evidence.outcome),
     mapIncreases: evidence.mapIncreases,
+    actorType: evidence.actorType,
     authoringUserId: evidence.authorUserId,
+    authorRole: evidence.authorRole ?? null,
+    authorIsGm: evidence.authorIsGm === true,
     processingUserId,
     settingMode,
     sessionId,
@@ -153,6 +158,7 @@ export function validatePlayerStrikeSnapshot(snapshot, evidence) {
     (evidence.altUsage ?? null) === (snapshot.altUsage ?? null) &&
     evidence.authorUserId === snapshot.authoringUserId &&
     evidence.mapIncreases === snapshot.mapIncreases &&
+    evidence.actorType === snapshot.actorType &&
     evidence.outcome === snapshot.outcome;
   if (!sourceExact) return { ok: false, reason: PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED };
   const targetExact =
@@ -168,9 +174,6 @@ export function validatePlayerStrikeDamage(snapshot, evidence) {
   if (!snapshot || !evidence?.isNativeDamageRoll || evidence.contextType !== "damage-roll") {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.DAMAGE_MISSING };
   }
-  if (evidence.isHealing || evidence.hasPersistentDamage) {
-    return { ok: false, reason: PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED };
-  }
   const exact =
     evidence.sourceActorUuid === snapshot.sourceActorUuid &&
     evidence.sourceTokenUuid === snapshot.sourceTokenUuid &&
@@ -183,7 +186,10 @@ export function validatePlayerStrikeDamage(snapshot, evidence) {
     evidence.mapIncreases === snapshot.mapIncreases;
   if (!exact) return { ok: false, reason: PLAYER_STRIKE_FAILURES.TARGET_CHANGED };
   const variant = damageVariantFromOutcome(evidence.outcome);
-  if (!variant || variant !== snapshot.damageVariant) {
+  // PF2e records which native button produced the damage message. The user's
+  // ordinary/critical selection is authoritative after any successful hit;
+  // Nelflow applies that existing roll with multiplier 1 and never transforms it.
+  if (!variant) {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH };
   }
   return { ok: true, reason: null, variant };

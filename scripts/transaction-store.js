@@ -157,7 +157,7 @@ export class TransactionStore {
     return this.get(attackMessage);
   }
 
-  /** Persist the authoritative projection of a player-authored native Strike. */
+  /** Persist the authoritative projection of a character-authored native Strike. */
   static async claimPlayerStrike(attackMessage, snapshot, { state, failureCode = null } = {}) {
     const existing = this.get(attackMessage);
     if (existing?.transactionType === "player-strike" && existing.role === "attack") return existing;
@@ -182,7 +182,21 @@ export class TransactionStore {
       postApplication: null,
       appliedAmount: null,
       damageVariant: snapshot.damageVariant,
+      observedDamageVariant: null,
       damageCorrelation: { state: "waiting", candidateCount: 0 },
+      correlationMethod: null,
+      actorType: snapshot.actorType,
+      messageAuthorId: snapshot.authoringUserId,
+      messageAuthorRole: snapshot.authorRole,
+      requestSenderId: snapshot.authoringUserId,
+      authorIsGm: snapshot.authorIsGm,
+      eligibilityResult: state === TRANSACTION_STATES.WAITING_FOR_DAMAGE
+        ? "eligible"
+        : state === TRANSACTION_STATES.SKIPPED ? "ineligible" : "manual-review",
+      applicationAttemptCount: 0,
+      finalState: state,
+      failureCode,
+      manualReason: failureCode,
       manualApplicationRequired: state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE,
       undoBlocked: false,
       presentationError: null,
@@ -234,6 +248,7 @@ export class TransactionStore {
       attackMessageId: current.attackMessageId,
       updatedAt: now(),
       revision: Number(current.revision ?? 0) + 1,
+      finalState: nextState,
     };
     if (nextState !== current.state) {
       appendAudit(transaction, {
@@ -245,7 +260,15 @@ export class TransactionStore {
         revision: transaction.revision,
       });
     }
-    if (nextState === TRANSACTION_STATES.FAILED || changes.undoBlocked || changes.presentationError || changes.undoOperation?.state === "failed") {
+    if (
+      nextState === TRANSACTION_STATES.FAILED ||
+      (current.transactionType === "player-strike" &&
+        [TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.AMBIGUOUS].includes(nextState) &&
+        changes.failureCode) ||
+      changes.undoBlocked ||
+      changes.presentationError ||
+      changes.undoOperation?.state === "failed"
+    ) {
       recordFailure(transaction, {
         reason: changes.undoBlocked ? "health-changed" : changes.undoOperation?.reason ?? changes.failureCode ?? changes.errorStage ?? "internal-exception",
         subsystem: changes.undoBlocked || changes.undoOperation?.state === "failed"
