@@ -1,4 +1,4 @@
-# Slice 4.0 / Nelflow 0.6.1: Character Strike Auto-Apply
+# Slice 4.0 / Nelflow 0.6.2: Deterministic Character Strike Damage
 
 ## Goal and supported workflow
 
@@ -40,11 +40,17 @@ The attack outcome is the PF2e context outcome. Nelflow does not recompute AC, m
 
 Nelflow never calls a Strike's `damage` or `critical` method for character attacks, never clicks a card, and never opens or confirms a damage dialog. An ordinary roll selected after a critical hit and a critical roll selected after a normal hit are both applied exactly as PF2e rolled them with multiplier 1. Nelflow does not transform, double, halve, or reinterpret either variant.
 
-## Exact correlation and concurrency
+## Exact click intent, correlation, and concurrency
 
-PF2e 8.4.0 damage messages preserve source actor/token/item, target actor/token, author, Strike action index, alternative usage, MAP, context type, and selected ordinary/critical outcome. A candidate must match every identity field and contain one native structured DamageRoll. The selected damage outcome is recorded diagnostically but is not required to match the attack outcome. Names, formulas, totals, content, HTML, time, adjacency, newest-message selection, and current targeting are not evidence.
+PF2e 8.4.0 renders both native controls as `button[data-action="strike-damage"]`; `data-outcome="success"` selects Damage and `data-outcome="critical-success"` selects Critical Damage. PF2e attaches one target-phase click listener that invokes the prepared Strike's native `damage` or `critical` function. Nelflow adds one capture-phase listener to the rendered message root. It records intent before PF2e's listener runs but never prevents propagation, calls either native method, opens a dialog, or creates a roll. The same render hook covers the main chat log and chat popout, and a weak root guard prevents duplicate listeners on one rendered element.
 
-Each attack transaction and damage message can claim each other once. A stable elected active GM, per-attack queue, current transaction state, revisioned durable flag, and the existing damage-claim registry prevent repeated hooks, socket wake-ups, and other GM clients from applying twice. Two messages that remain structurally indistinguishable are deliberately ambiguous; Nelflow will not guess which attack owns either card. MAP, item, target, author, action index, or alternative usage normally separates rapid attacks.
+The 30-second client-local intent records schema version 1, exact attack message and transaction IDs, nonce, requested native variant, clicking user, source actor/token/item, Strike identifier and action index, alternate usage, attack outcome, scene, and available combat/round/turn context. The authoring client's `preCreateChatMessage` hook accepts exactly one fresh structurally matching intent and adds `flags.nelflow.characterStrikeCorrelation` without touching PF2e flags or visible content. It consumes the intent immediately. Cancelled dialogs simply expire; they do not change the durable transaction state.
+
+The elected GM treats the flag as an untrusted causal hint. It re-reads the exact source attack, transaction, native damage message, actor, item, owner permission, recorded target, setting, state, nonce shape, author, variant, and age. Correlation priority is: validated click intent; any future exact native linkage; structured PF2e fallback; Manual Review for an actual observed conflict. A direct link therefore selects Attack B even if Attack A is structurally identical and waiting.
+
+PF2e damage messages preserve source actor/token/item, target actor/token, author, Strike action index, alternative usage, MAP, context type, and selected ordinary/critical outcome. Structured fallback still requires every identity field and one native DamageRoll. Names, formulas, totals, content, HTML, chat adjacency, newest-message selection, and current targeting are not evidence. Time is used only to expire a known click intent, never to choose a fallback candidate.
+
+Each attack transaction and damage message can claim each other once. A stable elected active GM, per-attack queue, current transaction state, revisioned durable flag, and the existing damage-claim registry prevent repeated hooks, socket wake-ups, and other GM clients from applying twice. Without a direct intent, an actually observed message matching multiple transactions is deliberately ambiguous. Merely having multiple theoretical waiting matches does not change any transaction from Waiting for Damage.
 
 ## Authority and socket security
 
@@ -58,7 +64,7 @@ The authoring client never mutates target HP. No general-purpose damage endpoint
 
 The adapter passes the unchanged native DamageRoll with multiplier 1 through PF2e's contextual clone and `Actor#applyDamage`. PF2e owns typed instances, materials, precision, resistance, weakness, immunity, temporary HP, ephemeral effects, healing/negative values, splash/persistent categories, and critical damage already present in the roll. Nelflow does not parse or reconstruct the roll and does not subtract HP.
 
-PF2e 8.4.0 exposes no conclusive structured field proving that a particular target currently has a legal Shield Block choice. Nelflow 0.6.1 therefore does not guess or implement a reaction gate. It never selects Shield Block, consumes a reaction, damages a shield, computes Hardness, or presents a reaction prompt. The existing adapter uses `shieldBlockRequest: false`; tables needing reaction decisions should leave this setting Off until the later reaction-gate slice.
+PF2e 8.4.0 exposes no conclusive structured field proving that a particular target currently has a legal Shield Block choice. Nelflow 0.6.2 therefore does not guess or implement a reaction gate. It never selects Shield Block, consumes a reaction, damages a shield, computes Hardness, or presents a reaction prompt. The existing adapter uses `shieldBlockRequest: false`; tables needing reaction decisions should leave this setting Off until the later reaction-gate slice.
 
 ## Transaction lifecycle, UI, Undo, and guards
 
@@ -66,7 +72,7 @@ The existing canonical Strike transaction is extended with `transactionType: "pl
 
 `waiting-for-damage -> damage-observed -> validating -> claimed -> applying -> applied -> undone`
 
-Manual, ambiguous, failed, interrupted, skipped, and abandoned are durable alternatives. The attack and linked damage cards show a compact localized Waiting, Applying, Applied, Manual Review, Interrupted, Miss, or Undone status plus the permitted recorded-target label and known applied amount. GMs additionally get Transaction Details, safe failure/audit data, recovery controls, and guarded Undo. Players receive no raw target UUID, fingerprints, raw flags, private totals, or GM diagnostic context.
+Manual, ambiguous, failed, interrupted, skipped, and abandoned are durable alternatives. `waiting-for-damage -> ambiguous` is rejected unless an observed damage-message ID, multiple structured candidates, or a documented direct-intent conflict exists. The attack and linked damage cards show a compact localized Waiting, Applying, Applied, Manual Review, Interrupted, Miss, or Undone status plus the permitted recorded-target label and known applied amount. GMs additionally get Transaction Details, safe failure/audit data, recovery controls, and guarded Undo. Players receive no raw target UUID, fingerprints, raw flags, private totals, or GM diagnostic context.
 
 No character-Strike control is presentation-guarded. Native Damage/Critical Damage and native/manual application controls stay functional. Guard clearing is therefore presentation-only and unnecessary for this workflow.
 
@@ -76,7 +82,7 @@ GM Undo calls the existing Slice 1 guarded Undo. It requires exact post-applicat
 
 Waiting transactions reconstruct and continue waiting for a future native message. A previous-session `validating`, `claimed`, or `applying` transaction becomes Interrupted and never reapplies. Applied/undone records reconstruct with guarded Undo; manual, ambiguous, and abandoned records stay terminal.
 
-The stable character-Strike failure codes integrate with Slice 3.4. Durable flags record actor type, author ID/role/GM status, request sender, processing authority, exact recorded target UUID, attack outcome, observed native damage variant, correlation method, eligibility, application attempts, final state, failure code, and Manual reason. The sanitized diagnostic export shortens IDs and omits names, formulas, totals, full UUIDs, raw flags, and hidden data. A Manual state without a meaningful failure is normalized to `manual-review-required` instead of displaying no failure code.
+The stable character-Strike failure codes integrate with Slice 3.4. Durable flags record actor and authority data, target, outcome, observed variant/message, final correlation method, direct-intent validation and rejection, intent identity/age/expiration, fallback candidate count and shortened IDs, ambiguity stage, application attempts, final state, failure code, and Manual reason. The sanitized diagnostic export shortens IDs and omits names, formulas, totals, full UUIDs, raw flags, and hidden data. A Manual state without a meaningful failure is normalized to `manual-review-required` instead of displaying no failure code.
 
 Re-scan is inspection-only. Use Existing Damage Message requires a GM to select one exact structurally compatible unclaimed card; it then re-enters the same GM validation/application service. Use Existing Damage Message, Mark Manual, and Abandon appear for actual Manual/Ambiguous/Failed/Interrupted recovery states, not valid Applied transactions. Recovery preserves native documents and survives reload.
 
@@ -86,7 +92,7 @@ Re-scan is inspection-only. Use Existing Damage Message requires a GM to select 
 - Dice So Nice remains driven by native message creation. Toolbelt, Workbench, Better Chat Message, NPC stacks, basic saves, and spell autoroll retain separate transaction identities.
 - Modules that strip structured PF2e message data cause Manual Review.
 - Self-only or otherwise private documents unavailable to the elected GM cannot be processed.
-- Structurally indistinguishable simultaneous character attacks are ambiguous because PF2e's native damage message does not persist its originating attack-message ID. Nelflow does not use time or card order to break that tie.
+- PF2e does not natively persist an originating attack-message ID on damage cards. Nelflow supplies that link for normal native card clicks. Structurally indistinguishable unmarked messages, or multiple same-user damage dialogs completed out of causal order, can still require recovery rather than being guessed by time or chat order.
 - Duplicate browser tabs for one Foundry user share document authority and remain a distributed-lock limitation, although durable claims and revisions avoid intentional duplicate application.
 - Multi-target/splash-target automation is deferred to Slice 5.0 / Nelflow 0.7.0. Shield/reaction prompting is deferred to a later reaction-gate slice.
 - Secondary-target fan-out, conditions, other resource Undo, defeated state, and shield restoration are not supported. Persistent, splash, healing, category, and material semantics already contained in the selected native roll remain PF2e-owned during application.

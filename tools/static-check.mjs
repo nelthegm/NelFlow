@@ -743,6 +743,7 @@ if (!constantsSource.includes("SETTINGS_MIGRATION_VERSION = 4")) {
 const playerStrikeModel = read("scripts/player-strike-model.js");
 const playerStrikeAdapter = read("scripts/player-strike-adapter.js");
 const playerStrikeService = read("scripts/player-strike-service.js");
+const playerStrikeIntent = read("scripts/player-strike-intent.js");
 const playerStrikeRuntime = `${playerStrikeAdapter}\n${playerStrikeService}`;
 for (const required of [
   'PLAYER_STRIKE_TRANSACTION_TYPE = "player-strike"',
@@ -787,6 +788,31 @@ for (const required of [
   "capturePlayerStrikeObservation",
 ]) {
   if (!playerStrikeRuntime.includes(required)) fail(`player Strike adapter is missing ${required}`);
+}
+for (const required of [
+  'button[data-action="strike-damage"]',
+  "capture: true",
+  "CHARACTER_STRIKE_INTENT_MAX_AGE_MS",
+  "characterStrikeCorrelation",
+  "captureCharacterStrikeDamageCorrelation",
+  "validateCharacterStrikeCorrelation",
+]) {
+  if (!`${playerStrikeIntent}\n${playerStrikeModel}\n${playerStrikeService}`.includes(required)) {
+    fail(`deterministic character Strike intent is missing ${required}`);
+  }
+}
+if (/preventDefault|stopPropagation|stopImmediatePropagation|\.critical\s*\(|\.damage\s*\(/.test(playerStrikeIntent)) {
+  fail("character Strike click intent must not block PF2e controls or invoke native damage");
+}
+if (!playerStrikeService.includes('correlationMethod = direct.ok ? "character-strike-click-intent"')) {
+  fail("validated character Strike click intent must take priority over structured fallback");
+}
+if (!playerStrikeService.includes("Ignored premature Player Strike ambiguity")) {
+  fail("player Strike state machine must reject ambiguity without observed conflict evidence");
+}
+const playerStrikeIntentTests = read("tests/player-strike-intent.test.mjs");
+if ((playerStrikeIntentTests.match(/test\(/g) ?? []).length < 40) {
+  fail("Nelflow 0.6.2 requires at least 40 focused click-intent scenarios");
 }
 if (/rollStrikeDamage|\.critical\s*\(|\.damage\s*\(/.test(playerStrikeService)) {
   fail("player Strike workflow must not invoke native damage rolling");

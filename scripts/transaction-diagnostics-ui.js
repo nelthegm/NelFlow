@@ -216,6 +216,20 @@ function transactionPanel(descriptor) {
     field(list, "Nelflow.Diagnostics.Field.ApplicationAttempts", projection.applicationAttemptCount);
     field(list, "Nelflow.Diagnostics.Field.FinalState", projection.finalState);
     field(list, "Nelflow.Diagnostics.Field.ManualReason", projection.manualReason);
+    field(list, "Nelflow.Diagnostics.Field.DirectIntentPresent", projection.directIntentPresent ? localize("Nelflow.Diagnostics.Yes") : localize("Nelflow.Diagnostics.No"));
+    field(list, "Nelflow.Diagnostics.Field.IntentNonce", projection.directIntentNonceShort);
+    field(list, "Nelflow.Diagnostics.Field.IntentSourceMessage", projection.directIntentSourceMessageIdShort);
+    field(list, "Nelflow.Diagnostics.Field.IntentTransaction", projection.directIntentTransactionIdShort);
+    field(list, "Nelflow.Diagnostics.Field.IntentVariant", projection.directIntentRequestedVariant);
+    field(list, "Nelflow.Diagnostics.Field.IntentAuthor", projection.directIntentAuthorIdShort);
+    field(list, "Nelflow.Diagnostics.Field.IntentAge", projection.directIntentAgeMs);
+    field(list, "Nelflow.Diagnostics.Field.IntentExpiration", projection.directIntentExpirationState);
+    field(list, "Nelflow.Diagnostics.Field.ObservedDamageMessage", projection.observedDamageMessageIdShort);
+    field(list, "Nelflow.Diagnostics.Field.DirectValidation", projection.directCorrelationValidation);
+    field(list, "Nelflow.Diagnostics.Field.FallbackCandidates", projection.structuredFallbackCandidateCount);
+    field(list, "Nelflow.Diagnostics.Field.FallbackCandidateIds", projection.structuredFallbackCandidateIdsShort?.join(", "));
+    field(list, "Nelflow.Diagnostics.Field.AmbiguityStage", projection.ambiguityStage);
+    field(list, "Nelflow.Diagnostics.Field.IntentRejectedReason", projection.directIntentRejectedReason);
   }
   field(list, "Nelflow.Diagnostics.Field.Targets", projection.targetCount);
   field(list, "Nelflow.Diagnostics.Field.Saves", `${projection.resolvedSaveCount}/${projection.saveCount}`);

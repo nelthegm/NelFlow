@@ -1,8 +1,8 @@
-# Nelflow 0.6.1 Character Strike Runtime Test Plan
+# Nelflow 0.6.2 Deterministic Character Strike Runtime Test Plan
 
 Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e and Nelflow only, then repeat the compatibility cases with PF2e Toolbelt 3.52.0-3.52.1 and the named chat modules. Record settings, message IDs privately, HP/temp HP before and after, diagnostics, screenshots, console output, and reload results. These cases are runtime acceptance and were not executed by the Node test suite.
 
-1. Install `nelflow.zip` in a copied world and confirm version 0.6.1 loads with `module.json` at the archive root.
+1. Install `nelflow.zip` in a copied world and confirm version 0.6.2 loads with `module.json` at the archive root.
 2. Update an existing Nelflow 0.5.1 world and confirm Player Strike Auto-Apply migrates to Off once.
 3. Refresh twice and confirm the migration is idempotent.
 4. Create a fresh test world and confirm the setting defaults to Hostile Targets.
@@ -40,7 +40,7 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 36. Confirm Off leaves attack/damage messages and PF2e application entirely native.
 37. Make two rapid attacks with the same weapon at MAP 0 and MAP 1, then click damage in reverse order.
 38. Confirm each exact damage message applies once to its attack's snapshotted target.
-39. Create two structurally indistinguishable attacks where feasible and confirm Ambiguous rather than time/order guessing.
+39. Create an unmarked damage message matching two structurally indistinguishable attacks and confirm Ambiguous rather than time/order guessing.
 40. Double-click Damage and confirm two native cards cannot both claim one attack; no duplicate HP application occurs.
 41. Have two players attack simultaneously and confirm isolated authors/transactions.
 42. Connect two active GMs and confirm stable election produces one claim/application.
@@ -94,3 +94,46 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 90. Mutate HP or temp HP after application; confirm Undo safely refuses.
 91. Repeat a GM NPC Strike and confirm the existing NPC resolver/stack behavior is unchanged.
 92. Repeat Toolbelt spell and NPC basic-save flows and confirm their transaction behavior is unchanged.
+
+## Nelflow 0.6.2 click-intent correlation matrix
+
+93. GM-authored character Strike, success, click Damage; confirm direct link and one application.
+94. GM-authored critical success, click Critical Damage; confirm exact critical roll applies.
+95. GM-authored critical success, click ordinary Damage; confirm exact ordinary roll applies.
+96. Player-authored Strike, click Damage; confirm the elected GM applies once.
+97. Assistant-GM-authored Strike; confirm exactly one active authority applies.
+98. Leave two identical Strikes waiting, then click Damage on Attack B; confirm only B links.
+99. Make two rapid same-character, same-weapon attacks; confirm source-message identity keeps them distinct.
+100. Make two characters attack concurrently; confirm no cross-correlation.
+101. Inspect the damage flag and confirm the exact source ChatMessage ID was recorded.
+102. Click Critical Damage and confirm requested variant `critical` was recorded.
+103. Confirm PF2e's native click handler executes exactly once.
+104. Confirm Nelflow creates no additional damage roll or damage dialog.
+105. Confirm the native damage message receives `flags.nelflow.characterStrikeCorrelation` without PF2e flag changes.
+106. Forge or alter a transaction ID in copied metadata; confirm the GM rejects it and applies nothing.
+107. Alter the structured source actor; confirm it cannot consume the intent.
+108. Alter the structured source item; confirm it cannot consume the intent.
+109. Wait more than 30 seconds before creating a matching message; confirm the intent cannot be consumed.
+110. Cancel or fail the native damage roll; confirm the intent expires and the attack remains waiting.
+111. Create no damage message; confirm the transaction remains Waiting for Damage, not Ambiguous.
+112. Observe one unmarked damage message matching two equal transactions; confirm Manual Review includes candidate diagnostics.
+113. Repeat the equal-candidate case with a valid direct intent; confirm the direct intent wins.
+114. Deliver duplicate create hooks for one linked damage message; confirm one application.
+115. Deliver duplicate socket wake-ups for one linked damage message; confirm one application.
+116. Connect multiple active GMs; confirm stable election produces one applying authority.
+117. Refresh after the attack and then click Damage; confirm the rehydrated card creates a new intent.
+118. Refresh after direct correlation; confirm the persisted damage link remains exact.
+119. Refresh during application; confirm Interrupted/recovery behavior and no duplicate damage.
+120. Change current target after the attack; confirm only the recorded target is eligible.
+121. Delete the recorded target before damage; confirm explicit safe failure and no application.
+122. Roll with zero targets; confirm no eligible transaction.
+123. Roll with multiple targets; confirm no automatic application.
+124. Create damage after a miss; confirm no automatic application.
+125. Create damage after a critical failure; confirm no automatic application.
+126. In Hostile Targets mode, confirm neutral and friendly recorded targets are rejected.
+127. In All Targets mode, confirm hostile, neutral, and friendly exact targets are accepted.
+128. In Off mode, confirm no click intent or automatic application is created.
+129. Undo with unchanged HP/temp HP; confirm exact guarded restoration.
+130. Repeat the existing NPC Strike stack/application tests; confirm no behavior change.
+131. Repeat Toolbelt basic-save application and autoroll tests; confirm no behavior change.
+132. Inspect and copy diagnostics for waiting, direct-linked, rejected, fallback-ambiguous, applied, and recovery states.

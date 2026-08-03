@@ -7,6 +7,8 @@ import {
 export const PLAYER_STRIKE_TRANSACTION_TYPE = "player-strike";
 export const PLAYER_STRIKE_CAPTURE_SCHEMA_VERSION = 1;
 export const PLAYER_STRIKE_SOCKET_ACTION = "player-strike-damage-observed";
+export const CHARACTER_STRIKE_CORRELATION_SCHEMA_VERSION = 1;
+export const CHARACTER_STRIKE_INTENT_MAX_AGE_MS = 30_000;
 
 export const PLAYER_STRIKE_FAILURES = Object.freeze({
   DISABLED: "player-strike-disabled",
@@ -19,6 +21,8 @@ export const PLAYER_STRIKE_FAILURES = Object.freeze({
   NOT_A_HIT: "player-strike-not-a-hit",
   DAMAGE_MISSING: "player-strike-damage-missing",
   DAMAGE_AMBIGUOUS: "player-strike-damage-ambiguous",
+  DIRECT_INTENT_INVALID: "player-strike-direct-intent-invalid",
+  DIRECT_INTENT_EXPIRED: "player-strike-direct-intent-expired",
   VARIANT_MISMATCH: "player-strike-damage-variant-mismatch",
   AUTHORITY_MISSING: "player-strike-authority-missing",
   APPLICATION_FAILED: "player-strike-application-failed",
@@ -170,7 +174,7 @@ export function validatePlayerStrikeSnapshot(snapshot, evidence) {
     : { ok: false, reason: PLAYER_STRIKE_FAILURES.TARGET_CHANGED };
 }
 
-export function validatePlayerStrikeDamage(snapshot, evidence) {
+export function validatePlayerStrikeDamage(snapshot, evidence, { authorUserId = snapshot?.authoringUserId } = {}) {
   if (!snapshot || !evidence?.isNativeDamageRoll || evidence.contextType !== "damage-roll") {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.DAMAGE_MISSING };
   }
@@ -180,7 +184,7 @@ export function validatePlayerStrikeDamage(snapshot, evidence) {
     evidence.sourceItemUuid === snapshot.sourceItemUuid &&
     evidence.targetActorUuid === snapshot.targetActorUuid &&
     evidence.targetTokenUuid === snapshot.targetTokenUuid &&
-    evidence.authorUserId === snapshot.authoringUserId &&
+    evidence.authorUserId === authorUserId &&
     evidence.actionIndex === snapshot.actionIndex &&
     (evidence.altUsage ?? null) === (snapshot.altUsage ?? null) &&
     evidence.mapIncreases === snapshot.mapIncreases;
@@ -193,6 +197,65 @@ export function validatePlayerStrikeDamage(snapshot, evidence) {
     return { ok: false, reason: PLAYER_STRIKE_FAILURES.VARIANT_MISMATCH };
   }
   return { ok: true, reason: null, variant };
+}
+
+function exactNullable(left, right) {
+  return (left ?? null) === (right ?? null);
+}
+
+export function requestedVariantFromDamageOutcome(outcome) {
+  if (outcome === "success") return "damage";
+  if (outcome === "criticalSuccess") return "critical";
+  return null;
+}
+
+/** Validate untrusted direct-link metadata against both durable state and PF2e's native message evidence. */
+export function validateCharacterStrikeCorrelation(
+  transaction,
+  evidence,
+  correlation,
+  { now = Date.now(), maxAgeMs = CHARACTER_STRIKE_INTENT_MAX_AGE_MS } = {},
+) {
+  if (
+    !transaction ||
+    transaction.transactionType !== PLAYER_STRIKE_TRANSACTION_TYPE ||
+    transaction.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE ||
+    !correlation ||
+    correlation.version !== CHARACTER_STRIKE_CORRELATION_SCHEMA_VERSION ||
+    correlation.transactionId !== transaction.id ||
+    correlation.sourceMessageId !== transaction.attackMessageId ||
+    typeof correlation.intentNonce !== "string" ||
+    !/^[A-Za-z0-9_-]{12,64}$/.test(correlation.intentNonce) ||
+    !["damage", "critical"].includes(correlation.requestedVariant) ||
+    typeof correlation.authorUserId !== "string" ||
+    !Number.isFinite(correlation.createdAt)
+  ) {
+    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID };
+  }
+  const ageMs = now - correlation.createdAt;
+  if (ageMs < -5_000 || ageMs > maxAgeMs) {
+    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_EXPIRED, ageMs };
+  }
+  const snapshot = transaction.snapshot;
+  const metadataExact =
+    correlation.sourceActorUuid === snapshot.sourceActorUuid &&
+    exactNullable(correlation.sourceTokenUuid, snapshot.sourceTokenUuid) &&
+    correlation.sourceItemUuid === snapshot.sourceItemUuid &&
+    correlation.strikeIdentifier === snapshot.strikeIdentifier &&
+    correlation.actionIndex === snapshot.actionIndex &&
+    exactNullable(correlation.altUsage, snapshot.altUsage) &&
+    correlation.attackOutcome === snapshot.outcome &&
+    exactNullable(correlation.sceneId, snapshot.sceneId);
+  const damageValidation = validatePlayerStrikeDamage(snapshot, evidence, {
+    authorUserId: correlation.authorUserId,
+  });
+  if (!metadataExact || !damageValidation.ok) {
+    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID, ageMs };
+  }
+  if (requestedVariantFromDamageOutcome(evidence.outcome) !== correlation.requestedVariant) {
+    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID, ageMs };
+  }
+  return { ok: true, reason: null, ageMs, variant: damageValidation.variant };
 }
 
 export function correlatePlayerStrikeDamage(transactions, evidence) {
@@ -208,6 +271,50 @@ export function correlatePlayerStrikeDamage(transactions, evidence) {
       ? PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS
       : PLAYER_STRIKE_FAILURES.DAMAGE_MISSING,
     candidates: eligible,
+  };
+}
+
+/** Prefer a validated causal click-intent before considering structured fallback candidates. */
+export function correlatePlayerStrikeDamageWithIntent(
+  transactions,
+  evidence,
+  correlation,
+  options = {},
+) {
+  const waiting = [...(transactions ?? [])].filter((transaction) =>
+    transaction?.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE &&
+    transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+  );
+  if (correlation) {
+    const transaction = waiting.find((candidate) =>
+      candidate.id === correlation.transactionId &&
+      candidate.attackMessageId === correlation.sourceMessageId,
+    ) ?? null;
+    const validation = transaction
+      ? validateCharacterStrikeCorrelation(transaction, evidence, correlation, options)
+      : { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID };
+    return validation.ok
+      ? {
+        ok: true,
+        transaction,
+        candidates: [transaction],
+        method: "character-strike-click-intent",
+        directValidation: validation,
+      }
+      : {
+        ok: false,
+        transaction,
+        candidates: transaction ? [transaction] : [],
+        method: "character-strike-click-intent-rejected",
+        reason: validation.reason,
+        directValidation: validation,
+      };
+  }
+  const fallback = correlatePlayerStrikeDamage(waiting, evidence);
+  return {
+    ...fallback,
+    method: "pf2e-structured-strike-context",
+    directValidation: null,
   };
 }
 

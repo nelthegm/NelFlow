@@ -10,9 +10,12 @@ import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { createFailureRecord, shortId } from "./transaction-failure.js";
 import { PlayerStrikeService } from "./player-strike-service.js";
-import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
+import {
+  CHARACTER_STRIKE_INTENT_MAX_AGE_MS,
+  PLAYER_STRIKE_TRANSACTION_TYPE,
+} from "./player-strike-model.js";
 
-export const DIAGNOSTIC_EXPORT_SCHEMA_VERSION = 1;
+export const DIAGNOSTIC_EXPORT_SCHEMA_VERSION = 2;
 const healthNotified = new Set();
 
 function roleFor(userId) {
@@ -204,6 +207,16 @@ function inferredFailure(descriptor) {
 
 export function transactionDiagnosticProjection(descriptor) {
   const transaction = descriptor.transaction;
+  const localIntent = descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+    ? PlayerStrikeService.intentDiagnostic(descriptor.id)
+    : null;
+  const intentCreatedAt = transaction.directIntentCreatedAt ?? localIntent?.createdAt ?? null;
+  const intentAgeMs = Number.isFinite(intentCreatedAt) ? Math.max(0, Date.now() - intentCreatedAt) : null;
+  const intentExpirationState = transaction.directIntentConsumedAt
+    ? "consumed"
+    : localIntent?.expirationState ?? (intentAgeMs == null
+      ? "none"
+      : intentAgeMs > CHARACTER_STRIKE_INTENT_MAX_AGE_MS ? "expired" : "fresh");
   const counts = targetCounts(descriptor);
   const sourceAuthorId = transaction.sourceUserId ?? transaction.authoringUserId ?? transaction.snapshot?.processingUserId;
   const processingId = transaction.processingUserId ?? transaction.rollingUserId ?? transaction.snapshot?.processingUserId;
@@ -241,6 +254,42 @@ export function transactionDiagnosticProjection(descriptor) {
     applicationAttemptCount: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? Number(transaction.applicationAttemptCount ?? 0) : null,
     finalState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.finalState ?? state : null,
     manualReason: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.manualReason ?? null : null,
+    directIntentPresent: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directIntentPresent === true || Boolean(localIntent)
+      : null,
+    directIntentNonceShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.directIntentNonce ?? localIntent?.intentNonce)
+      : null,
+    directIntentSourceMessageIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.directIntentSourceMessageId ?? localIntent?.sourceMessageId)
+      : null,
+    directIntentTransactionIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.directIntentTransactionId ?? localIntent?.transactionId)
+      : null,
+    directIntentRequestedVariant: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directIntentRequestedVariant ?? localIntent?.requestedVariant ?? null
+      : null,
+    directIntentAuthorIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.directIntentAuthorId ?? localIntent?.authorUserId)
+      : null,
+    directIntentAgeMs: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? intentAgeMs : null,
+    directIntentExpirationState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? intentExpirationState : null,
+    observedDamageMessageIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.observedDamageMessageId)
+      : null,
+    directCorrelationValidation: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directCorrelationValidation ?? "not-present"
+      : null,
+    structuredFallbackCandidateCount: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? Number(transaction.structuredFallbackCandidateCount ?? 0)
+      : null,
+    structuredFallbackCandidateIdsShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? (transaction.structuredFallbackCandidateTransactionIds ?? []).map((id) => shortId(id))
+      : [],
+    ambiguityStage: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.ambiguityStage ?? null : null,
+    directIntentRejectedReason: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directIntentRejectedReason ?? null
+      : null,
     ...counts,
     undoAvailable: ["strike", PLAYER_STRIKE_TRANSACTION_TYPE].includes(descriptor.type)
       ? transaction.state === TRANSACTION_STATES.APPLIED && !transaction.undoBlocked
@@ -327,6 +376,20 @@ export function buildSanitizedDiagnostic(descriptor) {
       applicationAttemptCount: projection.applicationAttemptCount,
       finalState: projection.finalState,
       manualReason: projection.manualReason,
+      directIntentPresent: projection.directIntentPresent,
+      directIntentNonceShort: projection.directIntentNonceShort,
+      directIntentSourceMessageIdShort: projection.directIntentSourceMessageIdShort,
+      directIntentTransactionIdShort: projection.directIntentTransactionIdShort,
+      directIntentRequestedVariant: projection.directIntentRequestedVariant,
+      directIntentAuthorIdShort: projection.directIntentAuthorIdShort,
+      directIntentAgeMs: projection.directIntentAgeMs,
+      directIntentExpirationState: projection.directIntentExpirationState,
+      observedDamageMessageIdShort: projection.observedDamageMessageIdShort,
+      directCorrelationValidation: projection.directCorrelationValidation,
+      structuredFallbackCandidateCount: projection.structuredFallbackCandidateCount,
+      structuredFallbackCandidateIdsShort: projection.structuredFallbackCandidateIdsShort,
+      ambiguityStage: projection.ambiguityStage,
+      directIntentRejectedReason: projection.directIntentRejectedReason,
       targetCount: projection.targetCount,
       saveCount: projection.saveCount,
       resolvedSaveCount: projection.resolvedSaveCount,

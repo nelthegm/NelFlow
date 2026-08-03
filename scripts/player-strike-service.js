@@ -10,6 +10,7 @@ import {
   reconcilePlayerStrikeReload,
   validatePlayerStrikeAttack,
   validatePlayerStrikeDamage,
+  validateCharacterStrikeCorrelation,
   validatePlayerStrikeSnapshot,
   validatePlayerStrikeSocketPayload,
   playerStrikeModeAllows,
@@ -26,6 +27,10 @@ import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
 import { TransactionStore } from "./transaction-store.js";
+import {
+  captureCharacterStrikeDamageCorrelation,
+  characterStrikeIntentDiagnostic,
+} from "./player-strike-intent.js";
 
 const SOCKET_NAMESPACE = `module.${MODULE_ID}`;
 const queues = new Map();
@@ -62,6 +67,20 @@ async function markManual(
   details = {},
 ) {
   const reason = failureCode ?? "manual-review-required";
+  const hasActualAmbiguity = Boolean(
+    details.observedDamageMessageId ||
+    Number(details.structuredFallbackCandidateCount ?? 0) > 1 ||
+    Number(details.conflictingDirectIntentCount ?? 0) > 1,
+  );
+  if (state === TRANSACTION_STATES.AMBIGUOUS && !hasActualAmbiguity) {
+    logger.warn("Ignored premature Player Strike ambiguity", {
+      attackMessageId: attackMessage?.id ?? null,
+      transactionId: transaction?.id ?? null,
+      stage: "pre-damage",
+      reason,
+    });
+    return transaction;
+  }
   return TransactionStore.update(attackMessage, {
     ...details,
     state,
@@ -87,33 +106,92 @@ function waitingTransactions() {
   return results;
 }
 
+function directCorrelation(waiting, normalized) {
+  const correlation = normalized.correlation;
+  if (!correlation) return { present: false, ok: false, owner: null, validation: null };
+  const owner = waiting.find((entry) =>
+    entry.transaction.id === correlation.transactionId &&
+    entry.message.id === correlation.sourceMessageId,
+  ) ?? null;
+  const validation = owner
+    ? validateCharacterStrikeCorrelation(owner.transaction, normalized.evidence, correlation)
+    : { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID };
+  return { present: true, ok: validation.ok, owner, validation, correlation };
+}
+
+function shortCandidateIds(candidates) {
+  return candidates.map((candidate) => candidate.id).slice(0, 8);
+}
+
 async function processDamage(message) {
   const normalized = normalizeDamage(message);
   if (!normalized) return false;
   const waiting = waitingTransactions();
-  const correlation = correlatePlayerStrikeDamage(waiting.map((entry) => entry.transaction), normalized.evidence);
-  if (!correlation.ok) {
-    if (correlation.reason === PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS) {
-      for (const candidate of correlation.candidates) {
-        const owner = waiting.find((entry) => entry.transaction.id === candidate.id);
-        if (owner && currentUserIsAuthority(candidate.sourceUserId)) {
-          await enqueue(owner.message.id, () => markManual(
-            owner.message,
-            TransactionStore.get(owner.message),
-            PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS,
-            TRANSACTION_STATES.AMBIGUOUS,
-            {
-              damageCorrelation: { state: "ambiguous", candidateCount: correlation.candidates.length },
-              correlationMethod: "pf2e-structured-strike-context",
-            },
-          ));
-        }
-      }
+  const direct = directCorrelation(waiting, normalized);
+  let owner = direct.ok ? direct.owner : null;
+  let correlationMethod = direct.ok ? "character-strike-click-intent" : null;
+  let fallback = null;
+
+  if (direct.present && !direct.ok) {
+    if (direct.owner && currentUserIsAuthority(direct.owner.transaction.sourceUserId)) {
+      await enqueue(direct.owner.message.id, () => markManual(
+        direct.owner.message,
+        TransactionStore.get(direct.owner.message),
+        direct.validation.reason,
+        TRANSACTION_STATES.MANUAL,
+        {
+          observedDamageMessageId: message.id,
+          directIntentPresent: true,
+          directIntentNonce: direct.correlation.intentNonce ?? null,
+          directIntentSourceMessageId: direct.correlation.sourceMessageId ?? null,
+          directIntentTransactionId: direct.correlation.transactionId ?? null,
+          directIntentRequestedVariant: direct.correlation.requestedVariant ?? null,
+          directIntentAuthorId: direct.correlation.authorUserId ?? null,
+          directIntentCreatedAt: direct.correlation.createdAt ?? null,
+          observedDamageVariant: expectedDamageVariant(normalized.evidence.outcome),
+          directCorrelationValidation: "rejected",
+          directIntentRejectedReason: direct.validation.reason,
+          ambiguityStage: "damage-observed",
+          correlationMethod: "character-strike-click-intent-rejected",
+        },
+      ));
     }
     return false;
   }
 
-  const owner = waiting.find((entry) => entry.transaction.id === correlation.transaction.id);
+  if (!owner) {
+    fallback = correlatePlayerStrikeDamage(waiting.map((entry) => entry.transaction), normalized.evidence);
+    if (!fallback.ok) {
+      if (fallback.reason === PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS) {
+        for (const candidate of fallback.candidates) {
+          const owner = waiting.find((entry) => entry.transaction.id === candidate.id);
+          if (owner && currentUserIsAuthority(candidate.sourceUserId)) {
+            await enqueue(owner.message.id, () => markManual(
+              owner.message,
+              TransactionStore.get(owner.message),
+              PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS,
+              TRANSACTION_STATES.AMBIGUOUS,
+              {
+                observedDamageMessageId: message.id,
+                observedDamageVariant: expectedDamageVariant(normalized.evidence.outcome),
+                damageCorrelation: { state: "ambiguous", candidateCount: fallback.candidates.length },
+                correlationMethod: "pf2e-structured-strike-context",
+                directIntentPresent: false,
+                directCorrelationValidation: "not-present",
+                structuredFallbackCandidateCount: fallback.candidates.length,
+                structuredFallbackCandidateTransactionIds: shortCandidateIds(fallback.candidates),
+                ambiguityStage: "damage-observed",
+              },
+            ));
+          }
+        }
+      }
+      return false;
+    }
+    owner = waiting.find((entry) => entry.transaction.id === fallback.transaction.id);
+    correlationMethod = "pf2e-structured-strike-context";
+  }
+
   if (!owner || !currentUserIsAuthority(owner.transaction.sourceUserId)) return false;
   return enqueue(owner.message.id, async () => {
     const attackMessage = game.messages.get(owner.message.id);
@@ -124,17 +202,47 @@ async function processDamage(message) {
     const attack = normalizeAttack(attackMessage);
     const damage = normalizeDamage(damageMessage);
     if (!attack || !damage || !currentUserIsAuthority(transaction.sourceUserId)) {
-      await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.AUTHORITY_MISSING);
+      await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.AUTHORITY_MISSING, TRANSACTION_STATES.MANUAL, {
+        observedDamageMessageId: damageMessage.id,
+        observedDamageVariant: damage ? expectedDamageVariant(damage.evidence.outcome) : null,
+        ambiguityStage: "authority-validation",
+      });
       return false;
     }
     const attackValidation = validatePlayerStrikeAttack(attack.evidence);
     const snapshotValidation = validatePlayerStrikeSnapshot(transaction.snapshot, attack.evidence);
-    const damageValidation = validatePlayerStrikeDamage(transaction.snapshot, damage.evidence);
-    if (!attackValidation.ok || !snapshotValidation.ok || !damageValidation.ok) {
+    const directRevalidation = direct.ok
+      ? validateCharacterStrikeCorrelation(transaction, damage.evidence, damage.correlation)
+      : null;
+    const directStillValid = !direct.ok || directRevalidation?.ok === true;
+    const directAuthor = direct.ok ? damage.correlation?.authorUserId : transaction.snapshot.authoringUserId;
+    const damageValidation = validatePlayerStrikeDamage(transaction.snapshot, damage.evidence, {
+      authorUserId: directAuthor,
+    });
+    const intentAuthor = direct.ok ? game.users?.get(directAuthor) : null;
+    const ownerLevel = globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
+    const directAuthorValid = !direct.ok || (
+      intentAuthor?.active === true && attack.actor?.testUserPermission?.(intentAuthor, ownerLevel) === true
+    );
+    const validationFailure = !directStillValid
+      ? directRevalidation?.reason ?? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
+      : !directAuthorValid
+        ? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
+        : damageValidation.reason ?? snapshotValidation.reason ?? attackValidation.reason ?? PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED;
+    if (!attackValidation.ok || !snapshotValidation.ok || !damageValidation.ok || !directAuthorValid || !directStillValid) {
       await markManual(
         attackMessage,
         transaction,
-        damageValidation.reason ?? snapshotValidation.reason ?? attackValidation.reason ?? PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED,
+        validationFailure,
+        TRANSACTION_STATES.MANUAL,
+        {
+          observedDamageMessageId: damageMessage.id,
+          directCorrelationValidation: direct.ok ? "rejected" : "not-present",
+          directIntentRejectedReason: !directAuthorValid || !directStillValid
+            ? directRevalidation?.reason ?? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
+            : null,
+          ambiguityStage: "authority-validation",
+        },
       );
       return false;
     }
@@ -145,15 +253,33 @@ async function processDamage(message) {
       damageVariant: damageValidation.variant,
       observedDamageVariant: damageValidation.variant,
       damageCorrelation: { state: "unique", candidateCount: 1 },
-      correlationMethod: "pf2e-structured-strike-context",
+      correlationMethod,
       requestSenderId: damage.evidence.authorUserId,
+      observedDamageMessageId: damageMessage.id,
+      directIntentPresent: direct.ok,
+      directIntentNonce: direct.ok ? damage.correlation.intentNonce : null,
+      directIntentSourceMessageId: direct.ok ? damage.correlation.sourceMessageId : null,
+      directIntentTransactionId: direct.ok ? damage.correlation.transactionId : null,
+      directIntentRequestedVariant: direct.ok ? damage.correlation.requestedVariant : null,
+      directIntentAuthorId: direct.ok ? damage.correlation.authorUserId : null,
+      directIntentCreatedAt: direct.ok ? damage.correlation.createdAt : null,
+      directIntentConsumedAt: direct.ok ? Date.now() : null,
+      directCorrelationValidation: direct.ok ? "valid" : "not-present",
+      directIntentRejectedReason: null,
+      structuredFallbackCandidateCount: fallback?.candidates?.length ?? 0,
+      structuredFallbackCandidateTransactionIds: fallback ? shortCandidateIds(fallback.candidates) : [],
+      ambiguityStage: null,
       eligibilityResult: "eligible",
       failureCode: null,
       manualReason: null,
       manualApplicationRequired: false,
     });
     if (!PF2eAdapter.persistDamageClaim(damageMessage.id, transaction.id)) {
-      await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS);
+      await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS, TRANSACTION_STATES.AMBIGUOUS, {
+        observedDamageMessageId: damageMessage.id,
+        ambiguityStage: "damage-observed",
+        directCorrelationValidation: direct.ok ? "valid-but-consumed" : "not-present",
+      });
       return false;
     }
     transaction = await TransactionStore.linkMessage(attackMessage, damageMessage, "damage");
@@ -340,10 +466,11 @@ export class PlayerStrikeService {
     Hooks.on("preCreateChatMessage", (document, _data, _options, userId) => {
       try {
         capturePlayerStrikeObservation(document, userId);
+        captureCharacterStrikeDamageCorrelation(document, userId);
       } catch (error) {
-        logger.error("Player Strike snapshot failed open", {
-          stage: "player-strike-snapshot",
-          reason: PLAYER_STRIKE_FAILURES.SOURCE_UNSUPPORTED,
+        logger.error("Player Strike pre-create capture failed open", {
+          stage: "player-strike-pre-create",
+          reason: "internal-exception",
         }, error);
       }
     });
@@ -388,21 +515,36 @@ export class PlayerStrikeService {
     const attackMessage = game.messages?.get(attackMessageId);
     const transaction = TransactionStore.get(attackMessage);
     if (transaction?.transactionType !== PLAYER_STRIKE_TRANSACTION_TYPE) return [];
-    const candidates = [];
+    const directCandidates = [];
+    const fallbackCandidates = [];
     for (const message of game.messages ?? []) {
       const normalized = normalizeDamage(message);
-      if (!normalized || !validatePlayerStrikeDamage(transaction.snapshot, normalized.evidence).ok) continue;
+      if (!normalized) continue;
       const owner = PF2eAdapter.damageClaimOwner(message.id);
       if (owner && owner !== transaction.id) continue;
-      candidates.push({
+      const correlation = normalized.correlation;
+      const directValidation = correlation
+        ? validateCharacterStrikeCorrelation(
+          { ...transaction, state: TRANSACTION_STATES.WAITING_FOR_DAMAGE },
+          normalized.evidence,
+          correlation,
+        )
+        : null;
+      const fallbackValidation = validatePlayerStrikeDamage(transaction.snapshot, normalized.evidence);
+      if (!directValidation?.ok && !fallbackValidation.ok) continue;
+      const candidate = {
         messageId: message.id,
         messageIdShort: message.id.slice(-10),
         authorRole: game.users?.get(authorId(message))?.isGM ? "gm" : "player",
         targetCount: 1,
         createdAt: message._stats?.createdTime ?? null,
-      });
+        correlationMethod: directValidation?.ok
+          ? "character-strike-click-intent"
+          : "pf2e-structured-strike-context",
+      };
+      (directValidation?.ok ? directCandidates : fallbackCandidates).push(candidate);
     }
-    return candidates;
+    return directCandidates.length ? directCandidates : fallbackCandidates;
   }
 
   static rescan(attackMessageId) {
@@ -435,5 +577,9 @@ export class PlayerStrikeService {
     });
     const damageMessage = game.messages.get(damageMessageId);
     return damageMessage ? processDamage(damageMessage) : false;
+  }
+
+  static intentDiagnostic(transactionId) {
+    return characterStrikeIntentDiagnostic(transactionId);
   }
 }

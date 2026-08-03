@@ -4,6 +4,7 @@ import { getSetting } from "./settings.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { TransactionStore } from "./transaction-store.js";
 import { logger } from "./logger.js";
+import { bindCharacterStrikeIntentCapture } from "./player-strike-intent.js";
 
 function localize(key, data = null) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -43,6 +44,7 @@ export function renderPlayerStrike(message, html) {
   const resolved = TransactionStore.resolveCanonical(message);
   const transaction = resolved?.transaction;
   if (!transaction || !message.visible || !message.isContentVisible) return false;
+  bindCharacterStrikeIntentCapture(message, html);
 
   const status = document.createElement("aside");
   status.className = `nelflow-player-strike nelflow-player-strike--${transaction.state}`;

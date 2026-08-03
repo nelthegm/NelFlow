@@ -2,10 +2,10 @@
   "id": "nelflow",
   "title": "Nelflow",
   "description": "PF2e NPC and player Strike flow plus Toolbelt Target Helper basic-save damage automation.",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "url": "https://github.com/nelthegm/NelFlow",
   "manifest": "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json",
-  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.6.1-rc1/nelflow.zip",
+  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.6.2-rc1/nelflow.zip",
   "authors": [
     {
       "name": "Nelson Cruz"

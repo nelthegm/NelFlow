@@ -17,6 +17,34 @@ function pf2eFlags(message) {
   return message?.flags?.pf2e ?? {};
 }
 
+function safeCorrelationString(value, max = 256) {
+  return typeof value === "string" && value.length > 0 && value.length <= max ? value : null;
+}
+
+function normalizeCharacterStrikeCorrelation(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value == null ? null : {};
+  return {
+    version: Number.isInteger(value.version) ? value.version : null,
+    transactionId: safeCorrelationString(value.transactionId, 128),
+    sourceMessageId: safeCorrelationString(value.sourceMessageId, 64),
+    intentNonce: safeCorrelationString(value.intentNonce, 64),
+    requestedVariant: ["damage", "critical"].includes(value.requestedVariant) ? value.requestedVariant : null,
+    authorUserId: safeCorrelationString(value.authorUserId, 64),
+    createdAt: Number.isFinite(value.createdAt) ? value.createdAt : null,
+    sourceActorUuid: safeCorrelationString(value.sourceActorUuid),
+    sourceTokenUuid: value.sourceTokenUuid == null ? null : safeCorrelationString(value.sourceTokenUuid),
+    sourceItemUuid: safeCorrelationString(value.sourceItemUuid),
+    strikeIdentifier: safeCorrelationString(value.strikeIdentifier),
+    actionIndex: Number.isInteger(value.actionIndex) ? value.actionIndex : null,
+    altUsage: value.altUsage == null ? null : safeCorrelationString(value.altUsage, 64),
+    attackOutcome: safeCorrelationString(value.attackOutcome, 32),
+    sceneId: value.sceneId == null ? null : safeCorrelationString(value.sceneId, 64),
+    combatId: value.combatId == null ? null : safeCorrelationString(value.combatId, 64),
+    combatRound: Number.isInteger(value.combatRound) ? value.combatRound : null,
+    combatTurn: Number.isInteger(value.combatTurn) ? value.combatTurn : null,
+  };
+}
+
 export function playerStrikeAuthorId(message) {
   return message?.author?.id ?? message?.user?.id ?? message?._source?.user ?? null;
 }
@@ -134,6 +162,9 @@ export function normalizePlayerStrikeDamage(message) {
   return {
     message,
     roll,
+    correlation: normalizeCharacterStrikeCorrelation(
+      message.flags?.[MODULE_ID]?.characterStrikeCorrelation ?? null,
+    ),
     evidence: {
       isNativeDamageRoll: true,
       contextType: context.type,

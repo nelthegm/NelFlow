@@ -87,8 +87,8 @@ const transaction = (changes = {}) => ({
   ...changes,
 });
 
-add("module version is 0.6.1", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.6.1"));
-add("package version is 0.6.1", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.6.1"));
+add("module version is 0.6.2", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.6.2"));
+add("package version is 0.6.2", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.6.2"));
 add("module id remains nelflow", () => assert.equal(JSON.parse(rootFile("module.json")).id, "nelflow"));
 add("player Strike setting registers", () => assert.match(rootFile("scripts/settings.js"), /SETTINGS\.PLAYER_STRIKE_AUTO_APPLY/));
 add("new-world default is hostile", () => assert.match(rootFile("scripts/settings.js"), /default: PLAYER_STRIKE_AUTO_APPLY_MODES\.HOSTILE/));
