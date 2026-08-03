@@ -74,9 +74,15 @@ The existing canonical Strike transaction is extended with `transactionType: "pl
 
 `waiting-for-damage -> damage-observed -> validating -> claimed -> applying -> applied -> undone`
 
-Manual, ambiguous, failed, interrupted, skipped, and abandoned are durable alternatives. `waiting-for-damage -> ambiguous` is rejected unless an observed damage-message ID, multiple structured candidates, or a documented direct-intent conflict exists. The attack and linked damage cards show a compact localized Waiting, Applying, Applied, Manual Review, Interrupted, Miss, or Undone status plus the permitted recorded-target label and known applied amount. GMs additionally get Transaction Details, safe failure/audit data, recovery controls, and guarded Undo. Players receive no raw target UUID, fingerprints, raw flags, private totals, or GM diagnostic context.
+Manual, ambiguous, failed, interrupted, skipped, and abandoned are durable alternatives. `waiting-for-damage -> ambiguous` is rejected unless an observed damage-message ID, multiple structured candidates, or a documented direct-intent conflict exists. Player-Strike presentation is described below. Players receive no raw target UUID, fingerprints, raw flags, private totals, or GM diagnostic context.
 
 No character-Strike control is presentation-guarded. Native Damage/Critical Damage and native/manual application controls stay functional. Guard clearing is therefore presentation-only and unnecessary for this workflow.
+
+### Nelflow 0.6.4 presentation projection
+
+Nelflow 0.6.4 projects Waiting, Applying, Applied, Manual Review, Interrupted, Miss, Undone, or Undo Blocked once per logical transaction. The viewer-visible native damage message is preferred; the exact attack and application message IDs are deterministic fallbacks when earlier records are unavailable to that viewer. Only that host receives the concise application line and guarded Undo. The legacy Strike fallback and other linked cards suppress duplicate Nelflow-owned status and Undo.
+
+The client-scoped **Show Transaction Diagnostics** setting defaults to Errors Only. Clean terminal transactions have no Transaction Details disclosure; failures, interruptions, ambiguity, orphan/recovery work, failed Undo, and nonterminal states show it expanded. Always retains the prior disclosure, while Off hides it without changing persistent flags, audit records, sanitized export, recovery controls, or health notifications. Player-Strike diagnostics use the same canonical host as the application summary, preventing duplicate panels across linked native messages.
 
 GM Undo calls the existing Slice 1 guarded Undo. It requires exact post-application HP and temporary HP before restoring the exact recorded pre-application pair. Later healing/damage blocks Undo; messages and attack results are never deleted or rerolled.
 
@@ -87,6 +93,10 @@ Waiting transactions reconstruct and continue waiting for a future native messag
 The stable character-Strike failure codes integrate with Slice 3.4. Durable flags record actor and authority data, target, outcome, observed variant/message, final correlation method, direct-intent validation and rejection, intent identity/age/expiration, fallback candidate count and shortened IDs, ambiguity stage, application attempts, final state, failure code, and Manual reason. The sanitized diagnostic export shortens IDs and omits names, formulas, totals, full UUIDs, raw flags, and hidden data. A Manual state without a meaningful failure is normalized to `manual-review-required` instead of displaying no failure code.
 
 Re-scan is inspection-only. Use Existing Damage Message requires a GM to select one exact structurally compatible unclaimed card; it then re-enters the same GM validation/application service. Use Existing Damage Message, Mark Manual, and Abandon appear for actual Manual/Ambiguous/Failed/Interrupted recovery states, not valid Applied transactions. Recovery preserves native documents and survives reload.
+
+The presentation host is not transaction authority. It is selected at render time from exact persisted message IDs and current native visibility. No native ChatMessage content, roll, flag, whisper, blind state, or ownership is changed, and a hidden record is never selected to host a visible projection.
+
+The applied HP delta is shown to a non-GM only when that viewer can also see the exact linked native application record. Otherwise the canonical line reports application without exposing the amount.
 
 ## Compatibility and known limitations
 

@@ -515,8 +515,8 @@
 }
 
 .nelflow-diagnostics {
-  margin-top: 0.3rem;
-  padding-top: 0.25rem;
+  margin-top: 0.2rem;
+  padding-top: 0.15rem;
   border-top: 1px solid var(--color-border-light-2, #bbb);
   font-size: var(--font-size-11, 0.6875rem);
 }
@@ -528,8 +528,8 @@
 }
 
 .nelflow-diagnostics__transaction {
-  margin-top: 0.35rem;
-  padding: 0.35rem;
+  margin-top: 0.25rem;
+  padding: 0.25rem;
   background: color-mix(in srgb, var(--color-cool-5, #ddd) 18%, transparent);
   border-radius: 3px;
 }
@@ -635,31 +635,33 @@
   border-top: 1px solid color-mix(in srgb, var(--color-border-light-2, #777) 55%, transparent);
   display: flex;
   font-size: var(--font-size-12, 0.75rem);
-  gap: 0.4rem;
-  margin-top: 0.35rem;
-  padding-top: 0.3rem;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+  padding-top: 0.2rem;
 }
 
 .nelflow-player-strike__body {
   flex: 1;
-  line-height: 1.2;
+  line-height: 1.15;
   min-width: 0;
-}
-
-.nelflow-player-strike__body > strong,
-.nelflow-player-strike__target {
-  display: block;
-}
-
-.nelflow-player-strike__target {
-  color: var(--color-text-subtle, #666);
   overflow-wrap: anywhere;
+}
+
+.nelflow-player-strike--applied .nelflow-player-strike__body,
+.nelflow-player-strike--undone .nelflow-player-strike__body {
+  color: var(--color-level-success, #267a3e);
+}
+
+.nelflow-player-strike--interrupted .nelflow-player-strike__body,
+.nelflow-player-strike--manual-review .nelflow-player-strike__body,
+.nelflow-player-strike--undo-blocked .nelflow-player-strike__body {
+  color: var(--color-level-warning, #936b00);
 }
 
 .nelflow-player-strike__undo {
   font-size: inherit;
   line-height: 1.2;
-  min-height: 1.5rem;
-  padding: 0.1rem 0.35rem;
+  min-height: 1.35rem;
+  padding: 0.05rem 0.3rem;
   width: auto;
 }

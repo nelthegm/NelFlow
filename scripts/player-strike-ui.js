@@ -1,10 +1,16 @@
-import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
+import { MODULE_ID, SETTINGS } from "./constants.js";
 import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
 import { getSetting } from "./settings.js";
 import { StrikeResolver } from "./strike-resolver.js";
 import { TransactionStore } from "./transaction-store.js";
 import { logger } from "./logger.js";
 import { bindCharacterStrikeIntentCapture } from "./player-strike-intent.js";
+import {
+  canShowPlayerStrikeAppliedAmount,
+  canShowPlayerStrikeUndo,
+  isPlayerStrikePresentationHost,
+  playerStrikePresentationState,
+} from "./player-strike-presentation.js";
 
 function localize(key, data = null) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -25,16 +31,32 @@ function targetLabel(transaction) {
   return nameVisible ? token.name : localize("Nelflow.PlayerStrike.RecordedTarget");
 }
 
-function statusKey(transaction) {
-  if (transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE) return "Nelflow.PlayerStrike.WaitingForDamage";
-  if ([TRANSACTION_STATES.DAMAGE_OBSERVED, TRANSACTION_STATES.VALIDATING, TRANSACTION_STATES.CLAIMED, TRANSACTION_STATES.APPLYING].includes(transaction.state)) {
-    return "Nelflow.PlayerStrike.Applying";
+function canViewLinkedMessage(currentMessage, messageId) {
+  const candidate = currentMessage.id === messageId ? currentMessage : game.messages?.get(messageId);
+  return Boolean(candidate?.visible && candidate.isContentVisible);
+}
+
+function summaryText(transaction, { showAppliedAmount }) {
+  const target = targetLabel(transaction);
+  const state = playerStrikePresentationState(transaction);
+  if (state === "applied") {
+    return showAppliedAmount && Number.isFinite(transaction.appliedAmount)
+      ? localize("Nelflow.PlayerStrike.Summary.Applied", {
+          amount: transaction.appliedAmount,
+          target,
+        })
+      : localize("Nelflow.PlayerStrike.Summary.AppliedUnknown", { target });
   }
-  if (transaction.state === TRANSACTION_STATES.APPLIED) return "Nelflow.PlayerStrike.Applied";
-  if (transaction.state === TRANSACTION_STATES.UNDONE) return "Nelflow.PlayerStrike.Undone";
-  if (transaction.state === TRANSACTION_STATES.SKIPPED) return "Nelflow.PlayerStrike.NotAHit";
-  if (transaction.state === TRANSACTION_STATES.INTERRUPTED) return "Nelflow.PlayerStrike.Interrupted";
-  return "Nelflow.PlayerStrike.ManualReview";
+  const keys = {
+    waiting: "Waiting",
+    applying: "Applying",
+    "not-a-hit": "NotAHit",
+    interrupted: "Interrupted",
+    undone: "Undone",
+    "undo-blocked": "UndoBlocked",
+    "manual-review": "ManualReview",
+  };
+  return localize(`Nelflow.PlayerStrike.Summary.${keys[state]}`, { target });
 }
 
 export function renderPlayerStrike(message, html) {
@@ -45,34 +67,34 @@ export function renderPlayerStrike(message, html) {
   const transaction = resolved?.transaction;
   if (!transaction || !message.visible || !message.isContentVisible) return false;
   bindCharacterStrikeIntentCapture(message, html);
+  if (!isPlayerStrikePresentationHost(
+    message.id,
+    transaction,
+    (messageId) => canViewLinkedMessage(message, messageId),
+  )) return false;
 
   const status = document.createElement("aside");
-  status.className = `nelflow-player-strike nelflow-player-strike--${transaction.state}`;
+  const presentationState = playerStrikePresentationState(transaction);
+  status.className = `nelflow-player-strike nelflow-player-strike--${presentationState}`;
+  status.dataset.nelflowCanonicalTransaction = transaction.id;
   status.setAttribute("role", "status");
   const icon = document.createElement("i");
   icon.className = "fa-solid fa-crosshairs";
   icon.setAttribute("aria-hidden", "true");
   const body = document.createElement("span");
   body.className = "nelflow-player-strike__body";
-  const label = document.createElement("strong");
-  label.textContent = localize(statusKey(transaction));
-  const target = document.createElement("small");
-  target.className = "nelflow-player-strike__target";
-  const amount = Number.isFinite(transaction.appliedAmount)
-    ? localize("Nelflow.PlayerStrike.AppliedAmount", { amount: transaction.appliedAmount })
-    : null;
-  target.textContent = amount
-    ? localize("Nelflow.PlayerStrike.TargetAndAmount", { target: targetLabel(transaction), amount })
-    : targetLabel(transaction);
-  body.append(label, target);
+  body.textContent = summaryText(transaction, {
+    showAppliedAmount: canShowPlayerStrikeAppliedAmount(transaction, {
+      isGM: game.user?.isGM,
+      canViewMessage: (messageId) => canViewLinkedMessage(message, messageId),
+    }),
+  });
   status.append(icon, body);
 
-  if (
-    game.user?.isGM &&
-    getSetting(SETTINGS.ENABLE_UNDO) &&
-    transaction.state === TRANSACTION_STATES.APPLIED &&
-    !transaction.undoBlocked
-  ) {
+  if (canShowPlayerStrikeUndo(transaction, {
+    isGM: game.user?.isGM,
+    undoEnabled: getSetting(SETTINGS.ENABLE_UNDO),
+  })) {
     const undo = document.createElement("button");
     undo.type = "button";
     undo.className = "nelflow-player-strike__undo";

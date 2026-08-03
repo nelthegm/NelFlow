@@ -385,6 +385,7 @@ export function buildSanitizedDiagnostic(descriptor) {
       compactTurnStacks: safeSetting(SETTINGS.COMPACT_TURN_STACKS),
       collapseLinkedNativeCards: safeSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS),
       playerStrikeAutoApply: safeSetting(SETTINGS.PLAYER_STRIKE_AUTO_APPLY),
+      showTransactionDiagnostics: safeSetting(SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS),
     },
     transaction: {
       type: projection.type,

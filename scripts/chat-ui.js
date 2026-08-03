@@ -429,6 +429,9 @@ function renderLegacyStatus(message, html) {
   const localMarker = message.getFlag(MODULE_ID, "transaction");
   if (!localMarker) return;
   const resolved = TransactionStore.resolveCanonical(message);
+  // Character Strikes have one dedicated canonical presentation host. The
+  // legacy NPC fallback would otherwise duplicate both status and guarded Undo.
+  if (resolved?.transaction?.transactionType === "player-strike") return;
   if (!resolved || !shouldRenderLegacy(localMarker, resolved.transaction)) return;
 
   const row = document.createElement("div");

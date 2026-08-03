@@ -8,6 +8,14 @@ import {
   transactionDiagnosticProjection,
 } from "./transaction-diagnostics-service.js";
 import { shortId } from "./transaction-failure.js";
+import {
+  SETTINGS,
+  TRANSACTION_DIAGNOSTIC_MODES,
+} from "./constants.js";
+import { getSetting } from "./settings.js";
+import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
+import { isPlayerStrikePresentationHost } from "./player-strike-presentation.js";
+import { visibleDiagnosticDescriptors } from "./transaction-diagnostics-policy.js";
 
 function localize(key, data) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -277,22 +285,31 @@ function transactionPanel(descriptor) {
 export function renderTransactionDiagnostics(message, html) {
   html.querySelectorAll(".nelflow-diagnostics").forEach((node) => node.remove());
   if (!game.user?.isGM || message.visible === false || message.isContentVisible === false) return false;
-  const descriptors = diagnosticDescriptors(message);
-  if (!descriptors.length) return false;
+  const descriptors = diagnosticDescriptors(message).filter((descriptor) => {
+    if (descriptor.type !== PLAYER_STRIKE_TRANSACTION_TYPE) return true;
+    return isPlayerStrikePresentationHost(message.id, descriptor.transaction, (messageId) => {
+      const candidate = message.id === messageId ? message : game.messages?.get(messageId);
+      return Boolean(candidate?.visible && candidate.isContentVisible);
+    });
+  });
+  const mode = getSetting(SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS);
+  const visibleDescriptors = visibleDiagnosticDescriptors(descriptors, mode);
+  if (!visibleDescriptors.length) return false;
   try {
     const details = element("details", "nelflow-diagnostics");
     details.dataset.nelflowTransactionDetails = message.id;
+    details.open = mode === TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY;
     const summary = element("summary", "nelflow-diagnostics__summary", localize("Nelflow.Diagnostics.Details"));
     summary.setAttribute("aria-label", localize("Nelflow.Diagnostics.DetailsAria"));
     summary.addEventListener("click", () => {
       logger.debug("transaction-details-opened", {
         messageId: shortId(message.id),
-        transactionType: descriptors.length === 1 ? descriptors[0].type : "stack",
+        transactionType: visibleDescriptors.length === 1 ? visibleDescriptors[0].type : "stack",
         safeRole: "gm",
       });
     }, { once: true });
     details.append(summary);
-    for (const descriptor of descriptors) details.append(transactionPanel(descriptor));
+    for (const descriptor of visibleDescriptors) details.append(transactionPanel(descriptor));
     (html.querySelector(".message-content") ?? html).append(details);
     return true;
   } catch (error) {

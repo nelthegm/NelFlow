@@ -153,9 +153,11 @@ for (const required of [
   "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL",
   "SETTINGS.MIGRATION_VERSION",
   "SETTINGS.PLAYER_STRIKE_AUTO_APPLY",
+  "SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.OFF",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.ALL",
+  "TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
 }
@@ -1074,6 +1076,29 @@ if (!diagnosticsSource.includes("if (!game.user?.isGM") || !diagnosticsSource.in
 const diagnosticsTests = read("tests/transaction-diagnostics.test.mjs");
 if ((diagnosticsTests.match(/\btest\s*\(/g) ?? []).length < 70) {
   fail("Slice 3.4 mocked coverage must include at least 70 focused scenarios");
+}
+for (const path of [
+  "scripts/player-strike-presentation.js",
+  "scripts/transaction-diagnostics-policy.js",
+  "tests/presentation-cleanup.test.mjs",
+]) {
+  if (!existsSync(join(root, path))) fail(`Nelflow 0.6.4 presentation cleanup file is missing: ${path}`);
+}
+const presentationTests = read("tests/presentation-cleanup.test.mjs");
+if ((presentationTests.match(/\btest\s*\(/g) ?? []).length < 14) {
+  fail("Nelflow 0.6.4 requires at least 14 focused presentation scenarios");
+}
+const presentationSource = `${read("scripts/player-strike-presentation.js")}\n${read("scripts/transaction-diagnostics-policy.js")}\n${read("scripts/player-strike-ui.js")}`;
+for (const required of [
+  "selectPlayerStrikePresentationHost",
+  "transactionNeedsDiagnosticAttention",
+  "TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY",
+  "StrikeResolver.undoFromMessage",
+]) {
+  if (!presentationSource.includes(required)) fail(`Nelflow 0.6.4 presentation policy is missing: ${required}`);
+}
+if (/deleteChatMessage|\.delete\s*\(|\.setFlag\s*\(|\.update\s*\(/.test(read("scripts/player-strike-ui.js"))) {
+  fail("player Strike presentation must not mutate or delete native ChatMessages");
 }
 const diagnosticsTestPlan = read("docs/SLICE_003_4_TEST_PLAN.md");
 if ((diagnosticsTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 55) {

@@ -17,6 +17,7 @@ export const SETTINGS = Object.freeze({
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll",
   GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
   PLAYER_STRIKE_AUTO_APPLY: "playerStrikeAutoApply",
+  SHOW_TRANSACTION_DIAGNOSTICS: "showTransactionDiagnostics",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });
@@ -66,6 +67,12 @@ export const PLAYER_STRIKE_AUTO_APPLY_MODES = Object.freeze({
   OFF: "off",
   HOSTILE: "hostile",
   ALL: "all",
+});
+
+export const TRANSACTION_DIAGNOSTIC_MODES = Object.freeze({
+  OFF: "off",
+  ERRORS_ONLY: "errors-only",
+  ALWAYS: "always",
 });
 
 export const PLAYER_STRIKE_TRANSACTION_SCHEMA_VERSION = 1;

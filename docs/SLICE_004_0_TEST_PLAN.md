@@ -153,3 +153,19 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 146. Inspect diagnostics and confirm local intent, persisted binding, authority claim, application state, bound message/transaction/nonce, and lifecycle timestamps are distinct.
 147. Force the native application adapter to fail in a disposable test and confirm Application Failed/Interrupted rather than Ambiguous with zero attempts.
 148. Reprocess an Applied same-message tuple and confirm the durable state remains Applied with no second native call.
+149. Complete one player Strike and confirm exactly one concise Nelflow application summary appears across attack, damage, and application messages.
+150. Confirm the viewer-visible native damage card is the canonical summary host.
+151. Delete the linked damage message and confirm the visible attack card becomes the deterministic fallback without changing transaction state.
+152. Hide the damage record from a viewer and confirm no information from that hidden record is exposed by host selection.
+153. Confirm exactly one Nelflow guarded Undo is visible for an Applied transaction.
+154. Confirm linked non-canonical cards contain no duplicate Nelflow status or Undo control.
+155. Change HP after application, use canonical Undo, and confirm Undo Blocked replaces the button without stale restoration.
+156. In Errors Only mode, complete a clean transaction and confirm Transaction Details is absent while flags and sanitized export remain available.
+157. In Errors Only mode, force Failed, Interrupted, Ambiguous, Manual, orphan/recovery, and failed-Undo states; confirm Transaction Details appears expanded.
+158. In Always mode, confirm the prior GM-only Transaction Details disclosure remains available for clean and exceptional transactions.
+159. In Off mode, confirm Transaction Details is absent while recovery health notifications, flags, audit data, and export remain intact.
+160. Reload after application and confirm the same canonical host, one summary, and one guarded Undo reconstruct from persistent flags.
+161. Test attack, damage, and application whispers/blind rolls with player and GM viewers; confirm native visibility and privacy are unchanged.
+162. Inspect stored native attack, damage, and application documents before and after rendering; confirm content, rolls, PF2e flags, ownership, whisper, and blind fields are unchanged.
+163. Disable NPC compact stacks and confirm the legacy Strike fallback does not add duplicate player-Strike status or Undo.
+164. Repeat NPC Strike, Toolbelt basic-save, autoroll, IWR, recovery, multi-GM, and Dice So Nice coverage; confirm no mechanical or compatibility regression.

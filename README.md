@@ -27,7 +27,8 @@ and fail-open handling for interrupted work. It adds no new automation category.
 Slice 4.0, corrected through Nelflow 0.6.3, observes one character Strike regardless
 of whether its active OWNER author is a player or GM. The user chooses PF2e's
 native damage roll, then one authoritative GM applies that exact DamageRoll to
-the attack's snapshotted target.
+the attack's snapshotted target. Nelflow 0.6.4 keeps those mechanics unchanged
+while reducing duplicate player-Strike status, Undo, and diagnostic UI.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -65,7 +66,7 @@ URL:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-This build prepares the future **v0.6.3-rc1** release candidate for runtime
+This build prepares the future **v0.6.4-rc1** release candidate for runtime
 testing. Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
@@ -92,9 +93,13 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 
 ## Slice 3.4 diagnostics and recovery
 
-- Relevant Nelflow cards expose a compact GM-only **Transaction Details** panel
-  with safe state, count, role, guard, failure, recovery, revision, and recent
-  audit fields.
+- Relevant Nelflow cards can expose a compact GM-only **Transaction Details**
+  panel with safe state, count, role, guard, failure, recovery, revision, and
+  recent audit fields. Nelflow 0.6.4 defaults its client-scoped visibility to
+  **Errors Only**: clean terminal transactions omit the disclosure, while
+  failures, interruptions, ambiguity, orphan/recovery work, failed Undo, and
+  nonterminal states show it expanded. **Off** hides the chat disclosure only;
+  **Always** preserves the previous disclosure on every relevant card.
 - **Copy Nelflow Diagnostic** exports sanitized JSON; clipboard failure opens a
   manual-copy dialog. Names, formulas, totals, full UUIDs/IDs, target lists,
   raw flags, credentials, URLs, and stack traces are excluded.
@@ -107,12 +112,32 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 - Active work records include a client-session marker. Work left claimed,
   rolling, processing, applying, or undoing by a prior session becomes review
   state on ready and is never automatically rerolled, reapplied, or undone.
-- No new setting or migration disables existing functionality. Diagnostics and
-  recovery controls are always GM-only.
+- Diagnostic flags, audit state, export, and recovery behavior remain available
+  in every presentation mode. Diagnostic contents and recovery controls remain
+  GM-only.
 
 See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.md)
 and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
 must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
+
+## Nelflow 0.6.4 chat-density cleanup
+
+Player Strike application status now renders once per logical transaction. The
+viewer-visible native damage message is the preferred canonical host; if that
+message is hidden or deleted, the visible attack and then application record
+are deterministic fallbacks. A normal completed Strike adds one concise line,
+for example `Applied 9 damage to Skeletal Mage`, and one guarded GM Undo when
+legal. Linked attack/application cards do not repeat Nelflow-owned status,
+Undo, or Transaction Details.
+
+Host selection uses only exact persisted message IDs and each viewer's native
+message visibility. It creates no player-Strike stack, stores no presentation
+authority, and never changes native content, rolls, flags, ownership, whispers,
+or blind visibility. Reload reconstructs the same projection from existing
+transaction flags. Undo still calls the existing exact guarded transaction
+path; blocked Undo becomes a concise terminal status on the canonical host.
+Non-GMs see the applied HP delta only when they can also see the exact native
+application record; otherwise the line confirms application without the amount.
 
 ## Nelflow 0.6.3 deterministic character Strike damage
 
@@ -153,7 +178,7 @@ state evidence. GM Undo is the existing guarded HP/temp-HP restoration.
 Existing worlds migrate this setting to **Off** once so an update cannot begin
 player-authored HP changes silently. Fresh worlds default to **Hostile
 Targets**. See [Slice 4.0 architecture](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
-and the [148-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
+and the [164-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
 
 ## Slice 2 behavior
 
@@ -381,6 +406,10 @@ targets, and ambiguous structures also remain manual.
 - **Player Strike Auto-Apply** — `Hostile Targets` in a fresh world, with
   `Off` and `All Targets` alternatives. The version-4 migration sets existing
   Nelflow worlds to Off once; a GM must explicitly opt in after updating.
+- **Show Transaction Diagnostics** is client-scoped and `Errors Only` by
+  default. `Off` removes the GM-only chat disclosure without deleting flags,
+  export, audit, or recovery data. `Always` restores the disclosure for clean
+  transactions as well as exceptions.
 - **Compact Turn Stacks** — `NPC Strikes Only` by default; choose `Off` to keep
   Slice 1 per-message status presentation.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
@@ -494,7 +523,7 @@ Undo Blocked.
   structurally unique. Concurrent identical unmarked sources become Ambiguous
   and do not autoroll.
 - PF2e 8.4.0 character Strike damage cards do not natively persist their
-  originating attack-message ID. Nelflow 0.6.3 supplies it for normal native
+  originating attack-message ID. Nelflow 0.6.3 and later supply it for normal native
   card clicks. Structurally identical unmarked messages or same-user dialogs
   completed out of causal order can still require recovery rather than a
   time/chat-order guess.

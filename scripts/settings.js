@@ -10,6 +10,7 @@ import {
   TOOLBELT_BASIC_SAVE_SOURCE_MODES,
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES,
   PLAYER_STRIKE_AUTO_APPLY_MODES,
+  TRANSACTION_DIAGNOSTIC_MODES,
 } from "./constants.js";
 
 function refreshPresentation() {
@@ -157,6 +158,23 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS,
+    name: "Nelflow.Settings.ShowTransactionDiagnostics.Name",
+    hint: "Nelflow.Settings.ShowTransactionDiagnostics.Hint",
+    scope: "client",
+    restricted: true,
+    type: String,
+    choices: {
+      [TRANSACTION_DIAGNOSTIC_MODES.OFF]: "Nelflow.Settings.ShowTransactionDiagnostics.Off",
+      [TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY]:
+        "Nelflow.Settings.ShowTransactionDiagnostics.ErrorsOnly",
+      [TRANSACTION_DIAGNOSTIC_MODES.ALWAYS]:
+        "Nelflow.Settings.ShowTransactionDiagnostics.Always",
+    },
+    default: TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",
@@ -185,9 +203,9 @@ export function registerSettings() {
     game.settings.register(MODULE_ID, definition.key, {
       name: definition.name,
       hint: definition.hint,
-      scope: "world",
+      scope: definition.scope ?? "world",
       config: definition.config ?? true,
-      restricted: true,
+      restricted: definition.restricted ?? true,
       type: definition.type ?? Boolean,
       choices: definition.choices,
       default: definition.default,
