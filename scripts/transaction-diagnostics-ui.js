@@ -224,6 +224,18 @@ function transactionPanel(descriptor) {
     field(list, "Nelflow.Diagnostics.Field.IntentAuthor", projection.directIntentAuthorIdShort);
     field(list, "Nelflow.Diagnostics.Field.IntentAge", projection.directIntentAgeMs);
     field(list, "Nelflow.Diagnostics.Field.IntentExpiration", projection.directIntentExpirationState);
+    field(list, "Nelflow.Diagnostics.Field.IntentLocalState", projection.directIntentLocalState);
+    field(list, "Nelflow.Diagnostics.Field.PersistedBindingState", projection.persistedBindingState);
+    field(list, "Nelflow.Diagnostics.Field.AuthorityClaimState", projection.authorityClaimState);
+    field(list, "Nelflow.Diagnostics.Field.ApplicationState", projection.applicationState);
+    field(list, "Nelflow.Diagnostics.Field.DirectDecision", projection.directCorrelationDecision);
+    field(list, "Nelflow.Diagnostics.Field.DirectRejectedReason", projection.directCorrelationRejectedReason);
+    field(list, "Nelflow.Diagnostics.Field.BoundDamageMessage", projection.boundDamageMessageIdShort);
+    field(list, "Nelflow.Diagnostics.Field.BoundTransaction", projection.boundTransactionIdShort);
+    field(list, "Nelflow.Diagnostics.Field.BoundNonce", projection.boundNonceShort);
+    field(list, "Nelflow.Diagnostics.Field.BoundAt", projection.boundAt);
+    field(list, "Nelflow.Diagnostics.Field.ClaimedAt", projection.claimedAt);
+    field(list, "Nelflow.Diagnostics.Field.AppliedAt", projection.appliedAt);
     field(list, "Nelflow.Diagnostics.Field.ObservedDamageMessage", projection.observedDamageMessageIdShort);
     field(list, "Nelflow.Diagnostics.Field.DirectValidation", projection.directCorrelationValidation);
     field(list, "Nelflow.Diagnostics.Field.FallbackCandidates", projection.structuredFallbackCandidateCount);

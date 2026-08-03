@@ -50,6 +50,27 @@ function removeIntent(transactionId, expectedNonce = null) {
   return true;
 }
 
+function expirePendingIntent(transactionId, expectedNonce) {
+  const intent = intents.get(transactionId);
+  if (intent?.localIntentState !== "pending") return false;
+  return removeIntent(transactionId, expectedNonce);
+}
+
+export function bindCharacterStrikeIntentMetadata(intent, damageMessageId, { boundAt = Date.now() } = {}) {
+  if (
+    !intent ||
+    typeof damageMessageId !== "string" ||
+    !damageMessageId ||
+    (intent.boundDamageMessageId && intent.boundDamageMessageId !== damageMessageId)
+  ) return null;
+  return {
+    ...publicIntent(intent),
+    localIntentState: "bound",
+    boundDamageMessageId: damageMessageId,
+    boundAt: intent.boundAt ?? boundAt,
+  };
+}
+
 export function buildCharacterStrikeIntent({
   transaction,
   attackEvidence,
@@ -84,6 +105,9 @@ export function buildCharacterStrikeIntent({
     combatId: combat?.id ?? null,
     combatRound: Number.isInteger(combat?.round) ? combat.round : null,
     combatTurn: Number.isInteger(combat?.turn) ? combat.turn : null,
+    localIntentState: "pending",
+    boundDamageMessageId: null,
+    boundAt: null,
   };
 }
 
@@ -100,6 +124,10 @@ export function recordCharacterStrikeIntent(message, button, {
     resolved?.attackMessage?.id !== message.id ||
     transaction?.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE
   ) return null;
+  // Once this attack has causally produced a native message, another click
+  // must not replace that durable tuple with a new nonce. PF2e's control still
+  // runs normally; the extra message simply receives no conflicting hint.
+  if (intents.get(transaction.id)?.localIntentState === "bound") return null;
   const normalized = normalizePlayerStrikeAttack(message);
   const clicker = game.users?.get(game.user?.id) ?? game.user;
   if (
@@ -123,13 +151,15 @@ export function recordCharacterStrikeIntent(message, button, {
   // damage message. Superseding its older unconsumed hint avoids theoretical
   // matches from cancelled dialogs while leaving other users' intents isolated.
   for (const pending of [...intents.values()]) {
-    if (pending.authorUserId === intent.authorUserId) {
+    if (pending.authorUserId === intent.authorUserId && pending.localIntentState === "pending") {
       removeIntent(pending.transactionId, pending.intentNonce);
     }
   }
-  removeIntent(transaction.id);
+  if (intents.get(transaction.id)?.localIntentState === "pending") {
+    removeIntent(transaction.id);
+  }
   const expirationTimer = globalThis.setTimeout?.(() => {
-    removeIntent(transaction.id, intent.intentNonce);
+    expirePendingIntent(transaction.id, intent.intentNonce);
   }, CHARACTER_STRIKE_INTENT_MAX_AGE_MS);
   expirationTimer?.unref?.();
   intents.set(transaction.id, { ...intent, expirationTimer });
@@ -182,9 +212,16 @@ export function captureCharacterStrikeDamageCorrelation(document, userId, { now 
   // More than one matching live click is a real conflict: leave the native
   // message untouched so the elected GM can use structured fallback safely.
   if (matches.length !== 1) return null;
-  const metadata = publicIntent(matches[0].intent);
+  const pending = matches[0].intent;
+  const damageMessageId = normalized.evidence.damageMessageId;
+  if (!damageMessageId) return null;
+  if (pending.expirationTimer) globalThis.clearTimeout?.(pending.expirationTimer);
+  const boundMetadata = bindCharacterStrikeIntentMetadata(pending, damageMessageId, { boundAt: now });
+  if (!boundMetadata) return null;
+  const bound = { ...boundMetadata, expirationTimer: null };
+  intents.set(bound.transactionId, bound);
+  const metadata = publicIntent(bound);
   document.updateSource({ [`flags.${MODULE_ID}.characterStrikeCorrelation`]: metadata });
-  removeIntent(metadata.transactionId, metadata.intentNonce);
   return metadata;
 }
 
@@ -192,11 +229,15 @@ export function characterStrikeIntentDiagnostic(transactionId, { now = Date.now(
   const intent = intents.get(transactionId);
   if (!intent) return null;
   const ageMs = Math.max(0, now - intent.createdAt);
-  if (ageMs > CHARACTER_STRIKE_INTENT_MAX_AGE_MS) {
+  if (intent.localIntentState === "pending" && ageMs > CHARACTER_STRIKE_INTENT_MAX_AGE_MS) {
     removeIntent(transactionId, intent.intentNonce);
     return null;
   }
-  return { ...publicIntent(intent), ageMs, expirationState: "fresh" };
+  return {
+    ...publicIntent(intent),
+    ageMs,
+    expirationState: intent.localIntentState === "bound" ? "bound" : "fresh",
+  };
 }
 
 export function clearCharacterStrikeIntents() {

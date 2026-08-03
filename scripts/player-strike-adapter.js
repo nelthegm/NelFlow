@@ -42,6 +42,11 @@ function normalizeCharacterStrikeCorrelation(value) {
     combatId: value.combatId == null ? null : safeCorrelationString(value.combatId, 64),
     combatRound: Number.isInteger(value.combatRound) ? value.combatRound : null,
     combatTurn: Number.isInteger(value.combatTurn) ? value.combatTurn : null,
+    localIntentState: ["pending", "bound", "finalized"].includes(value.localIntentState)
+      ? value.localIntentState
+      : null,
+    boundDamageMessageId: safeCorrelationString(value.boundDamageMessageId, 64),
+    boundAt: Number.isFinite(value.boundAt) ? value.boundAt : null,
   };
 }
 
@@ -166,6 +171,7 @@ export function normalizePlayerStrikeDamage(message) {
       message.flags?.[MODULE_ID]?.characterStrikeCorrelation ?? null,
     ),
     evidence: {
+      damageMessageId: message.id ?? message._source?._id ?? null,
       isNativeDamageRoll: true,
       contextType: context.type,
       sourceActorUuid: flags.origin?.actor ?? message.actor?.uuid ?? null,

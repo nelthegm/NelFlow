@@ -24,7 +24,7 @@ damage message to the unchanged Slice 3.1/3.2 application workflow.
 Slice 3.4 adds GM-only transaction diagnostics, sanitized bug-report export,
 durable audit/recovery state, safe Toolbelt re-scan and existing-damage linking,
 and fail-open handling for interrupted work. It adds no new automation category.
-Slice 4.0, corrected in Nelflow 0.6.1 and 0.6.2, observes one character Strike regardless
+Slice 4.0, corrected through Nelflow 0.6.3, observes one character Strike regardless
 of whether its active OWNER author is a player or GM. The user chooses PF2e's
 native damage roll, then one authoritative GM applies that exact DamageRoll to
 the attack's snapshotted target.
@@ -65,8 +65,8 @@ URL:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-The current release candidate is **v0.6.2-rc1**. It is intended for runtime
-testing; Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
+This build prepares the future **v0.6.3-rc1** release candidate for runtime
+testing. Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
@@ -114,17 +114,18 @@ See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.m
 and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
 must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
 
-## Nelflow 0.6.2 deterministic character Strike damage
+## Nelflow 0.6.3 deterministic character Strike damage
 
 Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. A
 character's player or GM user targets once and rolls the Strike normally.
 Nelflow snapshots the exact PF2e attack, source, target, author, action/index,
 MAP, and final outcome, then shows **Waiting for Damage**. It never calls Damage
-or Critical Damage. A capture-phase listener records a 30-second, one-shot
+or Critical Damage. A capture-phase listener records a 30-second pending
 intent for that exact attack card without stopping PF2e's handler. The outgoing
-native damage message receives inert Nelflow correlation metadata, then one
-elected GM revalidates and applies its unchanged DamageRoll through PF2e's
-contextual `Actor#applyDamage` pathway.
+native damage message receives an inert exact binding. Binding does not finalize
+the intent: one elected GM revalidates and claims that persisted relationship,
+then applies its unchanged DamageRoll through PF2e's contextual
+`Actor#applyDamage` pathway.
 
 Current targeting cannot redirect damage. Hostile mode requires both the
 snapshotted and current exact token disposition to remain hostile; friendly,
@@ -136,13 +137,13 @@ ordinary or critical damage variant selected by the user is authoritative and
 is never transformed. Native healing, persistent, splash, category, and
 material semantics present in that roll remain PF2e's responsibility.
 
-### Nelflow 0.6.2 changes
+### Nelflow 0.6.3 changes
 
-- Character Strike damage links to the exact attack card whose native Damage or Critical Damage control was clicked.
-- Multiple waiting Strikes no longer cause premature Manual Review.
-- Transactions remain waiting until a damage message is actually observed.
-- Direct click-intent correlation takes priority over structured fallback matching.
-- GM-authored and player-authored character Strikes continue to use the same workflow.
+- Fixed click intents being finalized before authoritative damage application.
+- Exact same-message intent bindings are now idempotent rather than ambiguous.
+- Direct click-intent correlation proceeds without requiring structured fallback candidates.
+- Bound intents remain valid across processing delays, refreshes, and client disconnects.
+- Character Strike damage now reaches native PF2e application after deterministic linking.
 
 Native cards, rolls, roll modes, damage dialogs, controls, and Dice So Nice
 animation remain intact. Player requests carry only a damage-message ID; the
@@ -152,7 +153,7 @@ state evidence. GM Undo is the existing guarded HP/temp-HP restoration.
 Existing worlds migrate this setting to **Off** once so an update cannot begin
 player-authored HP changes silently. Fresh worlds default to **Hostile
 Targets**. See [Slice 4.0 architecture](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
-and the [132-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
+and the [148-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
 
 ## Slice 2 behavior
 
@@ -493,12 +494,12 @@ Undo Blocked.
   structurally unique. Concurrent identical unmarked sources become Ambiguous
   and do not autoroll.
 - PF2e 8.4.0 character Strike damage cards do not natively persist their
-  originating attack-message ID. Nelflow 0.6.2 supplies it for normal native
+  originating attack-message ID. Nelflow 0.6.3 supplies it for normal native
   card clicks. Structurally identical unmarked messages or same-user dialogs
   completed out of causal order can still require recovery rather than a
   time/chat-order guess.
 - PF2e exposes no conclusive structured Shield Block eligibility signal for
-  this workflow. Nelflow 0.6.2 adds no reaction prompt and uses no Shield Block;
+  this workflow. Nelflow 0.6.3 adds no reaction prompt and uses no Shield Block;
   tables requiring reaction decisions should keep Player Strike Auto-Apply Off.
 - Private/self-roll documents unavailable to the elected GM cannot be applied.
 
@@ -529,5 +530,5 @@ settings, and safety invariants. They are not Foundry runtime acceptance.
 - [Slice 3.2 runtime test plan](docs/SLICE_003_2_TEST_PLAN.md)
 - [Slice 3.3 deterministic damage autoroll](docs/SLICE_003_3_DETERMINISTIC_DAMAGE_AUTOROLL.md)
 - [Slice 3.3 runtime test plan](docs/SLICE_003_3_TEST_PLAN.md)
-- [Slice 4.0 / Nelflow 0.6.2 character Strike auto-apply](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
-- [Nelflow 0.6.2 character Strike runtime test plan](docs/SLICE_004_0_TEST_PLAN.md)
+- [Slice 4.0 / Nelflow 0.6.3 character Strike auto-apply](docs/SLICE_004_0_PLAYER_STRIKE_AUTO_APPLY.md)
+- [Nelflow 0.6.3 character Strike runtime test plan](docs/SLICE_004_0_TEST_PLAN.md)

@@ -112,8 +112,9 @@ export class DamageMessageClaimRegistry {
 
   markPersisted(messageId, transactionId) {
     const claim = this.claims.get(messageId);
-    if (claim?.transactionId !== transactionId) return false;
-    claim.persisted = true;
+    const owner = claim?.transactionId ?? this.persistedOwner(messageId) ?? null;
+    if (owner !== transactionId) return false;
+    this.claims.set(messageId, { transactionId, persisted: true });
     return true;
   }
 

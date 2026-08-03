@@ -169,6 +169,15 @@ test("a persisted terminal claim prevents replay", () => {
   assert.equal(claims.release("damage", "one"), false);
 });
 
+test("a durable same-owner binding can be marked persisted after session claim loss", () => {
+  const claims = new DamageMessageClaimRegistry({
+    persistedOwner: (messageId) => messageId === "damage" ? "one" : null,
+  });
+  assert.equal(claims.markPersisted("damage", "one"), true);
+  assert.equal(claims.owner("damage"), "one");
+  assert.equal(claims.release("damage", "one"), false);
+});
+
 test("critical transaction rejects distinguishable normal damage", () => {
   const registry = new DamageCaptureRegistry();
   const capture = registry.begin(scope("critical", { expectedOutcome: "criticalSuccess" }));

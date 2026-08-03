@@ -23,6 +23,7 @@ export const PLAYER_STRIKE_FAILURES = Object.freeze({
   DAMAGE_AMBIGUOUS: "player-strike-damage-ambiguous",
   DIRECT_INTENT_INVALID: "player-strike-direct-intent-invalid",
   DIRECT_INTENT_EXPIRED: "player-strike-direct-intent-expired",
+  DIRECT_INTENT_CONFLICT: "player-strike-direct-intent-conflict",
   VARIANT_MISMATCH: "player-strike-damage-variant-mismatch",
   AUTHORITY_MISSING: "player-strike-authority-missing",
   APPLICATION_FAILED: "player-strike-application-failed",
@@ -219,7 +220,6 @@ export function validateCharacterStrikeCorrelation(
   if (
     !transaction ||
     transaction.transactionType !== PLAYER_STRIKE_TRANSACTION_TYPE ||
-    transaction.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE ||
     !correlation ||
     correlation.version !== CHARACTER_STRIKE_CORRELATION_SCHEMA_VERSION ||
     correlation.transactionId !== transaction.id ||
@@ -230,11 +230,62 @@ export function validateCharacterStrikeCorrelation(
     typeof correlation.authorUserId !== "string" ||
     !Number.isFinite(correlation.createdAt)
   ) {
-    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID };
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID,
+      decision: "rejected",
+    };
+  }
+  const damageMessageId = evidence?.damageMessageId ?? null;
+  const correlationBoundMessageId = correlation.boundDamageMessageId ?? null;
+  const transactionBoundMessageId = transaction.boundDamageMessageId ??
+    transaction.damageMessageId ?? transaction.observedDamageMessageId ?? null;
+  const nonceConflicts = Boolean(
+    transaction.directIntentNonce && transaction.directIntentNonce !== correlation.intentNonce,
+  );
+  const correlationMessageConflicts = Boolean(
+    correlationBoundMessageId && damageMessageId && correlationBoundMessageId !== damageMessageId,
+  );
+  const transactionMessageConflicts = Boolean(
+    transactionBoundMessageId && damageMessageId && transactionBoundMessageId !== damageMessageId,
+  );
+  if (nonceConflicts || correlationMessageConflicts || transactionMessageConflicts) {
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_CONFLICT,
+      decision: "rejected",
+      persistedBindingState: transactionMessageConflicts || nonceConflicts
+        ? "consumed-by-other-message"
+        : "conflicting",
+    };
+  }
+  const correlationBoundToSameMessage = Boolean(
+    damageMessageId && correlationBoundMessageId === damageMessageId,
+  );
+  const persistedSameMessage = Boolean(
+    damageMessageId &&
+    transactionBoundMessageId === damageMessageId &&
+    (!transaction.directIntentNonce || transaction.directIntentNonce === correlation.intentNonce),
+  );
+  const sameMessageBinding = correlationBoundToSameMessage || persistedSameMessage;
+  if (transaction.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE && !sameMessageBinding) {
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID,
+      decision: "rejected",
+    };
   }
   const ageMs = now - correlation.createdAt;
-  if (ageMs < -5_000 || ageMs > maxAgeMs) {
-    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_EXPIRED, ageMs };
+  // Thirty seconds bounds only the pre-message hint. Once either the message
+  // metadata or the transaction proves the exact tuple, processing latency and
+  // browser lifetime are no longer correlation inputs.
+  if (ageMs < -5_000 || (!sameMessageBinding && ageMs > maxAgeMs)) {
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_EXPIRED,
+      decision: "rejected",
+      ageMs,
+    };
   }
   const snapshot = transaction.snapshot;
   const metadataExact =
@@ -250,12 +301,32 @@ export function validateCharacterStrikeCorrelation(
     authorUserId: correlation.authorUserId,
   });
   if (!metadataExact || !damageValidation.ok) {
-    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID, ageMs };
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID,
+      decision: "rejected",
+      ageMs,
+    };
   }
   if (requestedVariantFromDamageOutcome(evidence.outcome) !== correlation.requestedVariant) {
-    return { ok: false, reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID, ageMs };
+    return {
+      ok: false,
+      reason: PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID,
+      decision: "rejected",
+      ageMs,
+    };
   }
-  return { ok: true, reason: null, ageMs, variant: damageValidation.variant };
+  return {
+    ok: true,
+    reason: null,
+    ageMs,
+    variant: damageValidation.variant,
+    decision: persistedSameMessage ? "accepted-idempotent" : "accepted",
+    persistedBindingState: persistedSameMessage && transaction.directIntentConsumedAt
+      ? "consumed-by-same-message"
+      : "valid",
+    boundDamageMessageId: damageMessageId,
+  };
 }
 
 export function correlatePlayerStrikeDamage(transactions, evidence) {
@@ -281,12 +352,14 @@ export function correlatePlayerStrikeDamageWithIntent(
   correlation,
   options = {},
 ) {
-  const waiting = [...(transactions ?? [])].filter((transaction) =>
-    transaction?.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE &&
+  const playerStrikes = [...(transactions ?? [])].filter((transaction) =>
+    transaction?.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE,
+  );
+  const waiting = playerStrikes.filter((transaction) =>
     transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE,
   );
   if (correlation) {
-    const transaction = waiting.find((candidate) =>
+    const transaction = playerStrikes.find((candidate) =>
       candidate.id === correlation.transactionId &&
       candidate.attackMessageId === correlation.sourceMessageId,
     ) ?? null;

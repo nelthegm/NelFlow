@@ -759,6 +759,7 @@ for (const required of [
 }
 for (const required of [
   "PF2eAdapter.applyDamageRollToRecordedTarget",
+  "PF2eAdapter.claimDamageMessage",
   "PF2eAdapter.persistDamageClaim",
   "TransactionStore.claimPlayerStrike",
   "electProcessingGm",
@@ -811,8 +812,18 @@ if (!playerStrikeService.includes("Ignored premature Player Strike ambiguity")) 
   fail("player Strike state machine must reject ambiguity without observed conflict evidence");
 }
 const playerStrikeIntentTests = read("tests/player-strike-intent.test.mjs");
-if ((playerStrikeIntentTests.match(/test\(/g) ?? []).length < 40) {
-  fail("Nelflow 0.6.2 requires at least 40 focused click-intent scenarios");
+const playerStrikeLifecycleTests = read("tests/player-strike-intent-lifecycle.test.mjs");
+if ((`${playerStrikeIntentTests}\n${playerStrikeLifecycleTests}`.match(/test\(/g) ?? []).length < 83) {
+  fail("Nelflow 0.6.3 requires at least 83 focused click-intent scenarios");
+}
+for (const required of [
+  "directIntentLocalState", "persistedBindingState", "authorityClaimState",
+  "applicationState", "directCorrelationDecision", "boundDamageMessageId",
+]) {
+  if (!playerStrikeRuntime.includes(required)) fail(`character Strike lifecycle diagnostics are missing ${required}`);
+}
+if (playerStrikeService.includes("valid-but-consumed")) {
+  fail("same-message click-intent bindings must not use the ambiguous valid-but-consumed state");
 }
 if (/rollStrikeDamage|\.critical\s*\(|\.damage\s*\(/.test(playerStrikeService)) {
   fail("player Strike workflow must not invoke native damage rolling");

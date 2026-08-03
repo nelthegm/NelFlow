@@ -23,6 +23,7 @@ export const FAILURE_CODES = Object.freeze([
   "player-strike-target-disposition-blocked", "player-strike-outcome-missing",
   "player-strike-not-a-hit", "player-strike-damage-missing", "player-strike-damage-ambiguous",
   "player-strike-direct-intent-invalid", "player-strike-direct-intent-expired",
+  "player-strike-direct-intent-conflict",
   "player-strike-damage-variant-mismatch", "player-strike-authority-missing",
   "player-strike-application-failed", "player-strike-reaction-review-required",
   "player-strike-interrupted",

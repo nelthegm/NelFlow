@@ -212,9 +212,15 @@ export function transactionDiagnosticProjection(descriptor) {
     : null;
   const intentCreatedAt = transaction.directIntentCreatedAt ?? localIntent?.createdAt ?? null;
   const intentAgeMs = Number.isFinite(intentCreatedAt) ? Math.max(0, Date.now() - intentCreatedAt) : null;
+  const hasPersistedDirectBinding = Boolean(
+    transaction.directIntentPresent &&
+    (transaction.boundDamageMessageId ?? transaction.damageMessageId ?? transaction.observedDamageMessageId),
+  );
   const intentExpirationState = transaction.directIntentConsumedAt
-    ? "consumed"
-    : localIntent?.expirationState ?? (intentAgeMs == null
+    ? "finalized"
+    : localIntent?.expirationState ?? (hasPersistedDirectBinding
+      ? "bound"
+      : intentAgeMs == null
       ? "none"
       : intentAgeMs > CHARACTER_STRIKE_INTENT_MAX_AGE_MS ? "expired" : "fresh");
   const counts = targetCounts(descriptor);
@@ -274,6 +280,36 @@ export function transactionDiagnosticProjection(descriptor) {
       : null,
     directIntentAgeMs: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? intentAgeMs : null,
     directIntentExpirationState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? intentExpirationState : null,
+    directIntentLocalState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? localIntent?.localIntentState ?? transaction.directIntentLocalState ?? "missing"
+      : null,
+    persistedBindingState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.persistedBindingState ?? (damageMessageId ? "valid" : "none")
+      : null,
+    authorityClaimState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.authorityClaimState ?? (state === TRANSACTION_STATES.APPLIED ? "completed" : "unclaimed")
+      : null,
+    applicationState: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.applicationState ?? (state === TRANSACTION_STATES.APPLIED ? "applied" : "pending")
+      : null,
+    directCorrelationDecision: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directCorrelationDecision ?? "not-present"
+      : null,
+    directCorrelationRejectedReason: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? transaction.directCorrelationRejectedReason ?? transaction.directIntentRejectedReason ?? null
+      : null,
+    boundDamageMessageIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.boundDamageMessageId ?? damageMessageId)
+      : null,
+    boundTransactionIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.boundTransactionId ?? (damageMessageId ? transaction.id : null))
+      : null,
+    boundNonceShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
+      ? shortId(transaction.boundNonce ?? transaction.directIntentNonce)
+      : null,
+    boundAt: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.boundAt ?? null : null,
+    claimedAt: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.claimedAt ?? null : null,
+    appliedAt: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE ? transaction.appliedAt ?? null : null,
     observedDamageMessageIdShort: descriptor.type === PLAYER_STRIKE_TRANSACTION_TYPE
       ? shortId(transaction.observedDamageMessageId)
       : null,
@@ -384,6 +420,18 @@ export function buildSanitizedDiagnostic(descriptor) {
       directIntentAuthorIdShort: projection.directIntentAuthorIdShort,
       directIntentAgeMs: projection.directIntentAgeMs,
       directIntentExpirationState: projection.directIntentExpirationState,
+      directIntentLocalState: projection.directIntentLocalState,
+      persistedBindingState: projection.persistedBindingState,
+      authorityClaimState: projection.authorityClaimState,
+      applicationState: projection.applicationState,
+      directCorrelationDecision: projection.directCorrelationDecision,
+      directCorrelationRejectedReason: projection.directCorrelationRejectedReason,
+      boundDamageMessageIdShort: projection.boundDamageMessageIdShort,
+      boundTransactionIdShort: projection.boundTransactionIdShort,
+      boundNonceShort: projection.boundNonceShort,
+      boundAt: projection.boundAt,
+      claimedAt: projection.claimedAt,
+      appliedAt: projection.appliedAt,
       observedDamageMessageIdShort: projection.observedDamageMessageIdShort,
       directCorrelationValidation: projection.directCorrelationValidation,
       structuredFallbackCandidateCount: projection.structuredFallbackCandidateCount,

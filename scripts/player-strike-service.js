@@ -93,17 +93,22 @@ async function markManual(
   });
 }
 
-function waitingTransactions() {
+function playerStrikeTransactions() {
   const results = [];
   for (const message of game.messages ?? []) {
     const transaction = TransactionStore.get(message);
     if (
       transaction?.role === "attack" &&
-      transaction.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE &&
-      transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE
+      transaction.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE
     ) results.push({ message, transaction });
   }
   return results;
+}
+
+function waitingTransactions(transactions = playerStrikeTransactions()) {
+  return transactions.filter(({ transaction }) =>
+    transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+  );
 }
 
 function directCorrelation(waiting, normalized) {
@@ -126,14 +131,18 @@ function shortCandidateIds(candidates) {
 async function processDamage(message) {
   const normalized = normalizeDamage(message);
   if (!normalized) return false;
-  const waiting = waitingTransactions();
-  const direct = directCorrelation(waiting, normalized);
+  const transactions = playerStrikeTransactions();
+  const waiting = waitingTransactions(transactions);
+  const direct = directCorrelation(transactions, normalized);
   let owner = direct.ok ? direct.owner : null;
   let correlationMethod = direct.ok ? "character-strike-click-intent" : null;
   let fallback = null;
 
   if (direct.present && !direct.ok) {
-    if (direct.owner && currentUserIsAuthority(direct.owner.transaction.sourceUserId)) {
+    if (
+      direct.owner?.transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE &&
+      currentUserIsAuthority(direct.owner.transaction.sourceUserId)
+    ) {
       await enqueue(direct.owner.message.id, () => markManual(
         direct.owner.message,
         TransactionStore.get(direct.owner.message),
@@ -150,13 +159,23 @@ async function processDamage(message) {
           directIntentCreatedAt: direct.correlation.createdAt ?? null,
           observedDamageVariant: expectedDamageVariant(normalized.evidence.outcome),
           directCorrelationValidation: "rejected",
+          directCorrelationDecision: "rejected",
           directIntentRejectedReason: direct.validation.reason,
+          directCorrelationRejectedReason: direct.validation.reason,
+          persistedBindingState: direct.validation.persistedBindingState ?? "conflicting",
           ambiguityStage: "damage-observed",
           correlationMethod: "character-strike-click-intent-rejected",
         },
       ));
     }
     return false;
+  }
+
+  // A repeated hook or socket delivery for the exact durable tuple is an
+  // idempotent observation, not a second candidate. Only a still-waiting
+  // transaction may enter the authoritative queue again.
+  if (owner && owner.transaction.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE) {
+    return owner.transaction.state === TRANSACTION_STATES.APPLIED;
   }
 
   if (!owner) {
@@ -209,7 +228,13 @@ async function processDamage(message) {
       });
       return false;
     }
-    const attackValidation = validatePlayerStrikeAttack(attack.evidence);
+    // Initial observation already proved the author was active. Once the exact
+    // native message is bound, a later disconnect must not invalidate that
+    // durable relationship; current ownership is still revalidated below.
+    const attackValidation = validatePlayerStrikeAttack({
+      ...attack.evidence,
+      authorActive: direct.ok ? true : attack.evidence.authorActive,
+    });
     const snapshotValidation = validatePlayerStrikeSnapshot(transaction.snapshot, attack.evidence);
     const directRevalidation = direct.ok
       ? validateCharacterStrikeCorrelation(transaction, damage.evidence, damage.correlation)
@@ -222,7 +247,7 @@ async function processDamage(message) {
     const intentAuthor = direct.ok ? game.users?.get(directAuthor) : null;
     const ownerLevel = globalThis.CONST?.DOCUMENT_OWNERSHIP_LEVELS?.OWNER ?? 3;
     const directAuthorValid = !direct.ok || (
-      intentAuthor?.active === true && attack.actor?.testUserPermission?.(intentAuthor, ownerLevel) === true
+      Boolean(intentAuthor) && attack.actor?.testUserPermission?.(intentAuthor, ownerLevel) === true
     );
     const validationFailure = !directStillValid
       ? directRevalidation?.reason ?? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
@@ -238,10 +263,37 @@ async function processDamage(message) {
         {
           observedDamageMessageId: damageMessage.id,
           directCorrelationValidation: direct.ok ? "rejected" : "not-present",
+          directCorrelationDecision: direct.ok ? "rejected" : "not-present",
           directIntentRejectedReason: !directAuthorValid || !directStillValid
             ? directRevalidation?.reason ?? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
             : null,
+          directCorrelationRejectedReason: !directAuthorValid || !directStillValid
+            ? directRevalidation?.reason ?? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_INVALID
+            : null,
           ambiguityStage: "authority-validation",
+        },
+      );
+      return false;
+    }
+
+
+    const damageClaim = PF2eAdapter.claimDamageMessage(damageMessage.id, transaction.id);
+    if (!damageClaim.ok) {
+      await markManual(
+        attackMessage,
+        transaction,
+        PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS,
+        TRANSACTION_STATES.AMBIGUOUS,
+        {
+          observedDamageMessageId: damageMessage.id,
+          ambiguityStage: "authority-claim",
+          directCorrelationValidation: direct.ok ? "rejected-conflicting-claim" : "not-present",
+          directCorrelationDecision: direct.ok ? "rejected" : "not-present",
+          directIntentRejectedReason: direct.ok ? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_CONFLICT : null,
+          directCorrelationRejectedReason: direct.ok ? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_CONFLICT : null,
+          persistedBindingState: "conflicting",
+          authorityClaimState: "claimed-by-other-gm",
+          conflictingTransactionId: damageClaim.owner ?? null,
         },
       );
       return false;
@@ -263,8 +315,24 @@ async function processDamage(message) {
       directIntentRequestedVariant: direct.ok ? damage.correlation.requestedVariant : null,
       directIntentAuthorId: direct.ok ? damage.correlation.authorUserId : null,
       directIntentCreatedAt: direct.ok ? damage.correlation.createdAt : null,
-      directIntentConsumedAt: direct.ok ? Date.now() : null,
-      directCorrelationValidation: direct.ok ? "valid" : "not-present",
+      directIntentConsumedAt: null,
+      directIntentLocalState: direct.ok ? damage.correlation.localIntentState ?? "bound" : "missing",
+      persistedBindingState: direct.ok ? directRevalidation.persistedBindingState ?? "valid" : "none",
+      authorityClaimState: "claimed-by-this-gm",
+      applicationState: "pending",
+      directCorrelationDecision: direct.ok ? directRevalidation.decision ?? "accepted" : "not-present",
+      directCorrelationRejectedReason: null,
+      boundDamageMessageId: direct.ok ? damageMessage.id : null,
+      boundTransactionId: direct.ok ? transaction.id : null,
+      boundNonce: direct.ok ? damage.correlation.intentNonce : null,
+      boundAt: direct.ok ? damage.correlation.boundAt ?? Date.now() : null,
+      claimedAt: Date.now(),
+      appliedAt: null,
+      directCorrelationValidation: direct.ok
+        ? directRevalidation.decision === "accepted-idempotent"
+          ? "accepted-idempotent-same-message"
+          : "accepted"
+        : "not-present",
       directIntentRejectedReason: null,
       structuredFallbackCandidateCount: fallback?.candidates?.length ?? 0,
       structuredFallbackCandidateTransactionIds: fallback ? shortCandidateIds(fallback.candidates) : [],
@@ -277,8 +345,12 @@ async function processDamage(message) {
     if (!PF2eAdapter.persistDamageClaim(damageMessage.id, transaction.id)) {
       await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.DAMAGE_AMBIGUOUS, TRANSACTION_STATES.AMBIGUOUS, {
         observedDamageMessageId: damageMessage.id,
-        ambiguityStage: "damage-observed",
-        directCorrelationValidation: direct.ok ? "valid-but-consumed" : "not-present",
+        ambiguityStage: "authority-claim",
+        directCorrelationValidation: direct.ok ? "rejected-conflicting-claim" : "not-present",
+        directCorrelationDecision: direct.ok ? "rejected" : "not-present",
+        directIntentRejectedReason: direct.ok ? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_CONFLICT : null,
+        directCorrelationRejectedReason: direct.ok ? PLAYER_STRIKE_FAILURES.DIRECT_INTENT_CONFLICT : null,
+        persistedBindingState: "conflicting",
       });
       return false;
     }
@@ -329,6 +401,8 @@ async function processDamage(message) {
     transaction = await TransactionStore.update(attackMessage, {
       state: TRANSACTION_STATES.CLAIMED,
       processingUserId: game.user.id,
+      authorityClaimState: "claimed-by-this-gm",
+      claimedAt: transaction.claimedAt ?? Date.now(),
     });
     const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
     if (!preApplication) {
@@ -338,6 +412,7 @@ async function processDamage(message) {
     transaction = await TransactionStore.update(attackMessage, {
       state: TRANSACTION_STATES.APPLYING,
       preApplication,
+      applicationState: "applying",
       applicationAttemptCount: Number(transaction.applicationAttemptCount ?? 0) + 1,
     });
     try {
@@ -364,6 +439,11 @@ async function processDamage(message) {
         preApplication,
         postApplication,
         appliedAmount: appliedAmount(preApplication, postApplication),
+        applicationState: "applied",
+        authorityClaimState: "completed",
+        appliedAt: Date.now(),
+        directIntentFinalizedAt: direct.ok ? Date.now() : null,
+        directIntentConsumedAt: direct.ok ? Date.now() : null,
         eligibilityResult: "applied",
         failureCode: null,
         manualReason: null,
@@ -381,6 +461,7 @@ async function processDamage(message) {
         // The native call may have changed HP before an exception or missing
         // application record became observable. Never label that state safe to retry.
         state: TRANSACTION_STATES.INTERRUPTED,
+        applicationState: "failed",
         failureCode: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,
         errorStage: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,
         manualReason: PLAYER_STRIKE_FAILURES.APPLICATION_FAILED,

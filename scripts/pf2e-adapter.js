@@ -501,6 +501,10 @@ export class PF2eAdapter {
     return damageClaims.markPersisted(messageId, transactionId);
   }
 
+  static claimDamageMessage(messageId, transactionId) {
+    return damageClaims.claim(messageId, transactionId);
+  }
+
   static releaseDamageClaim(messageId, transactionId) {
     return damageClaims.release(messageId, transactionId);
   }

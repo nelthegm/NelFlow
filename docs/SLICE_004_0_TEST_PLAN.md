@@ -1,8 +1,8 @@
-# Nelflow 0.6.2 Deterministic Character Strike Runtime Test Plan
+# Nelflow 0.6.3 Deterministic Character Strike Runtime Test Plan
 
 Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e and Nelflow only, then repeat the compatibility cases with PF2e Toolbelt 3.52.0-3.52.1 and the named chat modules. Record settings, message IDs privately, HP/temp HP before and after, diagnostics, screenshots, console output, and reload results. These cases are runtime acceptance and were not executed by the Node test suite.
 
-1. Install `nelflow.zip` in a copied world and confirm version 0.6.2 loads with `module.json` at the archive root.
+1. Install `nelflow.zip` in a copied world and confirm version 0.6.3 loads with `module.json` at the archive root.
 2. Update an existing Nelflow 0.5.1 world and confirm Player Strike Auto-Apply migrates to Off once.
 3. Refresh twice and confirm the migration is idempotent.
 4. Create a fresh test world and confirm the setting defaults to Hostile Targets.
@@ -95,7 +95,7 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 91. Repeat a GM NPC Strike and confirm the existing NPC resolver/stack behavior is unchanged.
 92. Repeat Toolbelt spell and NPC basic-save flows and confirm their transaction behavior is unchanged.
 
-## Nelflow 0.6.2 click-intent correlation matrix
+## Nelflow 0.6.3 click-intent correlation matrix
 
 93. GM-authored character Strike, success, click Damage; confirm direct link and one application.
 94. GM-authored critical success, click Critical Damage; confirm exact critical roll applies.
@@ -137,3 +137,19 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 130. Repeat the existing NPC Strike stack/application tests; confirm no behavior change.
 131. Repeat Toolbelt basic-save application and autoroll tests; confirm no behavior change.
 132. Inspect and copy diagnostics for waiting, direct-linked, rejected, fallback-ambiguous, applied, and recovery states.
+133. Reproduce the 0.6.2 diagnostic with a linked direct intent, zero fallback candidates, and zero application attempts; confirm 0.6.3 accepts the same-message tuple and applies once.
+134. Inspect pre-create state and confirm the local intent changes from pending to bound, not finalized.
+135. Deliver the same bound damage message through duplicate create hooks and confirm no Ambiguous transition.
+136. Deliver the same bound damage message through duplicate socket wake-ups and confirm one authority claim and one application attempt.
+137. Reuse the bound nonce on a different damage message and confirm a direct-intent conflict with no application.
+138. Present one damage message as bound to a different transaction and confirm a conflict with both records left safe.
+139. Confirm a valid direct binding applies with zero structured fallback candidates.
+140. Confirm a valid direct binding wins when multiple transactions are heuristic matches.
+141. Wait more than 30 seconds after the native damage message is bound and confirm elected-GM processing remains eligible.
+142. Leave a click intent unbound for more than 30 seconds and confirm it expires without claiming a later message.
+143. Refresh the clicking browser after the damage message is created but before GM processing and confirm the persisted binding applies once.
+144. Disconnect the clicking player after binding and confirm the elected GM can still revalidate ownership and apply once.
+145. Refresh the elected GM while Applying and confirm interrupted recovery without duplicate application.
+146. Inspect diagnostics and confirm local intent, persisted binding, authority claim, application state, bound message/transaction/nonce, and lifecycle timestamps are distinct.
+147. Force the native application adapter to fail in a disposable test and confirm Application Failed/Interrupted rather than Ambiguous with zero attempts.
+148. Reprocess an Applied same-message tuple and confirm the durable state remains Applied with no second native call.
