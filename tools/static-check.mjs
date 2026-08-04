@@ -1059,7 +1059,7 @@ if (/querySelector|innerHTML|outerHTML|textContent|rollDamage|applyDamage|health
   fail("structured transaction reconciliation must not inspect HTML, roll, apply, or inspect HP");
 }
 for (const event of [
-  "transaction-failure-recorded", "transaction-details-opened", "transaction-diagnostic-copied",
+  "transaction-failure-recorded", "transaction-recovery-review-opened", "transaction-diagnostic-copied",
   "transaction-recovery-started", "transaction-recovery-completed", "transaction-recovery-failed",
   "transaction-rescan-started", "transaction-rescan-completed", "transaction-existing-damage-linked",
   "transaction-marked-manual", "transaction-abandoned", "transaction-guard-cleared",
@@ -1071,7 +1071,7 @@ for (const event of [
   }
 }
 if (!diagnosticsSource.includes("if (!game.user?.isGM") || !diagnosticsSource.includes("buildSanitizedDiagnostic")) {
-  fail("transaction details and recovery must be GM-only and diagnostics must be sanitized");
+  fail("transaction recovery must be GM-only and support diagnostics must be sanitized");
 }
 const diagnosticsTests = read("tests/transaction-diagnostics.test.mjs");
 if ((diagnosticsTests.match(/\btest\s*\(/g) ?? []).length < 70) {
@@ -1082,20 +1082,33 @@ for (const path of [
   "scripts/transaction-diagnostics-policy.js",
   "tests/presentation-cleanup.test.mjs",
 ]) {
-  if (!existsSync(join(root, path))) fail(`Nelflow 0.6.4 presentation cleanup file is missing: ${path}`);
+  if (!existsSync(join(root, path))) fail(`Nelflow 0.6.5 presentation cleanup file is missing: ${path}`);
 }
 const presentationTests = read("tests/presentation-cleanup.test.mjs");
-if ((presentationTests.match(/\btest\s*\(/g) ?? []).length < 14) {
-  fail("Nelflow 0.6.4 requires at least 14 focused presentation scenarios");
+if ((presentationTests.match(/\btest\s*\(/g) ?? []).length < 24) {
+  fail("Nelflow 0.6.5 requires at least 24 focused presentation scenarios");
 }
-const presentationSource = `${read("scripts/player-strike-presentation.js")}\n${read("scripts/transaction-diagnostics-policy.js")}\n${read("scripts/player-strike-ui.js")}`;
+const presentationSource = `${read("scripts/player-strike-presentation.js")}\n${read("scripts/transaction-diagnostics-policy.js")}\n${read("scripts/player-strike-ui.js")}\n${read("scripts/transaction-diagnostics-ui.js")}\n${read("scripts/chat-ui.js")}`;
 for (const required of [
   "selectPlayerStrikePresentationHost",
-  "transactionNeedsDiagnosticAttention",
-  "TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY",
+  "transactionNeedsRecoveryPresentation",
+  "removeLegacyTransactionDiagnostics",
+  "renderTransactionRecovery",
   "StrikeResolver.undoFromMessage",
 ]) {
-  if (!presentationSource.includes(required)) fail(`Nelflow 0.6.4 presentation policy is missing: ${required}`);
+  if (!presentationSource.includes(required)) fail(`Nelflow 0.6.5 presentation policy is missing: ${required}`);
+}
+if (/renderTransactionDiagnostics|transactionDiagnosticProjection|Nelflow\.Diagnostics\.Details/.test(read("scripts/chat-ui.js"))) {
+  fail("Nelflow 0.6.5 ordinary chat must not render transaction internals");
+}
+if (/textContent\s*=\s*row\.presentationError/.test(read("scripts/chat-ui.js"))) {
+  fail("NPC stack chat must not expose stored presentation errors");
+}
+if (!read("scripts/settings.js").match(/SHOW_TRANSACTION_DIAGNOSTICS[\s\S]*config:\s*false/)) {
+  fail("legacy chat-diagnostics setting must remain registered but hidden");
+}
+if (!read("styles/nelflow.css").match(/\.nelflow-diagnostics,[\s\S]*display:\s*none\s*!important/)) {
+  fail("legacy diagnostic containers must be hidden defensively before first paint");
 }
 if (/deleteChatMessage|\.delete\s*\(|\.setFlag\s*\(|\.update\s*\(/.test(read("scripts/player-strike-ui.js"))) {
   fail("player Strike presentation must not mutate or delete native ChatMessages");

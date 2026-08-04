@@ -5,17 +5,14 @@ import {
   copyDiagnosticWithFallback,
   diagnosticDescriptors,
   TransactionDiagnosticsService,
-  transactionDiagnosticProjection,
 } from "./transaction-diagnostics-service.js";
 import { shortId } from "./transaction-failure.js";
-import {
-  SETTINGS,
-  TRANSACTION_DIAGNOSTIC_MODES,
-} from "./constants.js";
-import { getSetting } from "./settings.js";
 import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
 import { isPlayerStrikePresentationHost } from "./player-strike-presentation.js";
-import { visibleDiagnosticDescriptors } from "./transaction-diagnostics-policy.js";
+import {
+  recoveryStatusKey,
+  transactionNeedsRecoveryPresentation,
+} from "./transaction-diagnostics-policy.js";
 
 function localize(key, data) {
   return data ? game.i18n.format(key, data) : game.i18n.localize(key);
@@ -28,10 +25,11 @@ function element(tag, className = null, text = null) {
   return node;
 }
 
-function field(list, key, value) {
-  const term = element("dt", null, localize(key));
-  const description = element("dd", null, value == null || value === "" ? "—" : String(value));
-  list.append(term, description);
+/** Remove 0.6.4/legacy diagnostic projections before any new UI is appended. */
+export function removeLegacyTransactionDiagnostics(html) {
+  for (const node of html.querySelectorAll(
+    ".nelflow-diagnostics, [data-nelflow-transaction-details]",
+  )) node.remove();
 }
 
 async function showClipboardFallback(json) {
@@ -44,7 +42,7 @@ async function showClipboardFallback(json) {
   textarea.setAttribute("aria-label", localize("Nelflow.Diagnostics.JsonAria"));
   content.append(textarea);
   await foundry.applications.api.DialogV2.confirm({
-    window: { title: localize("Nelflow.Diagnostics.Copy") },
+    window: { title: localize("Nelflow.Recovery.SupportInfo") },
     content,
     modal: true,
     rejectClose: false,
@@ -92,11 +90,11 @@ async function selectExistingDamage(descriptor) {
   content.append(element("p", null, localize("Nelflow.Diagnostics.ExistingDamageWarning")));
   const select = element("select");
   select.setAttribute("aria-label", localize("Nelflow.Diagnostics.ExistingDamage"));
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
     const option = element("option");
     option.value = candidate.messageId;
-    option.textContent = localize("Nelflow.Diagnostics.Candidate", {
-      id: candidate.messageIdShort,
+    option.textContent = localize("Nelflow.Recovery.Candidate", {
+      number: index + 1,
       role: candidate.authorRole,
       targets: candidate.targetCount,
       created: candidate.createdAt ?? "—",
@@ -116,16 +114,16 @@ async function selectExistingDamage(descriptor) {
   })).ok;
 }
 
-function actionButton(labelKey, handler, { disabled = false } = {}) {
-  const button = element("button", "nelflow-diagnostics__action", localize(labelKey));
+function actionButton(labelKey, descriptor, handler, { disabled = false } = {}) {
+  const button = element("button", "nelflow-recovery-dialog__action", localize(labelKey));
   button.type = "button";
   button.disabled = disabled;
   button.addEventListener("click", () => {
     button.disabled = true;
     void runNelflowBoundary({
-      subsystem: "transaction-diagnostics",
+      subsystem: "transaction-recovery",
       operation: labelKey,
-      messageId: button.closest("[data-message-id]")?.dataset.messageId,
+      messageId: descriptor.ownerMessage?.id,
       task: handler,
     }).finally(() => {
       button.disabled = disabled;
@@ -135,19 +133,19 @@ function actionButton(labelKey, handler, { disabled = false } = {}) {
 }
 
 function recoveryControls(descriptor) {
-  const controls = element("div", "nelflow-diagnostics__actions");
+  const controls = element("div", "nelflow-recovery-dialog__actions");
   const state = descriptor.transaction.state ?? descriptor.transaction.phase;
   const playerStrikeRecovery = descriptor.type === "player-strike" && [
     "manual", "ambiguous", "failed", "interrupted",
   ].includes(state);
   if (descriptor.type === "toolbelt-application") {
-    controls.append(actionButton("Nelflow.Diagnostics.Rescan", async () => {
+    controls.append(actionButton("Nelflow.Diagnostics.Rescan", descriptor, async () => {
       const result = await TransactionDiagnosticsService.recover(descriptor, "rescan-toolbelt");
       ui.notifications.info(localize("Nelflow.Notification.RescanResult", { result: result.result }));
     }));
   }
   if (playerStrikeRecovery) {
-    controls.append(actionButton("Nelflow.Diagnostics.RescanPlayerStrike", async () => {
+    controls.append(actionButton("Nelflow.Diagnostics.RescanPlayerStrike", descriptor, async () => {
       const result = await TransactionDiagnosticsService.recover(descriptor, "rescan-player-strike");
       ui.notifications.info(localize("Nelflow.Notification.PlayerStrikeRescanResult", { result: result.result }));
     }));
@@ -155,169 +153,95 @@ function recoveryControls(descriptor) {
   if (descriptor.type === "autoroll" || playerStrikeRecovery) {
     controls.append(actionButton(
       "Nelflow.Diagnostics.ExistingDamage",
+      descriptor,
       () => selectExistingDamage(descriptor),
       { disabled: TransactionDiagnosticsService.candidates(descriptor).length === 0 },
     ));
   }
   if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
-    controls.append(actionButton("Nelflow.Diagnostics.MarkManual", () =>
+    controls.append(actionButton("Nelflow.Diagnostics.MarkManual", descriptor, () =>
       TransactionDiagnosticsService.recover(descriptor, "mark-manual")));
   }
   if (["autoroll", "toolbelt-application"].includes(descriptor.type)) {
-    controls.append(actionButton("Nelflow.Diagnostics.ClearGuard", () =>
+    controls.append(actionButton("Nelflow.Diagnostics.ClearGuard", descriptor, () =>
       TransactionDiagnosticsService.recover(descriptor, "clear-guard")));
   }
   if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
-    controls.append(actionButton("Nelflow.Diagnostics.Abandon", async () => {
+    controls.append(actionButton("Nelflow.Diagnostics.Abandon", descriptor, async () => {
       if (await confirmAbandon()) return TransactionDiagnosticsService.recover(descriptor, "abandon");
       return false;
     }));
   }
-  controls.append(actionButton("Nelflow.Diagnostics.Copy", () => copyDiagnostic(descriptor)));
+  controls.append(actionButton("Nelflow.Recovery.SupportInfo", descriptor, () =>
+    copyDiagnostic(descriptor)));
   return controls;
 }
 
-function transactionPanel(descriptor) {
-  const projection = transactionDiagnosticProjection(descriptor);
-  const stateKey = {
-    ready: "Ready",
-    "pending-save": "Waiting",
-    observing: "Waiting",
-    "awaiting-toolbelt-targets": "Waiting",
-    applying: "Applying",
-    "applying-damage": "Applying",
-    applied: "Complete",
-    complete: "Complete",
-    completed: "Complete",
-    interrupted: "Interrupted",
-    ambiguous: "Ambiguous",
-    error: "Failed",
-    failed: "Failed",
-    manual: "Manual",
-    abandoned: "Abandoned",
-  }[projection.state];
-  const section = element("section", "nelflow-diagnostics__transaction");
-  const list = element("dl", "nelflow-diagnostics__fields");
-  field(list, "Nelflow.Diagnostics.Field.Version", projection.nelflowVersion);
-  field(list, "Nelflow.Diagnostics.Field.Type", projection.type === "player-strike" ? localize("Nelflow.PlayerStrike.Type") : projection.type);
-  field(list, "Nelflow.Diagnostics.Field.State", stateKey ? localize(`Nelflow.Diagnostics.Status.${stateKey}`) : projection.state);
-  field(list, "Nelflow.Diagnostics.Field.SourceKind", projection.sourceKind);
-  field(list, "Nelflow.Diagnostics.Field.SourceMessage", projection.sourceMessageIdShort);
-  field(list, "Nelflow.Diagnostics.Field.DamageMessage", projection.damageMessageIdShort);
-  field(list, "Nelflow.Diagnostics.Field.AuthorRole", projection.sourceAuthorRole);
-  field(list, "Nelflow.Diagnostics.Field.AuthorityRole", projection.processingAuthorityRole);
-  if (projection.type === "player-strike") {
-    field(list, "Nelflow.Diagnostics.Field.SettingMode", projection.settingMode);
-    field(list, "Nelflow.Diagnostics.Field.AttackOutcome", projection.attackOutcome);
-    field(list, "Nelflow.Diagnostics.Field.DamageLink", projection.damageLinkState);
-    field(list, "Nelflow.Diagnostics.Field.AuthorityState", projection.authorityState);
-    field(list, "Nelflow.Diagnostics.Field.ActorType", projection.actorType);
-    field(list, "Nelflow.Diagnostics.Field.MessageAuthor", projection.messageAuthorIdShort);
-    field(list, "Nelflow.Diagnostics.Field.MessageAuthorRole", projection.messageAuthorRole);
-    field(list, "Nelflow.Diagnostics.Field.RequestSender", projection.requestSenderIdShort);
-    field(list, "Nelflow.Diagnostics.Field.ProcessingAuthority", projection.processingAuthorityIdShort);
-    field(list, "Nelflow.Diagnostics.Field.AuthorIsGm", projection.authorIsGm ? localize("Nelflow.Diagnostics.Yes") : localize("Nelflow.Diagnostics.No"));
-    field(list, "Nelflow.Diagnostics.Field.RecordedTarget", projection.recordedTargetIdShort);
-    field(list, "Nelflow.Diagnostics.Field.DamageVariant", projection.observedDamageVariant);
-    field(list, "Nelflow.Diagnostics.Field.CorrelationMethod", projection.correlationMethod);
-    field(list, "Nelflow.Diagnostics.Field.Eligibility", projection.eligibilityResult);
-    field(list, "Nelflow.Diagnostics.Field.ApplicationAttempts", projection.applicationAttemptCount);
-    field(list, "Nelflow.Diagnostics.Field.FinalState", projection.finalState);
-    field(list, "Nelflow.Diagnostics.Field.ManualReason", projection.manualReason);
-    field(list, "Nelflow.Diagnostics.Field.DirectIntentPresent", projection.directIntentPresent ? localize("Nelflow.Diagnostics.Yes") : localize("Nelflow.Diagnostics.No"));
-    field(list, "Nelflow.Diagnostics.Field.IntentNonce", projection.directIntentNonceShort);
-    field(list, "Nelflow.Diagnostics.Field.IntentSourceMessage", projection.directIntentSourceMessageIdShort);
-    field(list, "Nelflow.Diagnostics.Field.IntentTransaction", projection.directIntentTransactionIdShort);
-    field(list, "Nelflow.Diagnostics.Field.IntentVariant", projection.directIntentRequestedVariant);
-    field(list, "Nelflow.Diagnostics.Field.IntentAuthor", projection.directIntentAuthorIdShort);
-    field(list, "Nelflow.Diagnostics.Field.IntentAge", projection.directIntentAgeMs);
-    field(list, "Nelflow.Diagnostics.Field.IntentExpiration", projection.directIntentExpirationState);
-    field(list, "Nelflow.Diagnostics.Field.IntentLocalState", projection.directIntentLocalState);
-    field(list, "Nelflow.Diagnostics.Field.PersistedBindingState", projection.persistedBindingState);
-    field(list, "Nelflow.Diagnostics.Field.AuthorityClaimState", projection.authorityClaimState);
-    field(list, "Nelflow.Diagnostics.Field.ApplicationState", projection.applicationState);
-    field(list, "Nelflow.Diagnostics.Field.DirectDecision", projection.directCorrelationDecision);
-    field(list, "Nelflow.Diagnostics.Field.DirectRejectedReason", projection.directCorrelationRejectedReason);
-    field(list, "Nelflow.Diagnostics.Field.BoundDamageMessage", projection.boundDamageMessageIdShort);
-    field(list, "Nelflow.Diagnostics.Field.BoundTransaction", projection.boundTransactionIdShort);
-    field(list, "Nelflow.Diagnostics.Field.BoundNonce", projection.boundNonceShort);
-    field(list, "Nelflow.Diagnostics.Field.BoundAt", projection.boundAt);
-    field(list, "Nelflow.Diagnostics.Field.ClaimedAt", projection.claimedAt);
-    field(list, "Nelflow.Diagnostics.Field.AppliedAt", projection.appliedAt);
-    field(list, "Nelflow.Diagnostics.Field.ObservedDamageMessage", projection.observedDamageMessageIdShort);
-    field(list, "Nelflow.Diagnostics.Field.DirectValidation", projection.directCorrelationValidation);
-    field(list, "Nelflow.Diagnostics.Field.FallbackCandidates", projection.structuredFallbackCandidateCount);
-    field(list, "Nelflow.Diagnostics.Field.FallbackCandidateIds", projection.structuredFallbackCandidateIdsShort?.join(", "));
-    field(list, "Nelflow.Diagnostics.Field.AmbiguityStage", projection.ambiguityStage);
-    field(list, "Nelflow.Diagnostics.Field.IntentRejectedReason", projection.directIntentRejectedReason);
+async function showRecoveryReview(descriptors) {
+  const content = element("div", "nelflow-recovery-dialog");
+  content.append(element("p", null, localize("Nelflow.Recovery.DialogHint")));
+  for (const descriptor of descriptors) {
+    const item = element("section", "nelflow-recovery-dialog__item");
+    item.append(element("p", null, localize(recoveryStatusKey(descriptor))));
+    item.append(recoveryControls(descriptor));
+    content.append(item);
   }
-  field(list, "Nelflow.Diagnostics.Field.Targets", projection.targetCount);
-  field(list, "Nelflow.Diagnostics.Field.Saves", `${projection.resolvedSaveCount}/${projection.saveCount}`);
-  field(list, "Nelflow.Diagnostics.Field.Applications", `${projection.completedApplicationCount}/${projection.applicationCount}`);
-  field(list, "Nelflow.Diagnostics.Field.Undo", projection.undoAvailable ? localize("Nelflow.Diagnostics.Yes") : localize("Nelflow.Diagnostics.No"));
-  field(list, "Nelflow.Diagnostics.Field.Autoroll", projection.autorollState);
-  field(list, "Nelflow.Diagnostics.Field.Guard", projection.guardState);
-  field(
-    list,
-    "Nelflow.Diagnostics.Field.Failure",
-    projection.failure?.code
-      ? `${projection.failure.code} · ${localize(`Nelflow.Failure.${projection.failure.code}`)}`
-      : null,
-  );
-  field(list, "Nelflow.Diagnostics.Field.Recovery", projection.recovery.status);
-  field(list, "Nelflow.Diagnostics.Field.Revision", projection.revision);
-  section.append(list);
-  const audit = element("ol", "nelflow-diagnostics__audit");
-  for (const entry of projection.audit) {
-    audit.append(element("li", null, localize("Nelflow.Diagnostics.AuditEntry", {
-      revision: entry.revision,
-      event: entry.event,
-      state: entry.state,
-    })));
-  }
-  if (audit.childElementCount) {
-    section.append(element("strong", null, localize("Nelflow.Diagnostics.RecentAudit")), audit);
-  }
-  section.append(recoveryControls(descriptor));
-  return section;
+  return foundry.applications.api.DialogV2.confirm({
+    window: { title: localize("Nelflow.Recovery.DialogTitle") },
+    content,
+    modal: true,
+    rejectClose: false,
+  });
 }
 
-export function renderTransactionDiagnostics(message, html) {
-  html.querySelectorAll(".nelflow-diagnostics").forEach((node) => node.remove());
-  if (!game.user?.isGM || message.visible === false || message.isContentVisible === false) return false;
-  const descriptors = diagnosticDescriptors(message).filter((descriptor) => {
+function currentViewerDescriptors(message) {
+  return diagnosticDescriptors(message).filter((descriptor) => {
+    if (!transactionNeedsRecoveryPresentation(descriptor)) return false;
     if (descriptor.type !== PLAYER_STRIKE_TRANSACTION_TYPE) return true;
     return isPlayerStrikePresentationHost(message.id, descriptor.transaction, (messageId) => {
       const candidate = message.id === messageId ? message : game.messages?.get(messageId);
       return Boolean(candidate?.visible && candidate.isContentVisible);
     });
   });
-  const mode = getSetting(SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS);
-  const visibleDescriptors = visibleDiagnosticDescriptors(descriptors, mode);
-  if (!visibleDescriptors.length) return false;
-  try {
-    const details = element("details", "nelflow-diagnostics");
-    details.dataset.nelflowTransactionDetails = message.id;
-    details.open = mode === TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY;
-    const summary = element("summary", "nelflow-diagnostics__summary", localize("Nelflow.Diagnostics.Details"));
-    summary.setAttribute("aria-label", localize("Nelflow.Diagnostics.DetailsAria"));
-    summary.addEventListener("click", () => {
-      logger.debug("transaction-details-opened", {
-        messageId: shortId(message.id),
-        transactionType: visibleDescriptors.length === 1 ? visibleDescriptors[0].type : "stack",
-        safeRole: "gm",
-      });
-    }, { once: true });
-    details.append(summary);
-    for (const descriptor of visibleDescriptors) details.append(transactionPanel(descriptor));
-    (html.querySelector(".message-content") ?? html).append(details);
-    return true;
-  } catch (error) {
-    logger.warn("transaction-details-render-failed", {
-      attackMessageId: shortId(message.id),
-      stage: "transaction-details",
-      reason: error instanceof Error ? error.name : "unknown-error",
-    });
+}
+
+/**
+ * Render only concise, player-facing recovery status. Structured diagnostics,
+ * identifiers, audit records, and correlation evidence are never inserted into
+ * ordinary ChatMessage HTML; authorized support export remains in the dialog.
+ */
+export function renderTransactionRecovery(message, html) {
+  removeLegacyTransactionDiagnostics(html);
+  html.querySelectorAll(".nelflow-recovery").forEach((node) => node.remove());
+  if (!game.user?.isGM || message.visible === false || message.isContentVisible === false) {
     return false;
   }
+  const descriptors = currentViewerDescriptors(message);
+  if (!descriptors.length) return false;
+  const wrapper = element("aside", "nelflow-recovery");
+  wrapper.setAttribute("role", "status");
+  for (const descriptor of descriptors) {
+    const item = element("div", "nelflow-recovery__item");
+    item.append(element("span", "nelflow-recovery__status", localize(recoveryStatusKey(descriptor))));
+    const review = element("button", "nelflow-recovery__review", localize("Nelflow.Recovery.Review"));
+    review.type = "button";
+    review.setAttribute("aria-label", localize("Nelflow.Recovery.ReviewAria"));
+    review.addEventListener("click", () => {
+      logger.debug("transaction-recovery-review-opened", {
+        messageId: shortId(descriptor.ownerMessage?.id),
+        transactionType: descriptor.type,
+        safeRole: "gm",
+      });
+      void runNelflowBoundary({
+        subsystem: "transaction-recovery",
+        operation: "open-review",
+        messageId: descriptor.ownerMessage?.id,
+        task: () => showRecoveryReview([descriptor]),
+      });
+    });
+    item.append(review);
+    wrapper.append(item);
+  }
+  (html.querySelector(".message-content") ?? html).append(wrapper);
+  return true;
 }

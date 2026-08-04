@@ -76,7 +76,6 @@ export function renderPlayerStrike(message, html) {
   const status = document.createElement("aside");
   const presentationState = playerStrikePresentationState(transaction);
   status.className = `nelflow-player-strike nelflow-player-strike--${presentationState}`;
-  status.dataset.nelflowCanonicalTransaction = transaction.id;
   status.setAttribute("role", "status");
   const icon = document.createElement("i");
   icon.className = "fa-solid fa-crosshairs";

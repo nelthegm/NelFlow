@@ -2,16 +2,16 @@
 
 Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Record module versions, browser, settings, console output, card screenshots, diagnostics, HP/temp-HP before/after, and reload results. Static and mocked tests are not runtime acceptance.
 
-1. Install the 0.5.1 ZIP in a copied world and verify `module.json` loads from the archive root.
+1. Install the current ZIP in a copied world and verify `module.json` loads from the archive root.
 2. Enable only PF2e, PF2e Toolbelt 3.52.0 or 3.52.1, and Nelflow.
 3. Make one qualifying NPC Strike and verify its existing compact-stack behavior.
 4. Cast one supported Fireball and verify one native damage roll.
 5. Use one supported NPC breath weapon with a manually created native damage roll.
 6. Confirm normal application and guarded Undo for all supported workflows.
-7. Open Transaction Details on a Strike record.
-8. Open Transaction Details on a spell source card.
-9. Open Transaction Details on a native damage/Toolbelt card.
-10. Copy each diagnostic JSON record.
+7. Force a Strike recovery state and open its concise Review dialog.
+8. Force a spell-source recovery state and open its concise Review dialog.
+9. Force a native damage/Toolbelt recovery state and open its concise Review dialog.
+10. Use Copy Support Info for each sanitized JSON record.
 11. Confirm diagnostics contain expected Foundry, PF2e, Nelflow, and Toolbelt versions.
 12. Confirm no campaign actor or token names appear.
 13. Confirm no hidden item/spell names appear.
@@ -19,10 +19,10 @@ Use a copied/disposable Foundry V14 world with PF2e 8.3.0. Record module version
 15. Confirm no damage totals or HP values appear.
 16. Confirm no full UUID, raw flags, target list, URL, cookie, credential, or socket data appears.
 17. Deny clipboard permission and verify the safe DialogV2 textarea fallback.
-18. Sign in as a player and verify Transaction Details is absent.
+18. Sign in as a player and verify recovery controls and transaction internals are absent.
 19. Attempt direct DOM changes as a player and verify there is no recovery/socket authority endpoint.
 20. Produce a missing-target/manual-review Toolbelt transaction.
-21. Confirm a localized failure code and recovery status appear only to the GM.
+21. Confirm only concise recovery wording appears in chat; stored failure codes remain available through sanitized support export to the GM.
 22. Run Re-scan Toolbelt State.
 23. Confirm re-scan does not change HP or temporary HP.
 24. Confirm re-scan does not roll a save.

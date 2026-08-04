@@ -172,7 +172,9 @@ const SETTING_DEFINITIONS = [
         "Nelflow.Settings.ShowTransactionDiagnostics.Always",
     },
     default: TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY,
-    onChange: refreshPresentation,
+    // Compatibility-only: retain the client key and stored values, but no
+    // mode may project transaction internals into ordinary chat in 0.6.5.
+    config: false,
   },
   {
     key: SETTINGS.MIGRATION_VERSION,

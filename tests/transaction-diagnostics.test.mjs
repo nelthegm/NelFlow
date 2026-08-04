@@ -343,7 +343,7 @@ test("clipboard failure opens safe fallback", async () => {
   assert.equal(fallbackValue, "{\"safe\":true}");
 });
 
-test("Transaction Details is GM-only", () => {
+test("diagnostic descriptor access is GM-only", () => {
   installGame({ isGM: false });
   const message = { getFlag: () => { throw new Error("player must not inspect flags"); } };
   assert.deepEqual(diagnosticDescriptors(message), []);

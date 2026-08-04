@@ -16,7 +16,10 @@ import { SupplementalActionAwareness } from "./supplemental-action-awareness.js"
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { failOpenAutoDamageRoll, renderAutoDamageRoll } from "./auto-damage-roll-ui.js";
-import { renderTransactionDiagnostics } from "./transaction-diagnostics-ui.js";
+import {
+  removeLegacyTransactionDiagnostics,
+  renderTransactionRecovery,
+} from "./transaction-diagnostics-ui.js";
 import { renderPlayerStrike } from "./player-strike-ui.js";
 
 const reportedRenderFailures = new Set();
@@ -194,8 +197,6 @@ function renderRow(row, stack) {
   const state = rowState(row);
   const item = document.createElement("li");
   item.className = `nelflow-stack__row nelflow-stack__row--${state.className}`;
-  item.dataset.transactionId = row.transactionId;
-  item.dataset.attackMessageId = row.attackMessageId;
 
   const summary = document.createElement("div");
   summary.className = "nelflow-stack__row-summary";
@@ -296,12 +297,6 @@ function renderRow(row, stack) {
         "fa-solid fa-heart-pulse",
       ),
     );
-  }
-  if (row.presentationError) {
-    const error = document.createElement("span");
-    error.className = "nelflow-stack__error";
-    error.textContent = row.presentationError;
-    references.append(error);
   }
   details.append(detailsToggle, references);
   resultLine.append(details);
@@ -436,7 +431,6 @@ function renderLegacyStatus(message, html) {
 
   const row = document.createElement("div");
   row.className = "nelflow-status";
-  row.dataset.transactionId = resolved.transaction.id;
   const text = document.createElement("span");
   text.className = "nelflow-status__text";
   text.textContent = legacyStatusText(resolved.transaction);
@@ -471,28 +465,32 @@ function renderLegacyStatus(message, html) {
 
 export function renderNelflowChat(message, html) {
   if (!(html instanceof HTMLElement)) return;
+  // 0.6.5 never inserts transaction internals into chat. Remove any stale
+  // projection synchronously before rendering live or historical content.
+  removeLegacyTransactionDiagnostics(html);
   let stack = null;
   try {
     renderAutoDamageRoll(message, html);
     renderToolbeltBasicSave(message, html);
     if (renderSaveResolverChat(message, html)) {
-      renderTransactionDiagnostics(message, html);
+      renderTransactionRecovery(message, html);
       return;
     }
     stack = message.getFlag(MODULE_ID, "stack");
     if (stack) {
       if (!validStackProjection(stack)) throw new Error("Invalid persisted stack projection");
       if (canRenderStackForViewer(message)) renderStack(message, html, stack);
-      renderTransactionDiagnostics(message, html);
+      renderTransactionRecovery(message, html);
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
     renderPlayerStrike(message, html);
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
-    renderTransactionDiagnostics(message, html);
+    renderTransactionRecovery(message, html);
   } catch (error) {
-    html.querySelectorAll(".nelflow-diagnostics").forEach((node) => node.remove());
+    removeLegacyTransactionDiagnostics(html);
+    html.querySelectorAll(".nelflow-recovery").forEach((node) => node.remove());
     failOpenAutoDamageRoll(html);
     html.classList.remove(
       "nelflow-native-record-hidden",

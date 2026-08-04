@@ -119,12 +119,9 @@ function summaryText(message, role, transaction) {
   }
 
   const target = visibleApplicationTarget(message, transaction);
-  return Number.isFinite(transaction.appliedAmount)
-    ? format("Nelflow.Native.ApplicationSummary", {
-        target,
-        amount: transaction.appliedAmount,
-      })
-    : format("Nelflow.Native.ApplicationSummaryUnavailable", { target });
+  // The stack or workflow host owns application status. A linked native card
+  // receives only a neutral record label so Nelflow never duplicates Applied.
+  return format("Nelflow.Native.ApplicationRecordSummary", { target });
 }
 
 function makeToggle() {

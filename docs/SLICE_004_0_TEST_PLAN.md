@@ -56,7 +56,7 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 52. Refresh after Applied and confirm status plus guarded Undo reconstruct.
 53. Refresh after Manual, Ambiguous, or Abandoned and confirm each remains terminal.
 54. Delete a linked native damage message after application and confirm the attack record remains safe and Undo preconditions remain exact.
-55. Open GM Transaction Details and confirm type Player Strike, setting, source kind, outcome category, link/application/authority/Undo state, failure, audit, and revision.
+55. Use GM Review and Copy Support Info; confirm sanitized export retains Player Strike setting, source kind, outcome, link/application/authority/Undo state, failure, audit, and revision while chat exposes none of those internals.
 56. Sign in as a player and confirm private GM fields, target identity, IDs, and fingerprints are absent.
 57. Copy a diagnostic and confirm no names, formulas, totals, target AC, full IDs/UUIDs, target identity, or raw flags appear.
 58. Run Re-scan and confirm it does not roll, apply, or inspect HP.
@@ -160,12 +160,32 @@ Use a copied/disposable Foundry 14.365 world with PF2e 8.4.0. Start with PF2e an
 153. Confirm exactly one Nelflow guarded Undo is visible for an Applied transaction.
 154. Confirm linked non-canonical cards contain no duplicate Nelflow status or Undo control.
 155. Change HP after application, use canonical Undo, and confirm Undo Blocked replaces the button without stale restoration.
-156. In Errors Only mode, complete a clean transaction and confirm Transaction Details is absent while flags and sanitized export remain available.
-157. In Errors Only mode, force Failed, Interrupted, Ambiguous, Manual, orphan/recovery, and failed-Undo states; confirm Transaction Details appears expanded.
-158. In Always mode, confirm the prior GM-only Transaction Details disclosure remains available for clean and exceptional transactions.
-159. In Off mode, confirm Transaction Details is absent while recovery health notifications, flags, audit data, and export remain intact.
+156. Complete a clean transaction and confirm no transaction-internals disclosure appears while flags and sanitized export remain available.
+157. Force Failed, Interrupted, Ambiguous, Manual, orphan/recovery, and failed-Undo states; confirm only concise recovery wording and Review appear.
+158. Set the legacy diagnostics preference to Always and confirm transaction internals still never appear in chat.
+159. Set the legacy preference to Off and confirm recovery health notifications, flags, audit data, guarded actions, and support export remain intact.
 160. Reload after application and confirm the same canonical host, one summary, and one guarded Undo reconstruct from persistent flags.
 161. Test attack, damage, and application whispers/blind rolls with player and GM viewers; confirm native visibility and privacy are unchanged.
 162. Inspect stored native attack, damage, and application documents before and after rendering; confirm content, rolls, PF2e flags, ownership, whisper, and blind fields are unchanged.
 163. Disable NPC compact stacks and confirm the legacy Strike fallback does not add duplicate player-Strike status or Undo.
 164. Repeat NPC Strike, Toolbelt basic-save, autoroll, IWR, recovery, multi-GM, and Dice So Nice coverage; confirm no mechanical or compatibility regression.
+165. Complete a player Strike and search its rendered chat HTML; confirm `Transaction Details` and every technical field label are absent.
+166. Complete an NPC Strike and search the compact stack and linked-card HTML; confirm `Transaction Details` and technical fields are absent.
+167. Force a failed player Strike and confirm only human-readable recovery status and Review are visible.
+168. Force a failed NPC Strike and confirm only human-readable recovery status and Review are visible.
+169. Interrupt each supported workflow and confirm the status says automation was interrupted without exposing a session, authority, or correlation ID.
+170. Observe the first resolving NPC render and confirm no diagnostic container is inserted or briefly painted.
+171. Inspect the renderer and browser behavior to confirm no timeout, animation-frame, or mutation-observer cleanup is required.
+172. Render a cached legacy diagnostic container and confirm defensive CSS hides it before the synchronous renderer removes it.
+173. Reload and reconnect with successful, failed, and interrupted records; confirm no transaction internals appear.
+174. Scroll older chat history into view; confirm the same diagnostic-free renderer applies.
+175. Inspect message flags before and after rendering; confirm diagnostic, audit, recovery, correlation, and authority records are unchanged.
+176. Use Review and Copy Support Info; confirm sanitized export works and contains no private names, formulas, totals, full IDs, raw flags, or credentials.
+177. Confirm one successful player transaction has exactly one application summary across every linked card.
+178. Confirm one applied player or NPC Strike has no more than one visible Nelflow guarded Undo.
+179. Expand linked native PF2e cards and confirm their stored content, rolls, flags, buttons, ownership, whisper, and blind fields are unchanged.
+180. Open Native Records as multiple viewers and confirm each sees only exact native messages they are already entitled to see.
+181. Repeat player Strike target-name and applied-amount privacy checks with hidden tokens, whispers, and blind application records.
+182. Repeat NPC stack target-name and damage privacy checks with player and GM viewers.
+183. Open Configure Settings and confirm the legacy diagnostics preference is absent while its existing client storage value remains untouched.
+184. Repeat authority, IWR, Toolbelt, save, recovery, and Undo regression coverage without changing any mechanical expectation.

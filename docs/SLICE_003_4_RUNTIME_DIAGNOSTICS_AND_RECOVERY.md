@@ -12,11 +12,11 @@ Slice 3.4 makes an interrupted Nelflow workflow diagnosable without attributing 
 
 Strike, Toolbelt application, legacy resolver, and autoroll records carry a schema-versioned audit array. It records meaningful state transitions and recovery events, suppresses duplicate no-op entries, and retains the newest 24 entries. Entries contain revision, event, state, subsystem, time, user role, and safe reason only. Rendering never appends audit data.
 
-## Transaction Details and diagnostic export
+## Chat recovery and diagnostic export
 
-Relevant source, native damage, Toolbelt, resolver, and Strike stack cards receive a compact GM-only `Transaction Details` disclosure. It shows safe state, role, count, guard, failure, recovery, revision, and last-five-event fields. There is no player-side socket endpoint, and the renderer refuses to create the panel for non-GMs.
+As of Nelflow 0.6.5, ordinary chat never receives a transaction-internals disclosure. Source, native damage, Toolbelt, resolver, player Strike, and NPC stack rendering omit transaction IDs, correlation/authority evidence, audit fields, failure codes, and structured flags in every success, failure, interruption, recovery, history, and reload state. Exceptional records receive only a concise GM status and **Review** button. The review dialog offers the existing guarded actions without rendering an internal state table.
 
-`Copy Nelflow Diagnostic` produces schema-versioned JSON containing compatible environment versions, the existing workflow settings, a redacted transaction projection, audit, recovery, and warnings. Clipboard failure opens a `DialogV2` textarea with the same sanitized JSON. Actor, token, user, and hidden item names; formulas; totals; full UUIDs and integration IDs; target lists; raw flags; URLs; cookies; credentials; sockets; and stack traces are excluded.
+`Copy Support Info` produces the existing schema-versioned JSON containing compatible environment versions, workflow settings, a redacted transaction projection, audit, recovery, and warnings. Clipboard failure opens a `DialogV2` textarea with the same sanitized JSON. Actor, token, user, and hidden item names; formulas; totals; full UUIDs and integration IDs; target lists; raw flags; URLs; cookies; credentials; sockets; and stack traces are excluded.
 
 ## Recovery model
 
@@ -30,11 +30,11 @@ The scan rereads the exact message through the Toolbelt structured adapter and p
 
 The autoroll recovery service searches native damage messages using structural origin, exact source context, roll index, author, target fingerprint, and Nelflow correlation evidence. Names, titles, formulas, totals, newest-message selection, and chat adjacency are not selectors. A GM sees safe candidate metadata, explicitly selects one, and confirms the link. Linking records the message as external; it does not reroll, create a message, claim Nelflow generated it, or directly alter HP.
 
-### Mark Manual, Clear Guard, and Abandon
+### Manual handling, native controls, and stopping automation
 
-- **Mark Manual** terminates Nelflow automation while preserving messages, saves, damage/application records, and audit. Native/manual work may continue and the state survives reload.
-- **Clear Nelflow Guard** changes presentation ownership only. It preserves mechanics and transaction state and re-enables only controls for which Nelflow recorded guard ownership.
-- **Abandon Transaction** requires confirmation, ends all interpretation and automation for the record, restores Nelflow-owned controls where safe, preserves all records, and survives reload.
+- **Use Manual Handling** terminates Nelflow automation while preserving messages, saves, damage/application records, and audit. Native/manual work may continue and the state survives reload.
+- **Enable Native Controls** changes presentation ownership only. It preserves mechanics and transaction state and re-enables only controls for which Nelflow recorded guard ownership.
+- **Stop Nelflow Automation** requires confirmation, ends all interpretation and automation for the record, restores Nelflow-owned controls where safe, preserves all records, and survives reload.
 
 ## Hook boundaries and state interruption
 
@@ -50,7 +50,7 @@ At render time, a control remains guarded only for an exact completed/external r
 
 ## Reload, privacy, and external isolation
 
-All diagnostics, audit, recovery, revision, and operation markers are ChatMessage flags and reconstruct after reload. No polling or elapsed-time correctness rule is used. One ready-time GM notification reports only the count requiring review.
+All diagnostics, audit, recovery, revision, and operation markers are ChatMessage flags and reconstruct after reload. No polling or elapsed-time correctness rule is used. One ready-time GM notification reports only the count requiring review. The legacy diagnostics-setting key remains registered but hidden; its stored value is not migrated or deleted and cannot enable internal chat markup.
 
 Nelflow reports only its own transaction evidence. It does not patch or mutate Monk's Combat Details, PF2e Action Macros, Forge scripts, Dynamic Initiative, Sustain Reminder, Automated Animations, PF2e rule elements, or other modules. Known module versions may appear in sanitized exports, but external exceptions are not assigned blame without exact evidence.
 
