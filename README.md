@@ -60,15 +60,16 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 
 ## Install or update
 
-Foundry or Forge users can install this release candidate using this manifest
-URL:
+Foundry or Forge users can install the stable Nelflow 0.6.5 release using this
+manifest URL:
 
 ```text
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-This build prepares the future **v0.6.5-rc1** release candidate for runtime
-testing. Foundry 14.365/PF2e 8.4.0 runtime acceptance is not yet claimed.
+Nelflow 0.6.5 passed Foundry/Forge runtime testing and is the stable release.
+The manifest downloads the stable package from
+`https://github.com/nelthegm/NelFlow/releases/download/v0.6.5/nelflow.zip`.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
@@ -119,8 +120,8 @@ The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
   compatibility but are hidden and no longer control chat rendering.
 
 See [Slice 3.4 architecture](docs/SLICE_003_4_RUNTIME_DIAGNOSTICS_AND_RECOVERY.md)
-and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Runtime acceptance
-must be performed in Foundry V14 with PF2e 8.3.0 and Toolbelt 3.52.0-3.52.1.
+and the [70-case runtime plan](docs/SLICE_003_4_TEST_PLAN.md). Nelflow 0.6.5
+passed Foundry/Forge runtime testing before stable promotion.
 
 ## Nelflow 0.6.5 strict chat presentation
 

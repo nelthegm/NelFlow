@@ -2,6 +2,8 @@
 
 Nelflow 0.6.5 is a strict chat-presentation correction. It does not add a new automation category or change attack/damage correlation, authority, application, IWR, temporary HP, recovery, reload, or guarded Undo semantics.
 
+This stable `v0.6.5` release is the exact implementation accepted during Foundry/Forge runtime testing. Its manifest downloads `https://github.com/nelthegm/NelFlow/releases/download/v0.6.5/nelflow.zip`, replacing the release-candidate download URL.
+
 ## Chat presentation
 
 - Transaction internals are never displayed in ordinary chat for NPC Strikes, player Strikes, basic saves, Toolbelt applications, failures, interruptions, recovery states, reloads, or chat history.
@@ -19,4 +21,4 @@ Native PF2e ChatMessages, rolls, flags, buttons, ownership, whispers, blind roll
 
 ## Testing status
 
-The Node/static suite covers diagnostic-free player and NPC presentation, initial render, reload/history registration, legacy-container suppression, recovery wording, setting compatibility, native-record privacy, canonical summaries, and single guarded Undo projection. Foundry V14/PF2e runtime acceptance remains required and is not claimed by this build.
+The Node/static suite covers diagnostic-free player and NPC presentation, initial render, reload/history registration, legacy-container suppression, recovery wording, setting compatibility, native-record privacy, canonical summaries, and single guarded Undo projection. Foundry/Forge runtime testing passed before this stable release was promoted.
