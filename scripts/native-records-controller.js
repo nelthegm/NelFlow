@@ -56,6 +56,35 @@ function exactRecord(stack, row, role) {
   return { id: messageId, message, role, transactionId: row.transactionId };
 }
 
+function exactBatchRecords(stack, row) {
+  const records = [];
+  const candidates = [
+    { id: row.attackMessageId, role: "attack" },
+    ...(row.damageMessageIds ?? []).map((id) => ({ id, role: "damage" })),
+    ...(row.applicationMessageIds ?? []).map((id) => ({ id, role: "application" })),
+  ];
+  for (const candidate of candidates) {
+    const message = candidate.id ? game.messages.get(candidate.id) : null;
+    if (!visibleMessage(message)) continue;
+    const marker = message.getFlag(MODULE_ID, "transaction");
+    const resolved = TransactionStore.resolveCanonical(message);
+    const transaction = resolved?.transaction;
+    const exact = candidate.role === "attack"
+      ? transaction?.attackMessageId === candidate.id
+      : candidate.role === "damage"
+        ? Object.values(transaction?.damageGroups ?? {}).some((group) => group?.damageMessageId === candidate.id)
+        : transaction?.targets?.some((target) => target.applicationMessageId === candidate.id);
+    if (
+      marker?.role === candidate.role &&
+      marker.id === row.transactionId &&
+      transaction?.id === row.transactionId &&
+      transaction.stackRef?.id === stack.id &&
+      exact
+    ) records.push({ ...candidate, message, transactionId: row.transactionId });
+  }
+  return records;
+}
+
 function renderedMessage(messageId) {
   return Array.from(document.querySelectorAll("[data-message-id]")).find(
     (element) => element.dataset.messageId === messageId,
@@ -163,6 +192,14 @@ export class NativeRecordsController {
     const records = [];
     const seen = new Set();
     for (const row of stack.rows ?? []) {
+      if (row.batch) {
+        for (const record of exactBatchRecords(stack, row)) {
+          if (seen.has(record.id)) continue;
+          seen.add(record.id);
+          records.push(record);
+        }
+        continue;
+      }
       for (const role of Object.keys(ROLE_FIELDS)) {
         const record = exactRecord(stack, row, role);
         if (!record || seen.has(record.id)) continue;

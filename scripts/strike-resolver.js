@@ -8,6 +8,7 @@ import { SupplementalActionAwareness } from "./supplemental-action-awareness.js"
 import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
+import { MULTI_TARGET_CAPTURE_FLAG, validCapture } from "./multi-target-strike-model.js";
 
 const inFlight = new Set();
 
@@ -85,6 +86,7 @@ async function syncStack(attackMessage, transaction, stage) {
 
 export class StrikeResolver {
   static async handleAttackMessage(message) {
+    if (validCapture(message.getFlag?.(MODULE_ID, MULTI_TARGET_CAPTURE_FLAG))) return;
     if (
       !getSetting(SETTINGS.ENABLED) ||
       !PF2eAdapter.isEnvironmentSupported() ||

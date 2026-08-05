@@ -87,8 +87,8 @@ const transaction = (changes = {}) => ({
   ...changes,
 });
 
-add("module version is 0.6.5", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.6.5"));
-add("package version is 0.6.5", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.6.5"));
+add("module version is 0.7.0", () => assert.equal(JSON.parse(rootFile("module.json")).version, "0.7.0"));
+add("package version is 0.7.0", () => assert.equal(JSON.parse(rootFile("package.json")).version, "0.7.0"));
 add("module id remains nelflow", () => assert.equal(JSON.parse(rootFile("module.json")).id, "nelflow"));
 add("player Strike setting registers", () => assert.match(rootFile("scripts/settings.js"), /SETTINGS\.PLAYER_STRIKE_AUTO_APPLY/));
 add("new-world default is hostile", () => assert.match(rootFile("scripts/settings.js"), /default: PLAYER_STRIKE_AUTO_APPLY_MODES\.HOSTILE/));
@@ -445,7 +445,7 @@ add("0.6.1 Manual diagnostics always carry a reason", () => {
 });
 add("0.6.1 recovery controls are hidden for valid applied transactions", () => {
   assert.match(diagnosticsUiSource, /playerStrikeRecovery/);
-  assert.match(diagnosticsUiSource, /descriptor\.type !== "player-strike" \|\| playerStrikeRecovery/);
+  assert.match(diagnosticsUiSource, /MULTI_TARGET_STRIKE_TRANSACTION_TYPE[\s\S]*playerStrikeRecovery/);
 });
 add("0.6.1 GM pre-create capture is not author-role gated", () => {
   assert.doesNotMatch(adapterSource, /userId !== game\.user\?\.id \|\| game\.user\?\.isGM/);

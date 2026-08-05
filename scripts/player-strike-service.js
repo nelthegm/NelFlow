@@ -31,6 +31,7 @@ import {
   captureCharacterStrikeDamageCorrelation,
   characterStrikeIntentDiagnostic,
 } from "./player-strike-intent.js";
+import { MULTI_TARGET_CAPTURE_FLAG, validCapture } from "./multi-target-strike-model.js";
 
 const SOCKET_NAMESPACE = `module.${MODULE_ID}`;
 const queues = new Map();
@@ -573,6 +574,8 @@ export class PlayerStrikeService {
   }
 
   static async handleCreatedMessage(message) {
+    if (validCapture(message.getFlag?.(MODULE_ID, MULTI_TARGET_CAPTURE_FLAG))) return false;
+    if (message.getFlag?.(MODULE_ID, "multiTargetNative")?.transactionType === "multi-target-strike") return false;
     if (!getSetting(SETTINGS.ENABLED)) return false;
     if (isPlayerStrikeCandidate(message)) return observeAttack(message);
     const damage = normalizeDamage(message);

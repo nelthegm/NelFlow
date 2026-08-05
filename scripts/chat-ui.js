@@ -21,6 +21,9 @@ import {
   renderTransactionRecovery,
 } from "./transaction-diagnostics-ui.js";
 import { renderPlayerStrike } from "./player-strike-ui.js";
+import { renderMultiTargetStrike } from "./multi-target-strike-ui.js";
+import { canUndoBatchChild } from "./multi-target-strike-model.js";
+import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 
 const reportedRenderFailures = new Set();
 
@@ -193,6 +196,7 @@ function canUseUndo(row, stack) {
 }
 
 function renderRow(row, stack) {
+  if (row.batch) return renderBatchRow(row, stack);
   const stackId = stack.id;
   const state = rowState(row);
   const item = document.createElement("li");
@@ -328,6 +332,104 @@ function renderRow(row, stack) {
   return item;
 }
 
+function batchTargetLabel(target) {
+  if (!game.user.isGM || typeof fromUuidSync !== "function") return localize("Nelflow.Native.Target");
+  const document = fromUuidSync(target.tokenUuid, { strict: false });
+  return document?.name ?? document?.object?.name ?? localize("Nelflow.MultiTarget.TargetUnavailable");
+}
+
+function renderBatchRow(row, stack) {
+  const item = document.createElement("li");
+  item.className = "nelflow-stack__row nelflow-stack__row--batch";
+  const summary = document.createElement("div");
+  summary.className = "nelflow-stack__row-summary";
+  const image = document.createElement("img");
+  image.className = "nelflow-stack__strike-icon";
+  image.src = row.strikeIcon;
+  image.alt = "";
+  const main = document.createElement("div");
+  main.className = "nelflow-stack__main";
+  const attack = document.createElement("div");
+  attack.className = "nelflow-stack__attack";
+  const name = document.createElement("strong");
+  name.textContent = row.strikeName;
+  const count = document.createElement("span");
+  count.textContent = format("Nelflow.MultiTarget.TargetCount", { count: row.targets.length });
+  attack.append(name, count);
+  const map = mapText(row);
+  if (map) {
+    const mapLabel = document.createElement("span");
+    mapLabel.className = "nelflow-stack__map";
+    mapLabel.textContent = map;
+    attack.append(mapLabel);
+  }
+  const targets = document.createElement("ul");
+  targets.className = "nelflow-batch__targets";
+  for (const target of row.targets) {
+    const child = document.createElement("li");
+    child.className = `nelflow-batch__target nelflow-batch__target--${target.state}`;
+    const parts = [batchTargetLabel(target), target.outcome ? strikeOutcomeLabel(target.outcome) : localize("Nelflow.MultiTarget.Review")];
+    if (game.user.isGM || canRevealNativeRecord(target.damageMessageId)) {
+      const damage = formatDamageSummary(target.damageSummary);
+      if (damage) parts.push(damage);
+    }
+    if (target.state === "applied") {
+      parts.push(Number.isFinite(target.appliedAmount)
+        ? format("Nelflow.MultiTarget.Applied", { amount: target.appliedAmount })
+        : localize("Nelflow.State.Applied"));
+    } else if (target.state === "review") parts.push(localize("Nelflow.MultiTarget.Review"));
+    else if (target.state === "damage-rolled") parts.push(localize("Nelflow.State.NotApplied"));
+    else if (target.state === "resolving") parts.push(localize("Nelflow.State.Resolving"));
+    else if (target.state === "undone") parts.push(localize("Nelflow.State.Undone"));
+    else if (target.state === "undo-blocked") parts.push(localize("Nelflow.State.UndoBlocked"));
+    else if (target.flatCheckFailed) parts.push(localize("Nelflow.MultiTarget.FlatCheckFailed"));
+    const text = document.createElement("span");
+    text.textContent = parts.join(" · ");
+    child.append(text);
+    if (
+      game.user.isGM &&
+      game.user.id === stack.identity?.authorUserId &&
+      getSetting(SETTINGS.ENABLE_UNDO) &&
+      canUndoBatchChild(target)
+    ) {
+      const undo = labeledButton({
+        className: "nelflow-batch__undo-target",
+        iconClass: "fa-solid fa-rotate-left",
+        label: localize("Nelflow.Status.Undo"),
+      });
+      undo.addEventListener("click", () => runControl(
+        () => MultiTargetStrikeService.undoTarget(game.messages.get(row.attackMessageId), target.key),
+        "batch-target-undo",
+      ));
+      child.append(undo);
+    }
+    targets.append(child);
+  }
+  const footer = document.createElement("div");
+  footer.className = "nelflow-batch__footer";
+  if (
+    game.user.isGM &&
+    game.user.id === stack.identity?.authorUserId &&
+    getSetting(SETTINGS.ENABLE_UNDO) &&
+    row.targets.some(canUndoBatchChild)
+  ) {
+    const undoAll = labeledButton({
+      className: "nelflow-batch__undo-all",
+      iconClass: "fa-solid fa-rotate-left",
+      label: localize("Nelflow.MultiTarget.UndoAll"),
+    });
+    undoAll.addEventListener("click", () => runControl(
+      () => MultiTargetStrikeService.undoAll(game.messages.get(row.attackMessageId)),
+      "batch-undo-all",
+    ));
+    footer.append(undoAll);
+  }
+  main.append(attack, targets, footer);
+  summary.append(image, main);
+  item.append(summary);
+  return item;
+}
+
 function renderStack(message, html, stack) {
   const content = html.querySelector(".message-content") ?? html;
   const article = document.createElement("article");
@@ -340,7 +442,9 @@ function renderStack(message, html, stack) {
   context.className = "nelflow-stack__context";
   context.textContent =
     stack.kind === "combat-turn"
-      ? format("Nelflow.Stack.Round", { round: stack.identity.round })
+      ? stack.identity?.outOfTurn
+        ? format("Nelflow.Stack.RoundOutOfTurn", { round: stack.identity.round })
+        : format("Nelflow.Stack.Round", { round: stack.identity.round })
       : localize("Nelflow.Stack.Standalone");
   header.append(context);
 
@@ -426,7 +530,7 @@ function renderLegacyStatus(message, html) {
   const resolved = TransactionStore.resolveCanonical(message);
   // Character Strikes have one dedicated canonical presentation host. The
   // legacy NPC fallback would otherwise duplicate both status and guarded Undo.
-  if (resolved?.transaction?.transactionType === "player-strike") return;
+  if (["player-strike", "multi-target-strike"].includes(resolved?.transaction?.transactionType)) return;
   if (!resolved || !shouldRenderLegacy(localMarker, resolved.transaction)) return;
 
   const row = document.createElement("div");
@@ -484,7 +588,7 @@ export function renderNelflowChat(message, html) {
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
-    renderPlayerStrike(message, html);
+    if (!renderMultiTargetStrike(message, html)) renderPlayerStrike(message, html);
     renderLegacyStatus(message, html);
     NativeCardCompactor.render(message, html);
     renderTransactionRecovery(message, html);

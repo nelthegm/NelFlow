@@ -62,6 +62,16 @@ function identifyLinkedMessage(message) {
   // visible. Player Strike status is additive and never enters an NPC stack.
   if (resolved.transaction.transactionType === "player-strike") return null;
 
+  if (resolved.transaction.transactionType === "multi-target-strike") {
+    const transaction = resolved.transaction;
+    const exact = marker.role === "attack"
+      ? message.id === transaction.attackMessageId
+      : marker.role === "damage"
+        ? transaction.damageGroups?.[marker.damageGroup]?.damageMessageId === message.id
+        : transaction.targets?.find((target) => target.key === marker.targetKey)?.applicationMessageId === message.id;
+    return exact ? { marker, ...resolved } : null;
+  }
+
   const expectedIds = {
     attack: resolved.transaction.attackMessageId,
     damage: resolved.transaction.damageMessageId,
@@ -101,6 +111,25 @@ function visibleRecordedTarget(transaction) {
 
 function summaryText(message, role, transaction) {
   const strike = transaction.snapshot?.strikeName ?? localize("Nelflow.Stack.UnknownStrike");
+  if (transaction.transactionType === "multi-target-strike") {
+    if (role === "attack") {
+      return format("Nelflow.Native.BatchAttackSummary", {
+        strike,
+        count: transaction.targets?.length ?? 0,
+      });
+    }
+    if (role === "damage") {
+      const marker = message.getFlag(MODULE_ID, "transaction");
+      const summary = transaction.damageGroups?.[marker?.damageGroup]?.damageSummary ??
+        PF2eAdapter.summarizeDamageRoll(message.rolls?.find((roll) => roll?.instances));
+      const damage = formatDamageSummary(summary);
+      return format("Nelflow.Native.BatchDamageSummary", {
+        category: localize(marker?.damageGroup === "critical" ? "Nelflow.MultiTarget.CriticalGroup" : "Nelflow.MultiTarget.NormalGroup"),
+        damage: damage || localize("Nelflow.Native.Damage"),
+      });
+    }
+    return localize("Nelflow.Native.BatchApplicationRecord");
+  }
   if (role === "attack") {
     return format("Nelflow.Native.AttackSummary", {
       strike,

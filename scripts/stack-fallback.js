@@ -72,6 +72,7 @@ function rowStateText(row, includePrivateData) {
 }
 
 function fallbackRow(row, includePrivateData) {
+  if (row.batch) return fallbackBatchRow(row, includePrivateData);
   const map = formatMap(row);
   const target = includePrivateData
     ? row.targetName ?? localize("Nelflow.Native.Target")
@@ -111,6 +112,29 @@ function fallbackRow(row, includePrivateData) {
   ].join("");
 }
 
+function fallbackBatchRow(row, includePrivateData) {
+  const targets = (row.targets ?? []).map((target) => {
+    const name = includePrivateData
+      ? target.name ?? localize("Nelflow.Native.Target")
+      : localize("Nelflow.Native.Target");
+    const parts = [name, strikeOutcomeLabel(target.outcome)];
+    if (includePrivateData) {
+      const damage = formatDamageSummary(target.damageSummary);
+      if (damage) parts.push(damage);
+      if (target.state === "applied" && Number.isFinite(target.appliedAmount)) {
+        parts.push(format("Nelflow.MultiTarget.Applied", { amount: target.appliedAmount }));
+      } else if (target.state === "review") parts.push(localize("Nelflow.MultiTarget.Review"));
+    }
+    return `<li>${parts.map(escapeHtml).join(" &middot; ")}</li>`;
+  }).join("");
+  return [
+    '<li class="nelflow-stack-fallback__row nelflow-stack-fallback__row--batch">',
+    `<div class="nelflow-stack-fallback__attack"><strong>${escapeHtml(row.strikeName)}</strong> &middot; ${escapeHtml(format("Nelflow.MultiTarget.TargetCount", { count: row.targets?.length ?? 0 }))}</div>`,
+    `<ul>${targets}</ul>`,
+    "</li>",
+  ].join("");
+}
+
 function visibilityFromMessage(message) {
   return {
     blind: Boolean(message?._source?.blind ?? message?.blind),
@@ -123,7 +147,9 @@ export function buildDurableStackContent(stack, visibility) {
   const includePrivateData = isGmOnlyAudience(visibility);
   const heading =
     stack.kind === "combat-turn"
-      ? format("Nelflow.Stack.Round", { round: stack.identity?.round ?? "?" })
+      ? stack.identity?.outOfTurn
+        ? format("Nelflow.Stack.RoundOutOfTurn", { round: stack.identity?.round ?? "?" })
+        : format("Nelflow.Stack.Round", { round: stack.identity?.round ?? "?" })
       : localize("Nelflow.Stack.Standalone");
   const rows = (stack.rows ?? []).map((row) => fallbackRow(row, includePrivateData)).join("");
   return [

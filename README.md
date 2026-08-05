@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow 0.7.0 adds attacker-scoped NPC stacks and opt-out shared-roll
+multi-target Strikes for NPCs and characters. An NPC in the active combat now
+receives a stack for its actual token even when it attacks during another
+creature's turn; two scene tokens linked to one actor remain separate.
 Slice 1 safely continues one GM-authored NPC Strike against one recorded target
 through PF2e's native damage and optional application pathways. Slice 2 groups
 supported Strikes from one combatant turn into a durable compact chat stack.
@@ -52,24 +56,27 @@ content, rolls, PF2e flags, and native controls are never rewritten.
 
 - Foundry VTT generation 14
 - Pathfinder Second Edition system (character Strike integration source-checked with PF2e 8.4.0)
-- A GM-authored NPC Strike with exactly one target, or
-- An active player- or GM-owned character Strike with exactly one target, or
+- A supported NPC Strike or active player-/GM-owned character Strike with one
+  target for the established flow, or two or more explicit targets for the
+  shared-roll 0.7.0 flow, or
 - PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
   player- or GM-authored basic-save spell workflow, or a supported GM-authored
   NPC basic-save `action` ability
 
 ## Install or update
 
-Foundry or Forge users can install the stable Nelflow 0.6.5 release using this
+Foundry or Forge users can install the Nelflow 0.7.0 release-candidate build using this
 manifest URL:
 
 ```text
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-Nelflow 0.6.5 passed Foundry/Forge runtime testing and is the stable release.
-The manifest downloads the stable package from
-`https://github.com/nelthegm/NelFlow/releases/download/v0.6.5/nelflow.zip`.
+The 0.7.0 manifest is prepared to download the eventual RC package from
+`https://github.com/nelthegm/NelFlow/releases/download/v0.7.0-rc1/nelflow.zip`.
+This development build has static and Node test coverage but has not yet
+received Foundry/Forge runtime acceptance. Nelflow 0.6.5 remains the last
+runtime-accepted stable release until 0.7.0 is published and tested.
 
 For a normal installation, extract `nelflow.zip` into Foundry's
 `Data/modules/nelflow` directory so `module.json` is directly inside that
@@ -92,6 +99,43 @@ powershell -ExecutionPolicy Bypass -File tools/package.ps1
 ```
 
 The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
+
+## Nelflow 0.7.0 attacker stacks and multi-target Strikes
+
+NPC compact stacks now use the explicit originating token, not the active
+combatant, as the attacker. The stack key combines combat, round, a durable
+turn-window marker, attacker token UUID, authoring GM, and message visibility.
+Several attacks by one out-of-turn token share its stack during that window;
+another token always receives another stack. The heading adds **Out of Turn**
+without assuming the Strike was a Reaction.
+
+Set **Shared-Roll Multi-Target Strikes** to **Off**, **NPC Strikes Only**, or
+**Player and NPC Strikes** (the default). Zero or one target continues through
+the established workflow. For two or more targets:
+
+1. Target two or more tokens.
+2. Click the Strike once.
+3. Nelflow retains the immutable ordered target set and the one native attack.
+4. The authoritative GM compares that result with each target's prepared AC,
+   including natural-die and supported degree adjustments.
+5. Nelflow invokes native normal damage once for normal hits and native
+   critical damage once for critical hits.
+6. Each result is applied independently through PF2e's contextual IWR pathway.
+
+One parent transaction retains an ordered child record per target. A missing,
+changed, concealed/hidden-unresolved, or otherwise unsafe target becomes
+**Review** without cancelling completed siblings. Each applied child has its
+own guarded Undo, and **Undo All** attempts only children whose current HP and
+temporary HP still match their exact post-application snapshots. It never
+forces a stale rollback or rerolls attack/damage.
+
+NPC batches use one compact parent action row with concise target rows. Player
+batches add one summary to the first viewer-visible exact linked native record.
+Native Records are exact-ID and viewer-visibility gated. Transaction IDs,
+UUIDs, authority data, correlations, HP snapshots, and diagnostic payloads do
+not appear in ordinary chat. See the [0.7.0 architecture](docs/NELFLOW_0.7.0_ATTACKER_STACKS_AND_MULTI_TARGET_STRIKES.md),
+[test plan](docs/NELFLOW_0.7.0_TEST_PLAN.md), and
+[release notes](docs/RELEASE_NOTES_0.7.0.md).
 
 ## Slice 3.4 diagnostics and recovery
 

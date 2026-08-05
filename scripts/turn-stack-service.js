@@ -24,7 +24,8 @@ function markerMatches(marker, combat, combatant) {
   return (
     marker?.combatId === combat.id &&
     marker.round === combat.round &&
-    marker.combatantId === combatant.id
+    marker.combatantId === combatant.id &&
+    marker.turnIndex === combat.turn
   );
 }
 
@@ -51,21 +52,20 @@ function sourceVisibility(message) {
   };
 }
 
-function currentCombatFor(transaction) {
+function combatantsArray(combat) {
+  return Array.from(combat?.combatants ?? []);
+}
+
+/** Resolve an active combat window from the explicit attacker token only. */
+export function currentCombatFor(transaction) {
   const combat = game.combat;
-  const combatant = combat?.combatant;
   const snapshot = transaction.snapshot;
-  if (
-    !combat?.started ||
-    !combatant ||
-    combat.round == null ||
-    combat.turn == null ||
-    (combatant.actor?.uuid !== snapshot.sourceActorUuid &&
-      combatant.token?.uuid !== snapshot.sourceTokenUuid)
-  ) {
-    return null;
-  }
-  return { combat, combatant };
+  if (!combat?.started || combat.round == null || !snapshot?.sourceTokenUuid) return null;
+  const attackerCombatant = combatantsArray(combat).find(
+    (candidate) => candidate.token?.uuid === snapshot.sourceTokenUuid,
+  );
+  if (!attackerCombatant) return null;
+  return { combat, combatant: combat.combatant ?? null, attackerCombatant };
 }
 
 async function ensureTurnMarker(combat, combatant) {
@@ -115,31 +115,75 @@ async function stackIdentity(attackMessage, transaction) {
     };
   }
 
-  const marker = await ensureTurnMarker(active.combat, active.combatant);
+  const marker = active.combatant
+    ? await ensureTurnMarker(active.combat, active.combatant)
+    : {
+        combatId: active.combat.id,
+        round: active.combat.round,
+        combatantId: null,
+        turnIndex: null,
+        markerId: stableHash(`${active.combat.id}|${active.combat.round}|no-active-turn`),
+      };
   const identity = {
     combatId: active.combat.id,
     round: marker.round,
     combatantId: marker.combatantId,
     turnIndex: marker.turnIndex,
     turnMarkerId: marker.markerId,
+    attackerTokenUuid: transaction.snapshot.sourceTokenUuid,
+    attackerCombatantId: active.attackerCombatant.id,
+    outOfTurn: Boolean(active.combatant && active.combatant.id !== active.attackerCombatant.id),
     authorUserId: transaction.snapshot.processingUserId,
     visibilityKey: visibility.key,
   };
-  const key = [
+  const key = combatStackKey(identity);
+  return { id: stableHash(key), key, kind: "combat-turn", visibility, identity };
+}
+
+export function combatStackKey(identity) {
+  return [
     "combat-turn",
     identity.combatId,
     identity.round,
     identity.combatantId,
     identity.turnIndex,
     identity.turnMarkerId,
+    identity.attackerTokenUuid,
     identity.authorUserId,
     identity.visibilityKey,
   ].join("|");
-  return { id: stableHash(key), key, kind: "combat-turn", visibility, identity };
 }
 
 function makeRow(transaction) {
   const snapshot = transaction.snapshot;
+  if (transaction.transactionType === "multi-target-strike") {
+    const damageMessageIds = Object.values(transaction.damageGroups ?? {})
+      .map((group) => group?.damageMessageId)
+      .filter(Boolean);
+    const applicationMessageIds = (transaction.targets ?? [])
+      .map((target) => target.applicationMessageId)
+      .filter(Boolean);
+    return {
+      id: transaction.id,
+      transactionId: transaction.id,
+      transactionType: transaction.transactionType,
+      batch: true,
+      attackMessageId: transaction.attackMessageId,
+      attackCreatedAt: snapshot.attackCreatedAt ?? snapshot.timestamp,
+      sequence: 0,
+      strikeName: snapshot.strikeName ?? game.i18n.localize("Nelflow.Stack.UnknownStrike"),
+      strikeIcon: snapshot.strikeIcon ?? "icons/svg/sword.svg",
+      mapIncreases: snapshot.mapIncreases ?? 0,
+      mapPenalty: snapshot.mapPenalty ?? null,
+      attackTotal: snapshot.attackTotal ?? null,
+      targets: foundry.utils.deepClone(transaction.targets ?? []),
+      damageGroups: foundry.utils.deepClone(transaction.damageGroups ?? {}),
+      damageMessageIds,
+      applicationMessageIds,
+      transactionState: transaction.state,
+      updatedAt: transaction.updatedAt,
+    };
+  }
   return {
     id: transaction.id,
     transactionId: transaction.id,
@@ -245,6 +289,7 @@ function persistentProjection(stack) {
     schemaVersion: stack.schemaVersion ?? 1,
     actor: stack.actor ?? null,
     rows: stack.rows ?? [],
+    identity: stack.identity ?? null,
   };
 }
 
@@ -261,8 +306,10 @@ export class TurnStackService {
       const sameTurn =
         prior?.round === current?.round &&
         prior?.combatantId === current?.combatantId &&
+        prior?.turn === current?.turn &&
         existing?.combatantId === current?.combatantId &&
-        existing?.round === current?.round;
+        existing?.round === current?.round &&
+        existing?.turnIndex === combat.turn;
       if (sameTurn) return;
 
       const combatant = combat.combatant;
@@ -335,6 +382,7 @@ export class TurnStackService {
         ...stack,
         schemaVersion: STACK_SCHEMA_VERSION,
         actor: stack.actor ?? actorProjection(transaction),
+        identity: stack.identity ?? descriptor.identity,
         rows: sortRows(rows),
         updatedAt: Date.now(),
       };

@@ -10,6 +10,10 @@ import { shortId } from "./transaction-failure.js";
 import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
 import { isPlayerStrikePresentationHost } from "./player-strike-presentation.js";
 import {
+  multiTargetPresentationHost,
+  MULTI_TARGET_STRIKE_TRANSACTION_TYPE,
+} from "./multi-target-strike-model.js";
+import {
   recoveryStatusKey,
   transactionNeedsRecoveryPresentation,
 } from "./transaction-diagnostics-policy.js";
@@ -158,7 +162,7 @@ function recoveryControls(descriptor) {
       { disabled: TransactionDiagnosticsService.candidates(descriptor).length === 0 },
     ));
   }
-  if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
+  if (!["player-strike", MULTI_TARGET_STRIKE_TRANSACTION_TYPE].includes(descriptor.type) || playerStrikeRecovery) {
     controls.append(actionButton("Nelflow.Diagnostics.MarkManual", descriptor, () =>
       TransactionDiagnosticsService.recover(descriptor, "mark-manual")));
   }
@@ -166,7 +170,7 @@ function recoveryControls(descriptor) {
     controls.append(actionButton("Nelflow.Diagnostics.ClearGuard", descriptor, () =>
       TransactionDiagnosticsService.recover(descriptor, "clear-guard")));
   }
-  if (descriptor.type !== "player-strike" || playerStrikeRecovery) {
+  if (!["player-strike", MULTI_TARGET_STRIKE_TRANSACTION_TYPE].includes(descriptor.type) || playerStrikeRecovery) {
     controls.append(actionButton("Nelflow.Diagnostics.Abandon", descriptor, async () => {
       if (await confirmAbandon()) return TransactionDiagnosticsService.recover(descriptor, "abandon");
       return false;
@@ -197,6 +201,13 @@ async function showRecoveryReview(descriptors) {
 function currentViewerDescriptors(message) {
   return diagnosticDescriptors(message).filter((descriptor) => {
     if (!transactionNeedsRecoveryPresentation(descriptor)) return false;
+    if (descriptor.type === MULTI_TARGET_STRIKE_TRANSACTION_TYPE) {
+      if (descriptor.transaction.stackRef?.id) return descriptor.transaction.stackRef.id === message.id;
+      return multiTargetPresentationHost(descriptor.transaction, (messageId) => {
+        const candidate = message.id === messageId ? message : game.messages?.get(messageId);
+        return Boolean(candidate?.visible && candidate.isContentVisible);
+      }) === message.id;
+    }
     if (descriptor.type !== PLAYER_STRIKE_TRANSACTION_TYPE) return true;
     return isPlayerStrikePresentationHost(message.id, descriptor.transaction, (messageId) => {
       const candidate = message.id === messageId ? message : game.messages?.get(messageId);

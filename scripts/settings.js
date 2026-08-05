@@ -10,6 +10,7 @@ import {
   TOOLBELT_BASIC_SAVE_SOURCE_MODES,
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES,
   PLAYER_STRIKE_AUTO_APPLY_MODES,
+  MULTI_TARGET_STRIKE_MODES,
   TRANSACTION_DIAGNOSTIC_MODES,
 } from "./constants.js";
 
@@ -155,6 +156,20 @@ const SETTING_DEFINITIONS = [
       [PLAYER_STRIKE_AUTO_APPLY_MODES.ALL]: "Nelflow.Settings.PlayerStrikeAutoApply.All",
     },
     default: PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE,
+    onChange: refreshPresentation,
+  },
+  {
+    key: SETTINGS.SHARED_ROLL_MULTI_TARGET_STRIKES,
+    name: "Nelflow.Settings.MultiTargetStrikes.Name",
+    hint: "Nelflow.Settings.MultiTargetStrikes.Hint",
+    type: String,
+    choices: {
+      [MULTI_TARGET_STRIKE_MODES.OFF]: "Nelflow.Settings.MultiTargetStrikes.Off",
+      [MULTI_TARGET_STRIKE_MODES.NPC_STRIKES]: "Nelflow.Settings.MultiTargetStrikes.NpcOnly",
+      [MULTI_TARGET_STRIKE_MODES.PLAYER_AND_NPC_STRIKES]:
+        "Nelflow.Settings.MultiTargetStrikes.PlayerAndNpc",
+    },
+    default: MULTI_TARGET_STRIKE_MODES.PLAYER_AND_NPC_STRIKES,
     onChange: refreshPresentation,
   },
   {

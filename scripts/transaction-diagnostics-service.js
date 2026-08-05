@@ -10,6 +10,7 @@ import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { createFailureRecord, shortId } from "./transaction-failure.js";
 import { PlayerStrikeService } from "./player-strike-service.js";
+import { MULTI_TARGET_STRIKE_TRANSACTION_TYPE } from "./multi-target-strike-model.js";
 import {
   CHARACTER_STRIKE_INTENT_MAX_AGE_MS,
   PLAYER_STRIKE_TRANSACTION_TYPE,
@@ -89,9 +90,9 @@ function strikeDescriptor(message) {
   const resolved = TransactionStore.resolveCanonical(message);
   if (!resolved?.transaction?.id) return null;
   return {
-    type: resolved.transaction.transactionType === PLAYER_STRIKE_TRANSACTION_TYPE
-      ? PLAYER_STRIKE_TRANSACTION_TYPE
-      : "strike",
+    type: [PLAYER_STRIKE_TRANSACTION_TYPE, MULTI_TARGET_STRIKE_TRANSACTION_TYPE].includes(
+      resolved.transaction.transactionType,
+    ) ? resolved.transaction.transactionType : "strike",
     message,
     ownerMessage: resolved.attackMessage,
     transaction: resolved.transaction,

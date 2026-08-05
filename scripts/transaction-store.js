@@ -1,6 +1,7 @@
 import { MODULE_ID, TRANSACTION_STATES } from "./constants.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { appendAudit, recordFailure, updateRecovery, RECOVERY_STATUSES } from "./transaction-failure.js";
+import { makeBatchTransaction, MULTI_TARGET_STRIKE_TRANSACTION_TYPE } from "./multi-target-strike-model.js";
 
 const recoveryQueues = new Map();
 
@@ -106,6 +107,68 @@ export class TransactionStore {
 
   static deterministicId(attackMessage) {
     return `${MODULE_ID}-${attackMessage.id}`;
+  }
+
+  /** Claim one immutable shared-roll batch. A pre-create player observation may be replaced, never another claim. */
+  static async claimMultiTargetStrike(attackMessage, snapshot, targets) {
+    if (!game.user?.isGM || snapshot?.processingUserId !== game.user.id) return null;
+    const existing = this.get(attackMessage);
+    if (existing?.transactionType === MULTI_TARGET_STRIKE_TRANSACTION_TYPE && existing.role === "attack") {
+      return existing;
+    }
+    if (existing && existing.role !== "observation") return null;
+    const transaction = makeBatchTransaction({
+      attackMessageId: attackMessage.id,
+      snapshot,
+      targets,
+    });
+    await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
+    return this.get(attackMessage);
+  }
+
+  /** Persist a batch projection without routing child states through the singular Strike state machine. */
+  static async updateMultiTargetStrike(attackMessage, changes) {
+    const current = this.get(attackMessage);
+    if (
+      !game.user?.isGM ||
+      current?.snapshot?.processingUserId !== game.user.id ||
+      current?.transactionType !== MULTI_TARGET_STRIKE_TRANSACTION_TYPE ||
+      current.role !== "attack"
+    ) {
+      throw new Error("Missing Nelflow multi-target Strike transaction");
+    }
+    const next = {
+      ...current,
+      ...changes,
+      id: current.id,
+      role: "attack",
+      transactionType: MULTI_TARGET_STRIKE_TRANSACTION_TYPE,
+      attackMessageId: current.attackMessageId,
+      snapshot: current.snapshot,
+      targets: changes.targets ?? current.targets,
+      updatedAt: now(),
+      revision: Number(current.revision ?? 0) + 1,
+    };
+    await attackMessage.setFlag(MODULE_ID, "transaction", next);
+    return this.get(attackMessage);
+  }
+
+  static async linkMultiTargetMessage(attackMessage, linkedMessage, markerData) {
+    if (!linkedMessage?.id) return this.get(attackMessage);
+    const current = this.get(attackMessage);
+    if (current?.transactionType !== MULTI_TARGET_STRIKE_TRANSACTION_TYPE) return current;
+    const linkedMessageIds = Array.from(new Set([...(current.linkedMessageIds ?? []), linkedMessage.id]));
+    const next = await this.updateMultiTargetStrike(attackMessage, { linkedMessageIds });
+    await linkedMessage.setFlag(MODULE_ID, "transaction", {
+      id: next.id,
+      attackMessageId: next.attackMessageId,
+      transactionType: MULTI_TARGET_STRIKE_TRANSACTION_TYPE,
+      role: markerData.role,
+      damageGroup: markerData.damageGroup ?? null,
+      targetKey: markerData.targetKey ?? null,
+      state: next.state,
+    });
+    return next;
   }
 
   /**
@@ -377,6 +440,20 @@ export class TransactionStore {
     return this.enqueueRecovery(resolved.attackMessage, async () => {
       const current = this.get(resolved.attackMessage);
       if (!current?.id) return false;
+      if (current.transactionType === MULTI_TARGET_STRIKE_TRANSACTION_TYPE) {
+        const targets = current.targets.map((child) =>
+          ["applied", "miss", "undone", "undo-blocked"].includes(child.state)
+            ? child
+            : { ...child, state: "review", reviewReason: failure.code },
+        );
+        await this.updateMultiTargetStrike(resolved.attackMessage, {
+          state: "manual",
+          targets,
+          activeOperation: null,
+          presentationError: failure.code,
+        });
+        return true;
+      }
       const changes = current.state === TRANSACTION_STATES.PROCESSING
         ? { state: TRANSACTION_STATES.INTERRUPTED, errorStage: failure.code, activeOperation: null }
         : { presentationError: failure.code, errorStage: failure.code };

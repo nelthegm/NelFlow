@@ -17,6 +17,7 @@ export const SETTINGS = Object.freeze({
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll",
   GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
   PLAYER_STRIKE_AUTO_APPLY: "playerStrikeAutoApply",
+  SHARED_ROLL_MULTI_TARGET_STRIKES: "sharedRollMultiTargetStrikes",
   SHOW_TRANSACTION_DIAGNOSTICS: "showTransactionDiagnostics",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
@@ -68,6 +69,14 @@ export const PLAYER_STRIKE_AUTO_APPLY_MODES = Object.freeze({
   HOSTILE: "hostile",
   ALL: "all",
 });
+
+export const MULTI_TARGET_STRIKE_MODES = Object.freeze({
+  OFF: "off",
+  NPC_STRIKES: "npc-strikes",
+  PLAYER_AND_NPC_STRIKES: "player-and-npc-strikes",
+});
+
+export const MULTI_TARGET_STRIKE_SCHEMA_VERSION = 1;
 
 export const TRANSACTION_DIAGNOSTIC_MODES = Object.freeze({
   OFF: "off",

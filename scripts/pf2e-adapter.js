@@ -82,6 +82,14 @@ function spellDamageCaptureMatches(capture, document) {
 }
 
 function onPreCreateChatMessage(document) {
+  const damageOptions = messageFlags(document).context?.options ?? [];
+  const batchOption = damageOptions.find((option) => damageCaptures.getByOption(option)?.nativeMarker);
+  const batchCapture = batchOption ? damageCaptures.getByOption(batchOption) : null;
+  if (batchCapture?.nativeMarker) {
+    document.updateSource({
+      [`flags.${MODULE_ID}.multiTargetNative`]: batchCapture.nativeMarker,
+    });
+  }
   for (const capture of pendingSpellDamageCaptures.values()) {
     if (!spellDamageCaptureMatches(capture, document)) continue;
     document.updateSource({
@@ -375,6 +383,46 @@ export class PF2eAdapter {
     };
   }
 
+  /** Resolve a structured PF2e Strike for either supported creature actor type. */
+  static inspectSupportedStrikeMessage(message) {
+    const flags = messageFlags(message);
+    const context = flags.context;
+    const roll = message.rolls?.find((candidate) => candidate?.options?.type === "attack-roll");
+    const actor = message.actor ?? message.speakerActor ?? null;
+    const attack = message._attack ?? null;
+    const item = attack?.item ?? null;
+    const outcome = getRollOutcome(roll, context);
+    const identifier = getStrikeIdentifier(roll, context);
+    const actorSupported = actor?.isOfType?.("npc", "character") === true || ["npc", "character"].includes(actor?.type);
+    const valid =
+      context?.type === "attack-roll" &&
+      roll?.options?.action === "strike" &&
+      roll?.options?.damaging === true &&
+      actorSupported &&
+      attack?.type === "strike" &&
+      item?.actor?.uuid === actor.uuid &&
+      flags.origin?.uuid === item.uuid &&
+      context.origin?.actor === actor.uuid &&
+      Boolean(identifier) &&
+      Boolean(outcome);
+    if (!valid) return null;
+    return {
+      actor,
+      actorType: actor.type,
+      attack,
+      context,
+      identifier,
+      item,
+      outcome,
+      roll,
+      sourceTokenUuid: context.origin?.token ?? message.token?.uuid ?? null,
+      targetActorUuid: context.target?.actor ?? null,
+      targetTokenUuid: context.target?.token ?? null,
+      mapIncreases: Number.isInteger(context.mapIncreases) ? context.mapIncreases : 0,
+      mapPenalty: actualMapPenalty(message),
+    };
+  }
+
   /** Resolve the recorded target and ensure it is the one selected at attack-message creation time. */
   static resolveRecordedTarget(strike, selectedTarget) {
     const targetToken = selectedTarget?.document;
@@ -400,7 +448,7 @@ export class PF2eAdapter {
    * A supported namespaced PF2e roll option identifies the exact created
    * damage document without DOM clicks, timeouts, or newest-message guesses.
    */
-  static async rollStrikeDamage({ attackMessage, strike, targetToken, transactionId }) {
+  static async rollStrikeDamage({ attackMessage, strike, targetToken, transactionId, nativeMarker = null }) {
     const method = strike.outcome === "criticalSuccess" ? "critical" : "damage";
     const rollDamage = strike.attack?.[method];
     if (typeof rollDamage !== "function") {
@@ -419,6 +467,7 @@ export class PF2eAdapter {
       expectedOutcome: strike.outcome,
       processingUserId: game.user.id,
       startState: "processing",
+      nativeMarker,
     });
 
     try {

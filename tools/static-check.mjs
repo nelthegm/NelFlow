@@ -153,10 +153,14 @@ for (const required of [
   "AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL_MODES.ALL",
   "SETTINGS.MIGRATION_VERSION",
   "SETTINGS.PLAYER_STRIKE_AUTO_APPLY",
+  "SETTINGS.SHARED_ROLL_MULTI_TARGET_STRIKES",
   "SETTINGS.SHOW_TRANSACTION_DIAGNOSTICS",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.OFF",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.HOSTILE",
   "PLAYER_STRIKE_AUTO_APPLY_MODES.ALL",
+  "MULTI_TARGET_STRIKE_MODES.OFF",
+  "MULTI_TARGET_STRIKE_MODES.NPC_STRIKES",
+  "MULTI_TARGET_STRIKE_MODES.PLAYER_AND_NPC_STRIKES",
   "TRANSACTION_DIAGNOSTIC_MODES.ERRORS_ONLY",
 ]) {
   if (!settingsSource.includes(required)) fail(`setting registration is missing ${required}`);
@@ -204,6 +208,11 @@ const mechanicalSource = [
   "scripts/player-strike-model.js",
   "scripts/player-strike-adapter.js",
   "scripts/player-strike-service.js",
+  "scripts/multi-target-strike-model.js",
+  "scripts/multi-target-strike-capture.js",
+  "scripts/multi-target-strike-service.js",
+  "scripts/multi-target-strike-resolution.js",
+  "scripts/multi-target-strike-undo.js",
 ]
   .map(read)
   .join("\n");
