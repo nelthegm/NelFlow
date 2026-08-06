@@ -298,7 +298,7 @@ test("unrelated manual damage has no resolver correlation identity", () => {
   assert.equal(String(null).startsWith("nelflow:save-correlation:"), false);
 });
 
-test("Native Records identity is exact message-ID based", () => {
+test("Results identity is exact message-ID based", () => {
   const records = new Set(["source", "save", "damage", "application"]);
   assert.equal(records.has("unrelated"), false);
 });

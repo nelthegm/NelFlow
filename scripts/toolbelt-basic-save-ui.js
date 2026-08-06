@@ -100,19 +100,6 @@ function targetName(record, number) {
   return localize("Nelflow.Toolbelt.TargetNumber", { number });
 }
 
-function nativeRecordButton(record) {
-  const message = record.applicationMessageId ? game.messages?.get(record.applicationMessageId) : null;
-  if (!message || message.visible === false || message.isContentVisible === false) return null;
-  const button = element("button", "nelflow-toolbelt__record", localize("Nelflow.Toolbelt.ApplicationRecord"));
-  button.type = "button";
-  button.addEventListener("click", () => {
-    const target = document.querySelector(`[data-message-id="${record.applicationMessageId}"]`);
-    if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
-    else ui.notifications.info("Nelflow.Notification.NativeMessageNotRendered", { localize: true });
-  });
-  return button;
-}
-
 async function confirmManualDamage(message, record) {
   const content = element("div");
   content.append(element("p", null, localize("Nelflow.Toolbelt.Guard.ConfirmBody")));
@@ -200,8 +187,6 @@ function statusRow(message, draft, normalizedTarget, record, number) {
     });
     controls.append(undo);
   }
-  const native = nativeRecordButton(record);
-  if (native) controls.append(native);
   const manual = manualControlButton(message, draft, normalizedTarget, record);
   if (manual) controls.append(manual);
   if (controls.childElementCount) row.append(controls);

@@ -218,10 +218,10 @@ test("86. player presentation has one canonical visible host", () => assert.matc
 test("87. per-target Undo delegates to the shared guarded restore", () => assert.match(undoSource, /undoMultiTarget[\s\S]*restoreChild/));
 test("88. Undo All validates each child independently", () => assert.match(undoSource, /undoAllMultiTarget[\s\S]*for \(const child/));
 test("89. ordinary UI never renders transaction identifiers", () => assert.doesNotMatch(ui, /textContent\s*=.*transaction\.id|textContent\s*=.*transactionId/));
-test("90. exact linked message IDs back Native Records", () => assert.match(source("scripts/native-records-controller.js"), /linkedMessageIds|damageMessageIds/));
-test("91. viewer visibility gates player Native Records", () => assert.match(source("scripts/multi-target-strike-ui.js"), /message\?\.visible && message\.isContentVisible/));
+test("90. exact linked message IDs back Results", () => assert.match(source("scripts/native-records-controller.js"), /linkedMessageIds|damageMessageIds/));
+test("91. viewer visibility gates player Results", () => assert.match(source("scripts/multi-target-strike-ui.js"), /message\?\.visible && message\.isContentVisible/));
 test("92. stack projection redacts target names for non-GMs", () => assert.match(source("scripts/chat-ui.js"), /!game\.user\.isGM[\s\S]*Nelflow\.Native\.Target/));
-test("93. out-of-turn presentation uses a concise localized label", () => assert.match(source("lang/en.json"), /RoundOutOfTurn.*Out of Turn/));
+test("93. out-of-turn presentation uses a concise round-free label", () => assert.match(source("lang/en.json"), /Stack\.OutOfTurn.*Out of Turn/));
 test("94. linked native cards are mutated only while rendering", () => assert.doesNotMatch(source("scripts/native-card-compactor.js"), /message\.update\(|message\.delete\(/));
 test("95. no direct HP subtraction was introduced", () => assert.doesNotMatch(mechanics, /system\.attributes\.hp|\.hp\s*[-+]=/));
 test("96. no native message deletion was introduced", () => assert.doesNotMatch(mechanics, /delete(ChatMessage|EmbeddedDocuments|Documents)|message\.delete\(|deleteDocuments/));

@@ -16,6 +16,7 @@ import { TransactionStore } from "./transaction-store.js";
 import { PlayerStrikeService } from "./player-strike-service.js";
 import { MultiTargetStrikeCapture } from "./multi-target-strike-capture.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
+import { RollPopoverController } from "./roll-popover-controller.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -26,6 +27,7 @@ Hooks.once("setup", () => {
   // here lets the same read-only renderer enhance both initial history and
   // later live/batched messages.
   runNelflowSyncBoundary({ subsystem: "native-records", operation: "setup", task: () => NativeRecordsController.initialize() });
+  runNelflowSyncBoundary({ subsystem: "roll-popovers", operation: "setup", task: () => RollPopoverController.initialize() });
   Hooks.on("renderChatMessageHTML", (message, html) => {
     runNelflowSyncBoundary({
       subsystem: "chat-presentation",

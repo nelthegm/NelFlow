@@ -5,6 +5,9 @@ import { StrikeResolver } from "./strike-resolver.js";
 import { TransactionStore } from "./transaction-store.js";
 import { logger } from "./logger.js";
 import { bindCharacterStrikeIntentCapture } from "./player-strike-intent.js";
+import { NativeRecordsController } from "./native-records-controller.js";
+import { RollPopoverController } from "./roll-popover-controller.js";
+import { buildRollInspection, inspectionKind } from "./strike-roll-inspection.js";
 import {
   canShowPlayerStrikeAppliedAmount,
   canShowPlayerStrikeUndo,
@@ -34,6 +37,67 @@ function targetLabel(transaction) {
 function canViewLinkedMessage(currentMessage, messageId) {
   const candidate = currentMessage.id === messageId ? currentMessage : game.messages?.get(messageId);
   return Boolean(candidate?.visible && candidate.isContentVisible);
+}
+
+function canInspectRecordedTarget(target) {
+  const tokenDocument = typeof globalThis.fromUuidSync === "function"
+    ? globalThis.fromUuidSync(target?.tokenUuid ?? target?.targetTokenUuid, { strict: false })
+    : null;
+  const token = tokenDocument?.object ?? tokenDocument;
+  return Boolean(game.user?.isGM || token?.actor?.isOwner);
+}
+
+function inspectionTargetLabel(target) {
+  const tokenDocument = typeof globalThis.fromUuidSync === "function"
+    ? globalThis.fromUuidSync(target?.tokenUuid ?? target?.targetTokenUuid, { strict: false })
+    : null;
+  const token = tokenDocument?.object ?? tokenDocument;
+  if (!token) return localize("Nelflow.PlayerStrike.TargetUnavailable");
+  const canSeeName =
+    game.user?.isGM ||
+    token.actor?.isOwner ||
+    !game.pf2e?.settings?.tokens?.nameVisibility ||
+    token.playersCanSeeName;
+  return canSeeName ? token.name : localize("Nelflow.Roll.HiddenTarget");
+}
+
+function resultsControl(transaction) {
+  const records = NativeRecordsController.recordsForTransaction(transaction);
+  if (!records.length) return null;
+  const details = document.createElement("details");
+  details.className = "nelflow-player-strike__results";
+  const summary = document.createElement("summary");
+  summary.textContent = localize("Nelflow.Stack.Results", { count: records.length });
+  summary.setAttribute("aria-label", localize("Nelflow.Stack.Results", { count: records.length }));
+  const controls = document.createElement("div");
+  controls.className = "nelflow-player-strike__result-controls";
+  for (const record of records) {
+    const kind = inspectionKind(record, transaction);
+    const label = localize(kind === "attack"
+      ? "Nelflow.Stack.AttackMessage"
+      : kind === "criticalDamage"
+        ? "Nelflow.Stack.CriticalDamageMessage"
+        : "Nelflow.Stack.DamageMessage");
+    const control = document.createElement("button");
+    control.type = "button";
+    control.className = "nelflow-player-strike__result";
+    control.textContent = label;
+    control.title = localize("Nelflow.Roll.InspectTitle");
+    control.setAttribute("aria-label", label);
+    RollPopoverController.register(control, () => {
+      const current = NativeRecordsController.refreshRecord(record);
+      if (!current) return { kind, available: false };
+      return buildRollInspection(current, {
+        transaction: current.transaction,
+        canInspectTarget: canInspectRecordedTarget,
+        targetLabel: inspectionTargetLabel,
+        hiddenTargetLabel: localize("Nelflow.Roll.HiddenTarget"),
+      });
+    }, kind);
+    controls.append(control);
+  }
+  details.append(summary, controls);
+  return details;
 }
 
 function summaryText(transaction, { showAppliedAmount }) {
@@ -89,6 +153,8 @@ export function renderPlayerStrike(message, html) {
     }),
   });
   status.append(icon, body);
+  const results = resultsControl(transaction);
+  if (results) status.append(results);
 
   if (canShowPlayerStrikeUndo(transaction, {
     isGM: game.user?.isGM,

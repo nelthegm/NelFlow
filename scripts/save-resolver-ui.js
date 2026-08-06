@@ -66,21 +66,46 @@ function recordIds(resolver) {
   return [...new Set(ids)];
 }
 
+function resultRecordIds(resolver) {
+  const ids = [
+    resolver.sourceMessageId,
+    ...resolver.targets.flatMap((target) => [
+      ...(target.priorSaveMessageIds ?? []),
+      target.saveMessageId,
+    ]),
+    resolver.damage?.messageId,
+  ].filter((id) => visibleMessage(id));
+  return [...new Set(ids)];
+}
+
+function applicationRecordIds(resolver) {
+  return [...new Set(
+    resolver.targets.map((target) => target.applicationMessageId).filter((id) => visibleMessage(id)),
+  )];
+}
+
 function updateNativeVisibility(resolver) {
   const show = nativeVisibility.get(resolver.resolverId) === true;
-  const hasControl = Array.from(
-    document.querySelectorAll(".nelflow-save__native-records"),
-  ).some((control) => control.closest(".nelflow-save")?.dataset.resolverId === resolver.resolverId);
-  const hide =
-    hasControl &&
+  const hasCanonicalPresentation = Array.from(
+    document.querySelectorAll(".nelflow-save[data-resolver-id]"),
+  ).some((element) => element.dataset.resolverId === resolver.resolverId);
+  const suppress =
+    hasCanonicalPresentation &&
     getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS) &&
-    getSetting(SETTINGS.STACK_FIRST_NATIVE_RECORDS) === "hide-behind-stack" &&
-    !show;
-  for (const id of recordIds(resolver)) {
+    getSetting(SETTINGS.STACK_FIRST_NATIVE_RECORDS) === "hide-behind-stack";
+  for (const id of resultRecordIds(resolver)) {
     const element = renderedMessage(id);
     if (!element) continue;
     element.dataset.nelflowSaveResolverId = resolver.resolverId;
-    element.classList.toggle("nelflow-save-native-hidden", hide);
+    element.classList.toggle("nelflow-save-native-hidden", suppress && !show);
+  }
+  // Native application documents remain exact recovery/Undo proof but do not
+  // become a viewer-facing Results control or appear when Results is expanded.
+  for (const id of applicationRecordIds(resolver)) {
+    const element = renderedMessage(id);
+    if (!element) continue;
+    element.dataset.nelflowSaveResolverId = resolver.resolverId;
+    element.classList.toggle("nelflow-save-native-hidden", suppress);
   }
 }
 
@@ -92,7 +117,7 @@ function registerNative(message, html, marker) {
   if (!resolver || !recordIds(resolver).includes(message.id)) return;
   html.classList.add("nelflow-save-native");
   html.dataset.nelflowSaveResolverId = marker.resolverId;
-  if (!html.querySelector(":scope > .nelflow-save-native-label")) {
+  if (marker.role !== "application" && !html.querySelector(":scope > .nelflow-save-native-label")) {
     const target = resolver.targets.find(
       (entry) => entry.targetEntryId === marker.targetEntryId,
     );
@@ -104,11 +129,6 @@ function registerNative(message, html, marker) {
           })
         : localize("Nelflow.SaveResolver.RecordSave"),
       damage: localize("Nelflow.SaveResolver.RecordDamage"),
-      application: target
-        ? format("Nelflow.SaveResolver.RecordApplicationTarget", {
-            target: target.targetDisplayName,
-          })
-        : localize("Nelflow.SaveResolver.RecordApplication"),
     }[marker.role];
     if (roleLabel) {
       const label = document.createElement("div");
@@ -351,13 +371,10 @@ function renderTarget(resolverMessage, resolver, target) {
   const details = document.createElement("details");
   details.className = "nelflow-save__details";
   const summary = document.createElement("summary");
-  summary.textContent = localize("Nelflow.Stack.Details");
+  summary.textContent = localize("Nelflow.Stack.ResultsLabel");
   details.append(summary);
   if (target.saveMessageId) {
     details.append(detailButton(target.saveMessageId, resolver, localize("Nelflow.SaveResolver.RecordSave")));
-  }
-  if (target.applicationMessageId) {
-    details.append(detailButton(target.applicationMessageId, resolver, localize("Nelflow.SaveResolver.RecordApplication")));
   }
   if (details.childElementCount > 1) controls.append(details);
   row.append(image, body, controls);
@@ -382,19 +399,22 @@ function renderResolver(message, html, resolver) {
     dc: showDc ? resolver.save.dc : "?",
     save: localize(`Nelflow.SaveResolver.Save.${resolver.save.type}`),
   });
-  const nativeIds = recordIds(resolver);
-  const records = button(
-    format("Nelflow.Stack.NativeRecords", { count: nativeIds.length }),
-    "nelflow-save__native-records",
-    "fa-solid fa-box-archive",
-  );
-  records.setAttribute("aria-expanded", String(nativeVisibility.get(resolver.resolverId) === true));
-  records.addEventListener("click", () => {
-    nativeVisibility.set(resolver.resolverId, nativeVisibility.get(resolver.resolverId) !== true);
+  const nativeIds = resultRecordIds(resolver);
+  header.append(image, title);
+  if (nativeIds.length) {
+    const records = button(
+      format("Nelflow.Stack.Results", { count: nativeIds.length }),
+      "nelflow-save__native-records",
+      "fa-solid fa-box-archive",
+    );
     records.setAttribute("aria-expanded", String(nativeVisibility.get(resolver.resolverId) === true));
-    updateNativeVisibility(resolver);
-  });
-  header.append(image, title, records);
+    records.addEventListener("click", () => {
+      nativeVisibility.set(resolver.resolverId, nativeVisibility.get(resolver.resolverId) !== true);
+      records.setAttribute("aria-expanded", String(nativeVisibility.get(resolver.resolverId) === true));
+      updateNativeVisibility(resolver);
+    });
+    header.append(records);
+  }
 
   const progress = document.createElement("div");
   progress.className = "nelflow-save__progress";

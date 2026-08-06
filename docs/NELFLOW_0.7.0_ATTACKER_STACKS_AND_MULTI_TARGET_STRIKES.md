@@ -107,19 +107,39 @@ unverified application changes only that child to Review. Completed siblings
 are not repeated or cancelled. On reload, a previous-session resolving or
 applying child becomes Review. Terminal batches are not rerolled or reapplied.
 
-## Presentation, privacy and native records
+## Canonical presentation, privacy and Results
 
 NPC batches project to one action row in the attacker's existing durable stack
 with ordered child rows. Character batches select one deterministic
-viewer-visible native host and add one summary. Linked cards remain intact and
-are compacted only in the rendered DOM when configured.
+viewer-visible native host and add one summary. The visible heading identifies
+the attacker and may add **Out of Turn**; the round remains in the persistent
+stack identity but is intentionally omitted from the rendered heading.
 
-Native Records is assembled only from exact persisted IDs whose marker,
-canonical parent, group/child reference and current viewer visibility all
-match. Blind, whisper and hidden-name rules are checked per viewer. Stored
-fallback stack HTML uses neutral target labels unless its entire audience is
-GM-only. Ordinary presentation never includes transaction identifiers,
-UUIDs, raw flags, formulas, authority evidence or diagnostic payloads.
+When linked-card suppression is enabled, each exact linked attack, damage,
+critical-damage, and application ChatMessage is hidden only in the rendered
+DOM. The documents, rolls, content, flags, ownership, whispers, blind-roll
+audience, and native controls remain unmodified. Nelflow suppresses a message
+only after its exact marker, canonical transaction, persisted message ID, and
+viewer-visible canonical summary all agree. Missing or ambiguous linkage, an
+unavailable summary, or a rendering failure leaves the native message visible.
+
+**Results** is a viewer-local roll-inspection disclosure. It is assembled only
+from exact, viewer-accessible attack and damage messages after role and
+visibility filtering; application records are intentionally excluded and no
+empty Results control is rendered. Hover or keyboard focus on an Attack,
+Damage, or Critical Damage entry opens a compact viewport-clamped popover made
+from evaluated `message.rolls` and structured PF2e flags. Attack inspection can
+show the evaluated d20, modifier breakdown, MAP, total, authorized defense and
+degree information, natural-step adjustments, fortune dice, and ordered
+shared-roll target outcomes. Damage inspection can show the evaluated formula,
+dice, static terms, types/categories, special critical terms, and total. It
+does not parse PF2e card HTML. Escape or focus/pointer exit closes the popover.
+
+Blind, whisper and hidden-name rules are checked per viewer. Stored fallback
+stack HTML uses neutral target labels unless its entire audience is GM-only.
+Ordinary presentation never includes transaction identifiers, UUIDs, raw
+flags, formulas outside the viewer-requested Results popover, authority
+evidence, application proof, or diagnostic payloads.
 
 ## Undo and recovery
 

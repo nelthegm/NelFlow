@@ -145,12 +145,12 @@ function visibilityFromMessage(message) {
 /** Generate semantic, non-interactive, privacy-conservative stored HTML. */
 export function buildDurableStackContent(stack, visibility) {
   const includePrivateData = isGmOnlyAudience(visibility);
-  const heading =
-    stack.kind === "combat-turn"
-      ? stack.identity?.outOfTurn
-        ? format("Nelflow.Stack.RoundOutOfTurn", { round: stack.identity?.round ?? "?" })
-        : format("Nelflow.Stack.Round", { round: stack.identity?.round ?? "?" })
-      : localize("Nelflow.Stack.Standalone");
+  const actorName = includePrivateData
+    ? stack.actor?.name ?? localize("Nelflow.Stack.UnknownCombatant")
+    : localize("Nelflow.Stack.UnknownCombatant");
+  const heading = stack.identity?.outOfTurn
+    ? `${actorName} · ${localize("Nelflow.Stack.OutOfTurn")}`
+    : actorName;
   const rows = (stack.rows ?? []).map((row) => fallbackRow(row, includePrivateData)).join("");
   return [
     `<article class="nelflow-stack-fallback" data-schema-version="${escapeHtml(

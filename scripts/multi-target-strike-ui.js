@@ -5,8 +5,10 @@ import {
   MULTI_TARGET_STRIKE_TRANSACTION_TYPE,
 } from "./multi-target-strike-model.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
-import { NativeCardCompactor } from "./native-card-compactor.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import { formatDamageSummary, strikeOutcomeLabel } from "./presentation-format.js";
+import { RollPopoverController } from "./roll-popover-controller.js";
+import { buildRollInspection, inspectionKind } from "./strike-roll-inspection.js";
 import { getSetting } from "./settings.js";
 import { TransactionStore } from "./transaction-store.js";
 import { logger } from "./logger.js";
@@ -59,6 +61,18 @@ function targetName(child) {
     !game.pf2e?.settings?.tokens?.nameVisibility ||
     token.playersCanSeeName;
   return canSeeName ? token.name : localize("Nelflow.PlayerStrike.RecordedTarget");
+}
+
+function targetToken(child) {
+  const document = typeof fromUuidSync === "function"
+    ? fromUuidSync(child.tokenUuid ?? child.targetTokenUuid, { strict: false })
+    : null;
+  return document?.object ?? document;
+}
+
+function canInspectTarget(child) {
+  const token = targetToken(child);
+  return Boolean(game.user?.isGM || token?.actor?.isOwner);
 }
 
 function childState(child) {
@@ -131,22 +145,34 @@ function childRow(child, attackMessage) {
 }
 
 function recordsControl(transaction) {
-  const messages = linkedMessages(transaction);
-  if (!messages.length) return null;
+  const records = NativeRecordsController.recordsForTransaction(transaction);
+  if (!records.length) return null;
   const details = document.createElement("details");
   details.className = "nelflow-batch__records";
   const summary = document.createElement("summary");
-  summary.textContent = format("Nelflow.Stack.NativeRecords", { count: messages.length });
+  summary.textContent = format("Nelflow.Stack.Results", { count: records.length });
+  summary.setAttribute("aria-label", format("Nelflow.Stack.Results", { count: records.length }));
   const controls = document.createElement("div");
   controls.className = "nelflow-batch__record-buttons";
-  for (const message of messages) {
-    const label = message.id === transaction.attackMessageId
-      ? localize("Nelflow.Stack.AttackMessage")
-      : message.isDamageRoll
-        ? localize("Nelflow.Stack.DamageMessage")
-        : localize("Nelflow.Stack.ApplicationMessage");
+  for (const record of records) {
+    const kind = inspectionKind(record, transaction);
+    const label = localize(kind === "attack"
+      ? "Nelflow.Stack.AttackMessage"
+      : kind === "criticalDamage"
+        ? "Nelflow.Stack.CriticalDamageMessage"
+        : "Nelflow.Stack.DamageMessage");
     const control = button(label, "nelflow-batch__record");
-    control.addEventListener("click", () => NativeCardCompactor.reveal(message.id, { focus: true, highlight: true }));
+    control.title = localize("Nelflow.Roll.InspectTitle");
+    RollPopoverController.register(control, () => {
+      const current = NativeRecordsController.refreshRecord(record);
+      if (!current) return { kind, available: false };
+      return buildRollInspection(current, {
+        transaction: current.transaction,
+        canInspectTarget,
+        targetLabel: targetName,
+        hiddenTargetLabel: localize("Nelflow.Roll.HiddenTarget"),
+      });
+    }, kind);
     controls.append(control);
   }
   details.append(summary, controls);

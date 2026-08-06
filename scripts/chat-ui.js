@@ -24,6 +24,8 @@ import { renderPlayerStrike } from "./player-strike-ui.js";
 import { renderMultiTargetStrike } from "./multi-target-strike-ui.js";
 import { canUndoBatchChild } from "./multi-target-strike-model.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
+import { RollPopoverController } from "./roll-popover-controller.js";
+import { buildRollInspection, inspectionKind } from "./strike-roll-inspection.js";
 
 const reportedRenderFailures = new Set();
 
@@ -134,26 +136,66 @@ function canRevealNativeRecord(messageId) {
   return Boolean(message?.visible && message.isContentVisible);
 }
 
-function revealNativeMessage(messageId, stackId, options = {}) {
-  if (!canRevealNativeRecord(messageId)) {
-    ui.notifications.warn("Nelflow.Notification.NativeMessageUnavailable", { localize: true });
-    return;
-  }
-  NativeRecordsController.show(stackId);
-  if (!NativeCardCompactor.reveal(messageId, options)) {
-    ui.notifications.warn("Nelflow.Notification.NativeMessageNotRendered", { localize: true });
-  }
+function targetDocument(target) {
+  if (typeof fromUuidSync !== "function") return null;
+  const uuid = target?.tokenUuid ?? target?.targetTokenUuid;
+  const document = uuid ? fromUuidSync(uuid, { strict: false }) : null;
+  return document?.object ?? document;
 }
 
-function referenceButton(messageId, stackId, labelKey, iconClass) {
-  const button = labeledButton({
+function canInspectTarget(target) {
+  const token = targetDocument(target);
+  return Boolean(game.user?.isGM || token?.actor?.isOwner);
+}
+
+function inspectionTargetLabel(target) {
+  const token = targetDocument(target);
+  if (!token) return localize("Nelflow.MultiTarget.TargetUnavailable");
+  const canSeeName =
+    game.user?.isGM ||
+    token.actor?.isOwner ||
+    !game.pf2e?.settings?.tokens?.nameVisibility ||
+    token.playersCanSeeName;
+  return canSeeName ? token.name : localize("Nelflow.Roll.HiddenTarget");
+}
+
+function inspectionButton(record) {
+  const kind = inspectionKind(record);
+  const labels = {
+    attack: ["Nelflow.Stack.AttackMessage", "fa-solid fa-dice-d20"],
+    damage: ["Nelflow.Stack.DamageMessage", "fa-solid fa-burst"],
+    criticalDamage: ["Nelflow.Stack.CriticalDamageMessage", "fa-solid fa-burst"],
+  };
+  const [labelKey, iconClass] = labels[kind] ?? labels.damage;
+  const control = labeledButton({
     className: "nelflow-stack__reference",
     iconClass,
     label: localize(labelKey),
+    title: localize("Nelflow.Roll.InspectTitle"),
   });
-  button.disabled = !canRevealNativeRecord(messageId);
-  button.addEventListener("click", () => revealNativeMessage(messageId, stackId));
-  return button;
+  return RollPopoverController.register(
+    control,
+    () => {
+      const current = NativeRecordsController.refreshRecord(record);
+      if (!current) return { kind, available: false };
+      return buildRollInspection(current, {
+        transaction: current.transaction,
+        canInspectTarget,
+        targetLabel: inspectionTargetLabel,
+        hiddenTargetLabel: localize("Nelflow.Roll.HiddenTarget"),
+      });
+    },
+    kind,
+  );
+}
+
+function resultsPanel(records) {
+  if (!records.length) return null;
+  const panel = document.createElement("div");
+  panel.className = "nelflow-stack__results";
+  panel.setAttribute("aria-label", localize("Nelflow.Stack.ResultsAria"));
+  for (const record of records) panel.append(inspectionButton(record));
+  return panel;
 }
 
 function renderSupplementalActions(row, stackId) {
@@ -172,16 +214,12 @@ function renderSupplementalActions(row, stackId) {
   const title = labels.length
     ? format("Nelflow.Stack.ActionsNamedTitle", { actions: labels.join(", ") })
     : localize("Nelflow.Stack.ActionsUnknownTitle");
-  const button = labeledButton({
-    className: "nelflow-stack__actions",
-    iconClass: "fa-solid fa-bolt",
-    label,
-    title,
-  });
-  button.addEventListener("click", () => {
-    revealNativeMessage(row.attackMessageId, stackId, { focus: true, highlight: true });
-  });
-  return button;
+  const note = document.createElement("span");
+  note.className = "nelflow-stack__actions";
+  note.title = title;
+  note.setAttribute("aria-label", `${label}: ${title}`);
+  note.append(icon("fa-solid fa-bolt"), document.createTextNode(label));
+  return note;
 }
 
 function canUseUndo(row, stack) {
@@ -195,8 +233,8 @@ function canUseUndo(row, stack) {
   );
 }
 
-function renderRow(row, stack) {
-  if (row.batch) return renderBatchRow(row, stack);
+function renderRow(row, stack, records) {
+  if (row.batch) return renderBatchRow(row, stack, records);
   const stackId = stack.id;
   const state = rowState(row);
   const item = document.createElement("li");
@@ -267,43 +305,8 @@ function renderRow(row, stack) {
   if (row.transactionState !== TRANSACTION_STATES.SKIPPED) resultLine.append(stateLabel);
   const supplementalActions = renderSupplementalActions(row, stackId);
   if (supplementalActions) resultLine.append(supplementalActions);
-  const details = document.createElement("details");
-  details.className = "nelflow-stack__details";
-  const detailsToggle = document.createElement("summary");
-  detailsToggle.textContent = localize("Nelflow.Stack.Details");
-  detailsToggle.setAttribute("aria-label", localize("Nelflow.Stack.DetailsAria"));
-  const references = document.createElement("div");
-  references.className = "nelflow-stack__references";
-  const recordsLabel = document.createElement("span");
-  recordsLabel.className = "nelflow-stack__records-label";
-  recordsLabel.textContent = localize("Nelflow.Stack.Records");
-  references.append(recordsLabel);
-  references.append(
-    referenceButton(
-      row.attackMessageId,
-      stackId,
-      "Nelflow.Stack.AttackMessage",
-      "fa-solid fa-dice-d20",
-    ),
-    referenceButton(
-      row.damageMessageId,
-      stackId,
-      "Nelflow.Stack.DamageMessage",
-      "fa-solid fa-burst",
-    ),
-  );
-  if (row.applicationMessageId) {
-    references.append(
-      referenceButton(
-        row.applicationMessageId,
-        stackId,
-        "Nelflow.Stack.ApplicationMessage",
-        "fa-solid fa-heart-pulse",
-      ),
-    );
-  }
-  details.append(detailsToggle, references);
-  resultLine.append(details);
+  const inspection = resultsPanel(records);
+  if (inspection) resultLine.append(inspection);
 
   if (canUseUndo(row, stack)) {
     const undo = labeledButton({
@@ -338,7 +341,7 @@ function batchTargetLabel(target) {
   return document?.name ?? document?.object?.name ?? localize("Nelflow.MultiTarget.TargetUnavailable");
 }
 
-function renderBatchRow(row, stack) {
+function renderBatchRow(row, stack, records) {
   const item = document.createElement("li");
   item.className = "nelflow-stack__row nelflow-stack__row--batch";
   const summary = document.createElement("div");
@@ -407,6 +410,8 @@ function renderBatchRow(row, stack) {
   }
   const footer = document.createElement("div");
   footer.className = "nelflow-batch__footer";
+  const inspection = resultsPanel(records);
+  if (inspection) footer.append(inspection);
   if (
     game.user.isGM &&
     game.user.id === stack.identity?.authorUserId &&
@@ -438,23 +443,25 @@ function renderStack(message, html, stack) {
 
   const header = document.createElement("header");
   header.className = "nelflow-stack__header";
-  const context = document.createElement("span");
-  context.className = "nelflow-stack__context";
-  context.textContent =
-    stack.kind === "combat-turn"
-      ? stack.identity?.outOfTurn
-        ? format("Nelflow.Stack.RoundOutOfTurn", { round: stack.identity.round })
-        : format("Nelflow.Stack.Round", { round: stack.identity.round })
-      : localize("Nelflow.Stack.Standalone");
-  header.append(context);
+  const actor = document.createElement("strong");
+  actor.className = "nelflow-stack__actor";
+  actor.textContent = inspectionTargetLabel({ tokenUuid: stack.actor?.tokenUuid }) ||
+    localize("Nelflow.Stack.UnknownCombatant");
+  header.append(actor);
+  if (stack.identity?.outOfTurn) {
+    const context = document.createElement("span");
+    context.className = "nelflow-stack__context";
+    context.textContent = localize("Nelflow.Stack.OutOfTurn");
+    header.append(context);
+  }
 
   const nativeRecords = NativeRecordsController.recordsForStack(stack);
   let nativeRecordsButton = null;
   if (nativeRecords.length && NativeRecordsController.shouldRenderControl()) {
     nativeRecordsButton = labeledButton({
       className: "nelflow-stack__native-records",
-      iconClass: "fa-solid fa-box-archive",
-      label: format("Nelflow.Stack.NativeRecords", { count: nativeRecords.length }),
+      iconClass: "fa-solid fa-chevron-down",
+      label: format("Nelflow.Stack.Results", { count: nativeRecords.length }),
     });
     header.append(nativeRecordsButton);
   }
@@ -462,7 +469,9 @@ function renderStack(message, html, stack) {
   const rows = document.createElement("ol");
   rows.className = "nelflow-stack__rows";
   rows.setAttribute("aria-label", localize("Nelflow.Stack.RowsAria"));
-  for (const row of stack.rows ?? []) rows.append(renderRow(row, stack));
+  for (const row of stack.rows ?? []) {
+    rows.append(renderRow(row, stack, NativeRecordsController.recordsForRow(stack, row)));
+  }
   article.append(header, rows);
   content.replaceChildren(article);
   html.classList.add("nelflow-stack-message");
@@ -470,6 +479,7 @@ function renderStack(message, html, stack) {
   if (nativeRecordsButton) {
     NativeRecordsController.bindStackControl(stack, nativeRecordsButton, nativeRecords);
   }
+  NativeRecordsController.markStackRendered(stack);
 }
 
 function stateLabel(state) {
@@ -599,8 +609,12 @@ export function renderNelflowChat(message, html) {
     html.classList.remove(
       "nelflow-native-record-hidden",
       "nelflow-native-collapsed",
+      "nelflow-strike-canonical-host",
       "nelflow-save-native-hidden",
     );
+    html.querySelectorAll(".nelflow-native-detail, .nelflow-native-header").forEach((node) => {
+      node.classList.remove("nelflow-native-detail", "nelflow-native-header");
+    });
     NativeRecordsController.failOpen(stack?.id);
     failOpenSaveResolver(
       message.getFlag(MODULE_ID, "saveResolver")?.resolverId ??

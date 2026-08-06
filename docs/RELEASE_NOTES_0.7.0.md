@@ -25,7 +25,16 @@ multi-target Strikes. The development manifest targets the eventual
 
 - An NPC batch occupies one parent stack row with compact child target lines.
 - A character batch adds one summary to one deterministic viewer-visible native host.
-- Native Records remains exact-ID and visibility gated.
+- The canonical Nelflow stack/summary is the sole ordinary Strike presentation
+  when linked-card suppression is enabled. Exact native documents remain stored
+  and unmodified; uncertain linkage or presentation failure leaves them visible.
+- Stack headings identify the attacker and omit the round. Round data remains
+  part of durable stack partitioning and reload reconstruction.
+- **Results** exposes only exact viewer-accessible Attack, Damage, and Critical
+  Damage rolls. Application records remain internal proof and never become a
+  Results entry or button.
+- Hovering or focusing a Results entry opens a keyboard-accessible, viewport-
+  clamped inspection popover built from structured evaluated roll data.
 - Transaction internals remain absent from ordinary chat.
 - Previous-session uncertain work is never automatically rerolled or reapplied.
 
@@ -38,6 +47,6 @@ mode.
 
 ## Testing status
 
-The repository includes 100 focused 0.7.0 automated/static scenarios in
-addition to the complete existing suite. Foundry/Forge runtime acceptance is
-pending; see `docs/NELFLOW_0.7.0_TEST_PLAN.md`.
+The repository includes focused 0.7.0 automated/static scenarios in addition
+to the complete existing suite. Foundry/Forge runtime acceptance is pending;
+see `docs/NELFLOW_0.7.0_TEST_PLAN.md`.

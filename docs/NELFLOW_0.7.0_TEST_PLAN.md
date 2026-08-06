@@ -78,26 +78,50 @@ messages; do not accept chat wording alone as mechanical proof.
 58. Player batch: one summary on one canonical visible native host.
 59. At most one Undo All and one per-target Undo per child.
 60. No Transaction Details, UUIDs, transaction IDs or technical payload in chat.
-61. Native Records includes exact attack, normal/critical damage and application records.
-62. Delete one linked native record: remaining summary is safe.
-63. Blind attack as unauthorized player: no summary or record leak.
-64. Whisper attack as non-recipient: no summary or record leak.
-65. Hidden token-name policy: neutral target labels for unauthorized viewers.
-66. Reload/history render: same privacy and canonical host.
-67. Narrow chat sidebar: target rows wrap and buttons remain usable by keyboard.
-68. Expand each compact native card: original PF2e controls work.
+61. Linked-card suppression enabled: the canonical stack/summary is the only
+    ordinary visible Strike presentation, while exact native documents remain
+    present in the Messages collection.
+62. Results includes only viewer-accessible Attack, Damage, and Critical Damage
+    entries. It has the post-filter count, excludes Application, and is omitted
+    when that count is zero.
+63. Hover and keyboard-focus each Results entry: the popover shows the exact
+    evaluated structured roll and closes on pointer exit, focus exit, or Escape.
+64. Attack popover: verify d20, final modifier, named modifiers, MAP and total;
+    verify authorized AC/outcome plus natural 20/1 and fortune/misfortune data.
+65. Shared-roll attack popover: verify captured target order and independent
+    authorized outcomes; unauthorized target names/defenses must not leak.
+66. Damage/Critical Damage popovers: verify evaluated formula, die faces, static
+    terms, damage types/categories, total, and fatal/deadly or critical terms.
+67. Delete one linked native record: remaining summary and Results count are
+    safe; no stale entry or empty Results control appears.
+68. Break or make linkage ambiguous in a disposable world: affected native
+    card remains fully visible and functional (fail open).
+69. Force canonical stack/summary rendering failure: linked native cards remain
+    visible and functional (fail open).
+70. Blind attack as unauthorized player: no summary, Results, target, AC,
+    outcome, roll, or record leak.
+71. Whisper attack as non-recipient: no summary, Results, or record leak.
+72. Hidden token-name policy: neutral target labels for unauthorized viewers.
+73. Reload/history render: same privacy, canonical host, native suppression,
+    Results entries, and internal round partitioning without a visible round.
+74. Narrow chat sidebar and viewport edges: rows wrap, controls remain keyboard
+    operable, and popovers remain entirely on screen without blocking clicks.
+75. Disable linked-card suppression: native PF2e messages render normally while
+    the Nelflow stack/summary and Results inspection remain available.
+76. Confirm native application documents and guarded Undo proof still exist,
+    despite having no viewer-facing Application entry or button.
 
 ## Settings and compatibility
 
-69. Shared-roll Off: multi-target automation is disabled; singular behavior unchanged.
-70. NPC Strikes Only: NPC batch enabled, character batch excluded.
-71. Player and NPC Strikes: both supported.
-72. Change setting after a batch: persisted batch does not mutate.
-73. Test PF2e Workbench alone and with its damage autoroll enabled/disabled.
-74. Test PF2e Toolbelt Target Helper and damage controls.
-75. Test Dice So Nice attack, flat-check and damage animations.
-76. Test relevant chat-rendering modules separately and together.
-77. Re-run the established NPC singular, player singular and basic-save plans.
+77. Shared-roll Off: multi-target automation is disabled; singular behavior unchanged.
+78. NPC Strikes Only: NPC batch enabled, character batch excluded.
+79. Player and NPC Strikes: both supported.
+80. Change setting after a batch: persisted batch does not mutate.
+81. Test PF2e Workbench alone and with its damage autoroll enabled/disabled.
+82. Test PF2e Toolbelt Target Helper and damage controls.
+83. Test Dice So Nice attack, flat-check and damage animations.
+84. Test relevant chat-rendering modules separately and together.
+85. Re-run the established NPC singular, player singular and basic-save plans.
 
 Automated Node/static coverage is not Foundry runtime acceptance. Record the
 Foundry, PF2e and companion-module versions and any failed scenario before

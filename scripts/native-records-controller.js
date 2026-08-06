@@ -7,7 +7,8 @@ import {
 import { getSetting } from "./settings.js";
 import { TransactionStore } from "./transaction-store.js";
 
-const visibleByStack = new Map();
+const resultsOpenByStack = new Map();
+const failedStacks = new Set();
 let initialized = false;
 
 const ROLE_FIELDS = Object.freeze({
@@ -15,6 +16,8 @@ const ROLE_FIELDS = Object.freeze({
   damage: "damageMessageId",
   application: "applicationMessageId",
 });
+
+const INSPECTION_ROLES = new Set(["attack", "damage"]);
 
 function localize(key) {
   return game.i18n.localize(key);
@@ -31,6 +34,10 @@ function stackFirstEnabled() {
     getSetting(SETTINGS.STACK_FIRST_NATIVE_RECORDS) ===
       STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK
   );
+}
+
+function resultsEnabled() {
+  return getSetting(SETTINGS.COMPACT_TURN_STACKS) === COMPACT_STACK_MODES.NPC_STRIKES;
 }
 
 function visibleMessage(message) {
@@ -53,7 +60,7 @@ function exactRecord(stack, row, role) {
   ) {
     return null;
   }
-  return { id: messageId, message, role, transactionId: row.transactionId };
+  return { id: messageId, marker, message, role, transaction: resolved.transaction, transactionId: row.transactionId };
 }
 
 function exactBatchRecords(stack, row) {
@@ -80,7 +87,7 @@ function exactBatchRecords(stack, row) {
       transaction?.id === row.transactionId &&
       transaction.stackRef?.id === stack.id &&
       exact
-    ) records.push({ ...candidate, message, transactionId: row.transactionId });
+    ) records.push({ ...candidate, marker, message, transaction, transactionId: row.transactionId });
   }
   return records;
 }
@@ -104,9 +111,9 @@ function renderedControls(stackId) {
 }
 
 function updateControl(button, stackId, count, visible) {
-  const label = format("Nelflow.Stack.NativeRecords", { count });
+  const label = format("Nelflow.Stack.Results", { count });
   const actionLabel = localize(
-    visible ? "Nelflow.Stack.HideNativeRecords" : "Nelflow.Stack.ShowNativeRecords",
+    visible ? "Nelflow.Stack.HideResults" : "Nelflow.Stack.ShowResults",
   );
   button.dataset.nelflowNativeRecordsStackId = stackId;
   button.dataset.nelflowNativeRecordCount = String(count);
@@ -116,24 +123,53 @@ function updateControl(button, stackId, count, visible) {
   const text = button.querySelector("span");
   if (text) text.textContent = label;
   const icon = button.querySelector("i");
-  icon?.classList.toggle("fa-folder-open", visible);
-  icon?.classList.toggle("fa-box-archive", !visible);
+  icon?.classList.toggle("fa-chevron-up", visible);
+  icon?.classList.toggle("fa-chevron-down", !visible);
 }
 
 function applyVisibility(stackId, pendingControl = null) {
   const controls = renderedControls(stackId);
   if (pendingControl && !controls.includes(pendingControl)) controls.push(pendingControl);
-  const hasControl = controls.length > 0;
-  const visible = visibleByStack.get(stackId) === true;
-  const hide = stackFirstEnabled() && hasControl && !visible;
-
-  for (const element of renderedNativeRecords(stackId)) {
-    element.classList.toggle("nelflow-native-record-hidden", hide);
+  const visible = resultsOpenByStack.get(stackId) === true;
+  for (const article of document.querySelectorAll(".nelflow-stack[data-stack-id]")) {
+    if (article.dataset.stackId === stackId) article.classList.toggle("nelflow-stack--results-open", visible);
   }
   for (const button of controls) {
     const count = Number(button.dataset.nelflowNativeRecordCount) || 0;
-    updateControl(button, stackId, count, !hide);
+    updateControl(button, stackId, count, visible);
   }
+}
+
+function exactTransactionRecords(transaction) {
+  const candidates = transaction?.transactionType === "multi-target-strike"
+    ? (transaction.linkedMessageIds ?? []).map((id) => ({ id }))
+    : [transaction?.attackMessageId, transaction?.damageMessageId, transaction?.applicationMessageId]
+        .filter(Boolean)
+        .map((id) => ({ id }));
+  const records = [];
+  const seen = new Set();
+  for (const candidate of candidates) {
+    if (!candidate.id || seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    const message = game.messages?.get(candidate.id);
+    if (!visibleMessage(message)) continue;
+    const marker = message.getFlag?.(MODULE_ID, "transaction");
+    const resolved = TransactionStore.resolveCanonical(message);
+    if (marker?.id !== transaction.id || resolved?.transaction?.id !== transaction.id) continue;
+    let exact = false;
+    if (marker.role === "attack") exact = transaction.attackMessageId === message.id;
+    else if (marker.role === "damage") {
+      exact = transaction.transactionType === "multi-target-strike"
+        ? transaction.damageGroups?.[marker.damageGroup]?.damageMessageId === message.id
+        : transaction.damageMessageId === message.id;
+    } else if (marker.role === "application") {
+      exact = transaction.transactionType === "multi-target-strike"
+        ? transaction.targets?.find((target) => target.key === marker.targetKey)?.applicationMessageId === message.id
+        : transaction.applicationMessageId === message.id;
+    }
+    if (exact) records.push({ id: message.id, marker, message, role: marker.role, transaction });
+  }
+  return records;
 }
 
 export class NativeRecordsController {
@@ -155,10 +191,12 @@ export class NativeRecordsController {
         element.classList.remove("nelflow-native-record-hidden");
         delete element.dataset.nelflowNativeStackId;
       }
-      visibleByStack.delete(stack.id);
+      resultsOpenByStack.delete(stack.id);
+      failedStacks.delete(stack.id);
     });
     Hooks.on("nelflowPresentationSettingChanged", () => {
-      visibleByStack.clear();
+      resultsOpenByStack.clear();
+      failedStacks.clear();
       for (const element of document.querySelectorAll(".nelflow-linked-native")) {
         element.classList.remove("nelflow-native-record-hidden");
         if (!getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS)) {
@@ -185,10 +223,30 @@ export class NativeRecordsController {
   }
 
   static shouldRenderControl() {
-    return stackFirstEnabled();
+    return resultsEnabled();
+  }
+
+  static shouldSuppressLinkedCards() {
+    return (
+      getSetting(SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS) &&
+      getSetting(SETTINGS.STACK_FIRST_NATIVE_RECORDS) ===
+        STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK
+    );
   }
 
   static recordsForStack(stack) {
+    return this.linkedRecordsForStack(stack).filter((record) => INSPECTION_ROLES.has(record.role));
+  }
+
+  static recordsForRow(stack, row) {
+    if (!stack || !row) return [];
+    const records = row.batch
+      ? exactBatchRecords(stack, row)
+      : Object.keys(ROLE_FIELDS).map((role) => exactRecord(stack, row, role)).filter(Boolean);
+    return records.filter((record) => INSPECTION_ROLES.has(record.role));
+  }
+
+  static linkedRecordsForStack(stack) {
     const records = [];
     const seen = new Set();
     for (const row of stack.rows ?? []) {
@@ -211,23 +269,30 @@ export class NativeRecordsController {
   }
 
   static bindStackControl(stack, button, records) {
-    if (!stackFirstEnabled() || !records.length) return;
+    if (!resultsEnabled() || !records.length) return;
 
-    updateControl(button, stack.id, records.length, visibleByStack.get(stack.id) === true);
+    updateControl(button, stack.id, records.length, resultsOpenByStack.get(stack.id) === true);
     button.addEventListener("click", () => {
-      if (visibleByStack.get(stack.id) === true) visibleByStack.delete(stack.id);
-      else visibleByStack.set(stack.id, true);
+      if (resultsOpenByStack.get(stack.id) === true) resultsOpenByStack.delete(stack.id);
+      else resultsOpenByStack.set(stack.id, true);
       applyVisibility(stack.id, button);
     });
-
-    // Native messages are separate documents. Attach only already compacted
-    // roots whose exact IDs survived the canonical record validation above.
-    for (const record of records) {
-      const element = renderedMessage(record.id);
-      if (!element?.classList.contains("nelflow-linked-native")) continue;
-      element.dataset.nelflowNativeStackId = stack.id;
-    }
     applyVisibility(stack.id, button);
+  }
+
+  static recordsForTransaction(transaction) {
+    return exactTransactionRecords(transaction).filter((record) => INSPECTION_ROLES.has(record.role));
+  }
+
+  static linkedRecordsForTransaction(transaction) {
+    return exactTransactionRecords(transaction);
+  }
+
+  static refreshRecord(record) {
+    if (!record?.id || !record.transaction) return null;
+    return exactTransactionRecords(record.transaction).find(
+      (candidate) => candidate.id === record.id && candidate.role === record.role,
+    ) ?? null;
   }
 
   static registerNative(html, messageId, linked) {
@@ -237,14 +302,15 @@ export class NativeRecordsController {
     if (
       !stack ||
       stack.id !== stackId ||
-      !this.recordsForStack(stack).some((record) => record.id === messageId)
+      !visibleMessage(stackMessage) ||
+      !this.linkedRecordsForStack(stack).some((record) => record.id === messageId)
     ) {
-      return;
+      return false;
     }
     html.dataset.nelflowNativeStackId = stackId;
-    const hasControl = renderedControls(stackId).length > 0;
-    const hide = stackFirstEnabled() && hasControl && visibleByStack.get(stackId) !== true;
+    const hide = stackFirstEnabled() && !failedStacks.has(stackId);
     html.classList.toggle("nelflow-native-record-hidden", hide);
+    return hide;
   }
 
   static restoreNative(html) {
@@ -252,14 +318,20 @@ export class NativeRecordsController {
     delete html.dataset.nelflowNativeStackId;
   }
 
-  static show(stackId) {
-    if (!stackId) return;
-    visibleByStack.set(stackId, true);
-    applyVisibility(stackId);
+  static markStackRendered(stack) {
+    if (!stack?.id) return;
+    failedStacks.delete(stack.id);
+    for (const record of this.linkedRecordsForStack(stack)) {
+      const element = renderedMessage(record.id);
+      if (!element?.classList.contains("nelflow-linked-native")) continue;
+      element.dataset.nelflowNativeStackId = stack.id;
+      element.classList.toggle("nelflow-native-record-hidden", stackFirstEnabled());
+    }
   }
 
   static failOpen(stackId) {
     if (!stackId) return;
+    failedStacks.add(stackId);
     for (const element of renderedNativeRecords(stackId)) {
       element.classList.remove("nelflow-native-record-hidden");
     }

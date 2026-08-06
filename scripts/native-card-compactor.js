@@ -58,10 +58,6 @@ function identifyLinkedMessage(message) {
   if (!marker?.id || !["attack", "damage", "application"].includes(marker.role)) return null;
   const resolved = TransactionStore.resolveCanonical(message);
   if (!resolved || resolved.transaction.id !== marker.id) return null;
-  // Slice 4 keeps player-facing native Damage/Critical Damage controls fully
-  // visible. Player Strike status is additive and never enters an NPC stack.
-  if (resolved.transaction.transactionType === "player-strike") return null;
-
   if (resolved.transaction.transactionType === "multi-target-strike") {
     const transaction = resolved.transaction;
     const exact = marker.role === "attack"
@@ -193,6 +189,7 @@ function restoreFullCard(html) {
     "nelflow-linked-native",
     "nelflow-native-collapsed",
     "nelflow-native-highlight",
+    "nelflow-strike-canonical-host",
   );
   html.querySelector(":scope > .nelflow-native-summary")?.remove();
   for (const element of html.querySelectorAll(
@@ -200,6 +197,43 @@ function restoreFullCard(html) {
   )) {
     element.classList.remove("nelflow-native-detail", "nelflow-native-header");
   }
+}
+
+function canonicalStrikeHost(transaction) {
+  const exact = new Set(
+    NativeRecordsController.linkedRecordsForTransaction(transaction).map((record) => record.id),
+  );
+  const ordered = transaction.transactionType === "player-strike"
+    ? [transaction.damageMessageId, transaction.attackMessageId, transaction.applicationMessageId]
+    : transaction.linkedMessageIds ?? [];
+  return ordered.find((id) => exact.has(id)) ?? null;
+}
+
+function suppressCanonicalStrikeMessage(message, html, linked) {
+  const hostId = canonicalStrikeHost(linked.transaction);
+  if (!hostId) return false;
+  restoreFullCard(html);
+  html.classList.add("nelflow-linked-native");
+  if (message.id !== hostId) {
+    html.classList.add("nelflow-native-record-hidden");
+    return true;
+  }
+
+  const presentation = html.querySelector(
+    ".nelflow-player-strike, .nelflow-batch, .nelflow-recovery",
+  );
+  const header = Array.from(html.children).find((element) => element.classList.contains("message-header"));
+  const content = Array.from(html.children).find((element) => element.classList.contains("message-content"));
+  // If the canonical Nelflow projection is missing, preserve the native card as
+  // the only safe recovery surface rather than creating an empty chat entry.
+  if (!presentation || !header || !content) return false;
+  header.classList.add("nelflow-native-header");
+  for (const child of content.children) {
+    if (child === presentation || child.classList.contains("nelflow-recovery")) continue;
+    child.classList.add("nelflow-native-detail");
+  }
+  html.classList.add("nelflow-strike-canonical-host");
+  return true;
 }
 
 function compactCard(message, html, linked) {
@@ -255,6 +289,21 @@ export class NativeCardCompactor {
     if (!linked || !message.visible || !message.isContentVisible) {
       if (existing) restoreFullCard(html);
       else NativeRecordsController.restoreNative(html);
+      return;
+    }
+    const strikeType = linked.transaction.transactionType;
+    if (["player-strike", "multi-target-strike"].includes(strikeType) && !linked.transaction.stackRef?.id) {
+      if (!NativeRecordsController.shouldSuppressLinkedCards()) {
+        restoreFullCard(html);
+        return;
+      }
+      if (!suppressCanonicalStrikeMessage(message, html, linked)) restoreFullCard(html);
+      return;
+    }
+    if (linked.transaction.stackRef?.id) {
+      restoreFullCard(html);
+      html.classList.add("nelflow-linked-native");
+      NativeRecordsController.registerNative(html, message.id, linked);
       return;
     }
     if (existing) {

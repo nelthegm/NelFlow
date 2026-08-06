@@ -391,11 +391,11 @@ for (const required of [
   "TransactionStore.resolveCanonical(message)",
   "resolved.transaction.stackRef?.id !== stack.id",
   "message?.visible && message.isContentVisible",
-  "const hasControl = controls.length > 0",
-  "stackFirstEnabled() && hasControl && !visible",
+  'const INSPECTION_ROLES = new Set(["attack", "damage"])',
+  "stackFirstEnabled() && !failedStacks.has(stackId)",
   "element.dataset.nelflowNativeStackId === stackId",
-  "visibleByStack.clear()",
-  "visibleByStack.delete(stack.id)",
+  "resultsOpenByStack.clear()",
+  "resultsOpenByStack.delete(stack.id)",
   "static failOpen(stackId)",
 ]) {
   if (!recordsController.includes(required)) {
@@ -416,9 +416,8 @@ if (
 }
 if (
   !compactor.includes("NativeRecordsController.registerNative(html, message.id, linked)") ||
-  !read("scripts/chat-ui.js").includes(
-    "revealNativeMessage(row.attackMessageId, stackId, { focus: true, highlight: true })",
-  ) ||
+  !read("scripts/chat-ui.js").includes("NativeRecordsController.markStackRendered(stack)") ||
+  !read("scripts/chat-ui.js").includes("renderSupplementalActions(row, stackId)") ||
   !read("scripts/chat-ui.js").includes(
     "if (canRenderStackForViewer(message)) renderStack(message, html, stack)",
   ) ||

@@ -37,20 +37,22 @@ transaction internals in ordinary chat.
 
 ```text
 [Foundry speaker: Stone Giant]
-Round 3                                  Native Records (7)
+Stone Giant                                  Results (5)
 Greatclub → Vincent
-Hit · 24 bludgeoning · Applied (24 HP) · Native Records · Undo
+Hit · 24 bludgeoning · Applied (24 HP) · Undo
 Greatclub · MAP −5 → Vincent
-Critical Hit · 47 bludgeoning · Applied (47 HP) · Actions (1) · Native Records
+Critical Hit · 47 bludgeoning · Applied (47 HP) · Actions (1)
 Fist · MAP −10 → Brynna
-Miss · Native Records
+Miss
 ```
 
 Original PF2e attack, damage, and damage-taken messages remain intact. With
-stack-first native records enabled, those exact messages are visually hidden
-behind one viewer-local stack control. Revealing records shows compact audit
-stubs first; Show Details restores each complete native message. Stored
-content, rolls, PF2e flags, and native controls are never rewritten.
+stack-first linked-card suppression enabled, those exact messages are hidden
+only in the rendered chat DOM once the canonical Nelflow presentation is
+available. **Results** then provides viewer-authorized Attack, Damage, and
+Critical Damage roll inspection by hover or keyboard focus. Stored content,
+rolls, PF2e flags, privacy, and native controls are never rewritten; uncertain
+linkage or presentation failure leaves the native card visible.
 
 ## Requirements
 
@@ -131,7 +133,8 @@ forces a stale rollback or rerolls attack/damage.
 
 NPC batches use one compact parent action row with concise target rows. Player
 batches add one summary to the first viewer-visible exact linked native record.
-Native Records are exact-ID and viewer-visibility gated. Transaction IDs,
+Results are exact-ID and viewer-visibility gated, contain only Attack, Damage,
+and Critical Damage rolls, and omit internal application proof. Transaction IDs,
 UUIDs, authority data, correlations, HP snapshots, and diagnostic payloads do
 not appear in ordinary chat. See the [0.7.0 architecture](docs/NELFLOW_0.7.0_ATTACKER_STACKS_AND_MULTI_TARGET_STRIKES.md),
 [test plan](docs/NELFLOW_0.7.0_TEST_PLAN.md), and
@@ -256,48 +259,44 @@ and the [164-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
 The stack is presentation only. The native attack message's canonical
 `flags.nelflow.transaction` remains the sole mechanical state.
 
-## Slice 2.1 native-card compaction
+## Slice 2.1 native-card preservation
 
-- Linked attack cards summarize the Strike and outcome.
-- Linked damage cards summarize the Strike, evaluated total, and structured
-  damage types without reading or reconstructing the displayed formula.
-- Uniquely linked PF2e damage-application cards show a minimal target and
-  applied HP/temp-HP audit line.
-- Show Details and Hide Details operate independently on each native message.
-  Expansion reveals the original PF2e subtree and all native or companion
-  module controls.
-- Foundry's outer speaker header remains. The stack's inner header now shows
-  only the round or Outside Combat instead of repeating the actor.
-- Closed row Native Records and guarded Undo controls share the wrapped result
-  line; opening Native Records exposes exact attack, damage, and application
-  references.
+- Exact linked PF2e attack, damage, critical-damage, and application messages
+  remain intact as private recovery/audit documents.
+- When configured, their ordinary visual card is suppressed only after an
+  exact canonical Nelflow stack or character summary renders successfully.
+- The visible stack heading identifies the attacker and may say **Out of
+  Turn**. Round remains in the internal stack identity but is not displayed.
+- Guarded Undo stays on the canonical application summary; application records
+  remain internal proof and do not add another viewer-facing control.
 
-Compaction requires exact Nelflow message linkage, visible message content, and
-the standard direct Foundry message header/content structure. If any check
-fails, Nelflow leaves the full native card visible.
+Suppression requires exact Nelflow message linkage, viewer-visible message
+content, and a working canonical summary. If any check fails, Nelflow leaves
+the full native card visible and functional.
 
-## Slice 2.2 stack-first chat
+## Slice 2.2 stack-first chat and Results
 
-- **Native Records (N)** counts only exact linked attack, damage, and
-  application messages visible to the current viewer.
-- Records default hidden when compact stacks, native collapse, and the
-  stack-first setting are all enabled. The control reveals one-line audit stubs
-  without moving or cloning their ChatMessage documents.
-- Audit stubs hide the outer message header while collapsed. Expanding one
-  restores its complete Foundry header, native PF2e content, and all native or
-  companion-module controls.
+- **Results (N)** counts only exact linked Attack, Damage, and Critical Damage
+  messages visible to the current viewer after filtering. Application records
+  are excluded, and Results is omitted when the count is zero.
+- Hovering or focusing a Results entry opens a compact roll popover built from
+  evaluated `message.rolls` and structured PF2e flags, never chat-card HTML.
+- Attack inspection includes available d20, modifier/MAP breakdown, total, and
+  authorized outcome context. Damage inspection includes evaluated dice,
+  static terms, type/category, critical terms, and total.
+- The popover closes on pointer/focus exit or Escape and clamps to the viewport.
 - Local show/hide state is independent per viewer and resets to the configured
   default after reload. It never mutates transaction or stack mechanics.
 - Strike presentation uses **Critical Hit**, **Hit**, **Miss**, and **Critical
   Miss** while preserving PF2e's stored outcome values.
 - PF2e NPC Strike `additionalEffects` and melee `attackEffects` produce a
-  GM-visible **Actions (N)** indicator. Clicking it reveals, expands, focuses,
-  and highlights the exact linked native attack message.
+  GM-visible **Actions (N)** advisory indicator without revealing a duplicate
+  native card.
 - Supplemental awareness is advisory. Nelflow never evaluates legality,
   executes a rider, or recreates an Improved Grab, Knockdown, Push, Whip
   Reposition, or other action.
-- Row Native Records uses compact inline `Records: Attack · Damage · Application`
-  links. Guarded Undo remains the existing Slice 1 operation.
+- Guarded Undo remains the existing Slice 1 operation and is not duplicated by
+  Results.
 
 When structured metadata is absent, Nelflow may locally recognize actual PF2e
 semantic controls inside visible roll notes on the already-linked attack
@@ -310,10 +309,10 @@ message. It does not search prose or persist DOM-derived mechanics.
 - Live messages, initial chat history, reconnects, rerenders, and later
   historical batches all use the same synchronous read-only renderer.
 - Rendering is never gated by the authoring GM. Any permitted viewer can render
-  the privacy-filtered stack and use local Native Records controls, without
+  the privacy-filtered stack and use local Results controls, without
   gaining transaction or persistent-stack mutation authority.
-- Native records reconcile in either order: records rendered first are attached
-  when their exact stack control appears, and records rendered later recognize
+- Linked native messages reconcile in either order: messages rendered first
+  are suppressed when their exact stack appears, and messages rendered later recognize
   an already-rendered exact control.
 - New and legitimately updated Nelflow stack messages store semantic fallback
   HTML alongside their stack flag in the same document update. The fallback
@@ -468,8 +467,8 @@ targets, and ambiguous structures also remain manual.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
   stacks remain active, native PF2e cards stay fully expanded, and Nelflow adds
   no replacement collapse controls.
-- **Stack-First Native Records** — `Hide Behind Stack Control` by default;
-  choose `Always Show Audit Stubs` to keep compact native summaries visible.
+- **Stack-First Results** — `Stack Only` by default; choose `Show Linked Native
+  Cards` to keep native PF2e cards visible alongside the compact summary.
   This setting never hides messages when native collapse or compact stacks are
   disabled.
 - **Basic Save Workflow** — defaults to `Toolbelt Target Helper`; alternatives
@@ -520,8 +519,8 @@ Undo Blocked.
   damage, shields, effects, defeated state, or other resources.
 - Manual use of PF2e's damage controls while auto-application is disabled is
   not tracked as an automatic application; the row remains Not Applied.
-- A user-deleted native message cannot be reopened from row Native Records. The row
-  and canonical transaction remain intact.
+- A user-deleted native message disappears from Results. The row and canonical
+  transaction remain intact, and an empty Results disclosure is not shown.
 - PF2e application-card revert remains native and available after expansion,
   but does not reconcile Nelflow's separate transaction or stack state.
 - Healing, zero-effect application messages without structured applied-damage
