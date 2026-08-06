@@ -247,5 +247,5 @@ test("0.9.1 metadata preserves GitHub distribution structure", () => {
   assert.equal(module.version, "0.9.1");
   assert.equal(packageMetadata.version, "0.9.1");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, undefined);
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip");
 });

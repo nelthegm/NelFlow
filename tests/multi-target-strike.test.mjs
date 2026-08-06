@@ -231,7 +231,7 @@ test("99. diagnostic presentation setting remains hidden", () => assert.match(so
 test("100. release metadata targets 0.9.1", () => {
   const manifest = JSON.parse(source("module.json"));
   assert.equal(manifest.version, "0.9.1");
-  assert.equal(manifest.download, undefined);
+  assert.equal(manifest.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip");
 });
 test("101. authority revalidates the complete captured target set", () => assert.match(service, /authorTargetSetMatches\(author, capture\)/));
 test("102. character Undo requires a GM-owned exact application proof", () => {

@@ -5,6 +5,7 @@
   "version": "0.9.1",
   "url": "https://github.com/nelthegm/NelFlow",
   "manifest": "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json",
+  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip",
   "authors": [
     {
       "name": "Nelson Cruz"

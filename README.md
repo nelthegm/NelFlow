@@ -44,34 +44,29 @@ linkage or presentation failure leaves the native card visible.
 
 ## Install or update
 
-Prefer a **clean replace** of the module folder. Do not merge a new build into
-an older `0.7.0` directory.
+### Foundry Manifest URL (primary)
 
-### Local package (recommended for 0.9.1)
+In Foundry: **Add-on Modules → Install Module**, paste:
 
-From this repository:
-
-```powershell
-npm run package
+```text
+https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-Install the produced archive:
+That manifest points at the published GitHub release asset:
 
-1. Stop Foundry.
-2. Back up or remove `Data/modules/nelflow`.
-3. Extract `dist/nelflow-0.9.1.zip` so that
-   `Data/modules/nelflow/module.json` exists.
-4. Restart Foundry and enable **Nelflow**.
+```text
+https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip
+```
 
-Confirm:
+After install or update, restart Foundry if prompted, enable **Nelflow**, and
+confirm:
 
 ```js
 game.modules.get("nelflow")?.version // "0.9.1"
 ```
 
-A hosted GitHub `download` URL is intentionally omitted until a public 0.9.1
-release artifact is published. The `manifest` field continues to point at the
-repository `module.json` for development tracking.
+Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
+installer so the module directory is replaced cleanly.
 
 ### Development checkout
 

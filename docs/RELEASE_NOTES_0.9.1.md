@@ -38,8 +38,14 @@ options. Unverified versions fail open. Debug logging may print:
 npm run package
 ```
 
-Produces `dist/nelflow-0.9.1.zip` with `module.json` at the ZIP root. Hosted
-`download` is omitted until a public GitHub release exists.
+Produces `dist/nelflow-0.9.1.zip` / `dist/nelflow.zip` with `module.json` at
+the ZIP root. Published release download:
+
+`https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip`
+
+Install via Foundry using:
+
+`https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json`
 
 ## Manual test order
 
