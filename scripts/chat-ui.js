@@ -103,6 +103,9 @@ function rowState(row) {
       ? { key: "Nelflow.State.PendingApplication", className: "pending" }
       : { key: "Nelflow.State.NotApplied", className: "not-applied" };
   }
+  if (row.transactionState === TRANSACTION_STATES.AWAITING_IMPACT) {
+    return { key: "Nelflow.Status.AwaitingImpact", className: "pending" };
+  }
   if (row.transactionState === TRANSACTION_STATES.APPLIED) {
     return row.undoBlocked
       ? { key: "Nelflow.State.UndoBlocked", className: "blocked" }
@@ -488,6 +491,7 @@ function stateLabel(state) {
     [TRANSACTION_STATES.PROCESSING]: "Nelflow.Status.Processing",
     [TRANSACTION_STATES.SKIPPED]: "Nelflow.Status.Skipped",
     [TRANSACTION_STATES.DAMAGE_ROLLED]: "Nelflow.Status.DamageRolled",
+    [TRANSACTION_STATES.AWAITING_IMPACT]: "Nelflow.Status.AwaitingImpact",
     [TRANSACTION_STATES.APPLIED]: "Nelflow.Status.Applied",
     [TRANSACTION_STATES.FAILED]: "Nelflow.Status.Failed",
     [TRANSACTION_STATES.UNDONE]: "Nelflow.Status.Undone",
@@ -525,6 +529,7 @@ function shouldRenderLegacy(localMarker, transaction) {
   if (localMarker.role === "damage") {
     return [
       TRANSACTION_STATES.DAMAGE_ROLLED,
+      TRANSACTION_STATES.AWAITING_IMPACT,
       TRANSACTION_STATES.APPLIED,
       TRANSACTION_STATES.FAILED,
       TRANSACTION_STATES.UNDONE,

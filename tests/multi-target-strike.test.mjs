@@ -228,10 +228,10 @@ test("96. no native message deletion was introduced", () => assert.doesNotMatch(
 test("97. no PF2e card HTML is parsed for mechanics", () => assert.doesNotMatch(mechanics, /querySelector|innerHTML|textContent/));
 test("98. shared-roll setting defaults to player and NPC Strikes", () => assert.match(source("scripts/settings.js"), /default: MULTI_TARGET_STRIKE_MODES\.PLAYER_AND_NPC_STRIKES/));
 test("99. diagnostic presentation setting remains hidden", () => assert.match(source("scripts/settings.js"), /SHOW_TRANSACTION_DIAGNOSTICS[\s\S]*config: false/));
-test("100. release metadata targets the eventual 0.7.0 RC", () => {
+test("100. release metadata targets 0.8.0", () => {
   const manifest = JSON.parse(source("module.json"));
-  assert.equal(manifest.version, "0.7.0");
-  assert.equal(manifest.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.7.0-rc1/nelflow.zip");
+  assert.equal(manifest.version, "0.8.0");
+  assert.equal(manifest.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.8.0/nelflow.zip");
 });
 test("101. authority revalidates the complete captured target set", () => assert.match(service, /authorTargetSetMatches\(author, capture\)/));
 test("102. character Undo requires a GM-owned exact application proof", () => {

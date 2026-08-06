@@ -2,6 +2,15 @@ import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { DAMAGE_CORRELATION_REASONS } from "./damage-correlation.js";
 import { logger } from "./logger.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
+import {
+  COMMIT_TRIGGERS,
+  armPendingImpactCommit,
+  buildNelcineStrikeRawPayload,
+  canUseNelcineImpactSync,
+  claimPendingImpactCommit,
+  registerNelcineImpactHook,
+  transactionIdFromImpact,
+} from "./nelcine-impact-bridge.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
@@ -84,7 +93,144 @@ async function syncStack(attackMessage, transaction, stage) {
   }
 }
 
+/**
+ * Existing damage application + Undo metadata path. Used for immediate and delayed commits.
+ */
+async function commitStrikeApplication({
+  message,
+  transaction,
+  strike,
+  targetToken,
+  damageMessage,
+  preApplication,
+  triggerSource = COMMIT_TRIGGERS.IMMEDIATE,
+}) {
+  const applied = await PF2eAdapter.applyDamageToRecordedTarget({
+    attackMessage: message,
+    damageMessage,
+    strike,
+    targetToken,
+    transactionId: transaction.id,
+  });
+  if (!applied) {
+    throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+  }
+
+  const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
+  if (!postApplication) {
+    throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+  }
+
+  let next = transaction;
+  if (applied.applicationMessage) {
+    next = await TransactionStore.linkMessage(message, applied.applicationMessage, "application");
+  }
+  next = await TransactionStore.update(message, {
+    state: TRANSACTION_STATES.APPLIED,
+    preApplication,
+    postApplication,
+    appliedAmount: appliedAmount(preApplication, postApplication),
+    targetName: targetToken.name,
+    impactCommit: {
+      triggerSource,
+      committedAt: Date.now(),
+    },
+  });
+  await syncStack(message, next, "applied");
+  logger.debug("Damage applied", {
+    transactionId: next.id,
+    preApplication,
+    postApplication,
+    appliedAmount: next.appliedAmount,
+    triggerSource,
+  });
+  return next;
+}
+
+async function commitArmedImpact(transactionId, triggerSource) {
+  const pending = claimPendingImpactCommit(transactionId, triggerSource);
+  if (!pending) return { committed: false, reason: "already-committed-or-missing" };
+
+  const message = game.messages.get(pending.attackMessageId);
+  if (!message) {
+    logger.warn("Impact commit missing attack message", { transactionId, triggerSource });
+    return { committed: false, reason: "missing-attack-message" };
+  }
+
+  let transaction = TransactionStore.get(message);
+  if (!transaction || transaction.id !== transactionId) {
+    logger.warn("Impact commit missing transaction", { transactionId, triggerSource });
+    return { committed: false, reason: "missing-transaction" };
+  }
+
+  if (
+    transaction.state !== TRANSACTION_STATES.AWAITING_IMPACT &&
+    transaction.state !== TRANSACTION_STATES.DAMAGE_ROLLED
+  ) {
+    return { committed: false, reason: "unexpected-state" };
+  }
+
+  const strike = PF2eAdapter.inspectStrikeMessage(message);
+  const targetToken = await PF2eAdapter.resolveToken(pending.targetTokenUuid);
+  const damageMessage = game.messages.get(pending.damageMessageId);
+
+  if (!strike || !targetToken || !damageMessage) {
+    transaction = await TransactionStore.update(message, {
+      state: TRANSACTION_STATES.FAILED,
+      reasonKey: "Nelflow.Reason.ProcessingError",
+      errorStage: "impact-commit",
+    });
+    await syncStack(message, transaction, "impact-commit-failed");
+    notify("Nelflow.Notification.ApplyFailed");
+    return { committed: false, reason: "resolve-failed" };
+  }
+
+  try {
+    const preApplication = pending.preApplication ?? PF2eAdapter.healthSnapshot(targetToken.actor);
+    if (!preApplication) {
+      throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+    }
+    await commitStrikeApplication({
+      message,
+      transaction,
+      strike,
+      targetToken,
+      damageMessage,
+      preApplication,
+      triggerSource,
+    });
+    return { committed: true, triggerSource };
+  } catch (error) {
+    logger.error(
+      "Impact commit failed",
+      logContext(message, transaction, "impact-commit", triggerSource),
+      error,
+    );
+    try {
+      transaction = await TransactionStore.update(message, {
+        state: TRANSACTION_STATES.FAILED,
+        reasonKey: "Nelflow.Reason.ProcessingError",
+        errorStage: "impact-commit",
+      });
+      await syncStack(message, transaction, "impact-commit-failed");
+    } catch (stateError) {
+      logger.error("Unable to persist impact commit failure", {}, stateError);
+    }
+    notify("Nelflow.Notification.ApplyFailed");
+    return { committed: false, reason: "apply-failed" };
+  }
+}
+
 export class StrikeResolver {
+  static initializeImpactBridge() {
+    registerNelcineImpactHook((impact) => {
+      // Never trust NelCine damage metadata — transactionId only.
+      const transactionId = transactionIdFromImpact(impact);
+      if (!transactionId) return;
+      return commitArmedImpact(transactionId, COMMIT_TRIGGERS.IMPACT);
+    });
+  }
+
   static async handleAttackMessage(message) {
     if (validCapture(message.getFlag?.(MODULE_ID, MULTI_TARGET_CAPTURE_FLAG))) return;
     if (
@@ -223,10 +369,11 @@ export class StrikeResolver {
       }
 
       unpersistedDamageClaimId = rolled.damageMessage.id;
+      const damageSummary = PF2eAdapter.summarizeDamageRoll(rolled.roll);
       transaction = await TransactionStore.update(message, {
         state: TRANSACTION_STATES.DAMAGE_ROLLED,
         damageMessageId: rolled.damageMessage.id,
-        damageSummary: PF2eAdapter.summarizeDamageRoll(rolled.roll),
+        damageSummary,
         damageCorrelation: {
           schemaVersion: 1,
           sequence: rolled.sequence,
@@ -287,43 +434,88 @@ export class StrikeResolver {
         throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
       }
 
-      const applied = await PF2eAdapter.applyDamageToRecordedTarget({
-        attackMessage: message,
-        damageMessage: rolled.damageMessage,
-        strike,
-        targetToken,
-        transactionId: transaction.id,
+      const syncGate = canUseNelcineImpactSync({
+        targetSceneId: targetToken.document.parent?.id ?? null,
+        outcome: strike.outcome,
+        hasAuthoritativeDamage: Boolean(damageSummary) && Number.isFinite(damageSummary.total),
+        damageTotal: damageSummary?.total,
+        supportsDelayedCommit: true,
       });
-      if (!applied) {
-        throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
-      }
 
-      const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
-      if (!postApplication) {
-        throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
-      }
-
-      if (applied.applicationMessage) {
-        transaction = await TransactionStore.linkMessage(
+      if (!syncGate.eligible) {
+        logger.debug("NelCine impact sync skipped; applying immediately", {
+          transactionId: transaction.id,
+          reason: syncGate.reason,
+        });
+        await commitStrikeApplication({
           message,
-          applied.applicationMessage,
-          "application",
-        );
+          transaction,
+          strike,
+          targetToken,
+          damageMessage: rolled.damageMessage,
+          preApplication,
+          triggerSource: COMMIT_TRIGGERS.IMMEDIATE,
+        });
+        return;
       }
-      transaction = await TransactionStore.update(message, {
-        state: TRANSACTION_STATES.APPLIED,
-        preApplication,
-        postApplication,
-        appliedAmount: appliedAmount(preApplication, postApplication),
-        targetName: targetToken.name,
-      });
-      await syncStack(message, transaction, "applied");
-      logger.debug("Damage applied", {
+
+      const rawPayload = buildNelcineStrikeRawPayload({
         transactionId: transaction.id,
-        preApplication,
-        postApplication,
-        appliedAmount: transaction.appliedAmount,
+        strike,
+        attackMessage: message,
+        targetToken,
+        damageMessage: rolled.damageMessage,
+        damageSummary,
       });
+
+      armPendingImpactCommit(
+        {
+          transactionId: transaction.id,
+          attackMessageId: message.id,
+          damageMessageId: rolled.damageMessage.id,
+          targetTokenUuid: targetToken.document.uuid,
+          preApplication,
+          impactTimeoutMs: syncGate.impactTimeoutMs,
+        },
+        {
+          onEmergency: (id) => {
+            void commitArmedImpact(id, COMMIT_TRIGGERS.TIMEOUT);
+          },
+        },
+      );
+
+      transaction = await TransactionStore.update(message, {
+        state: TRANSACTION_STATES.AWAITING_IMPACT,
+        preApplication,
+        impactPending: {
+          armedAt: Date.now(),
+          impactTimeoutMs: syncGate.impactTimeoutMs,
+          emergencyTimeoutMs: computeEmergencyMs(syncGate.impactTimeoutMs),
+        },
+      });
+      await syncStack(message, transaction, "awaiting-impact");
+
+      try {
+        // Do not await cinematic completion — commit arrives via impact hook or emergency timeout.
+        const broadcastPromise = syncGate.runtime.broadcast(rawPayload, {
+          authoritativeImpact: true,
+          impactTimeoutMs: syncGate.impactTimeoutMs,
+          impactFallbackMs: syncGate.impactTimeoutMs,
+        });
+        void Promise.resolve(broadcastPromise).catch((error) => {
+          logger.warn(
+            "NelCine broadcast failed; committing via NelFlow fallback",
+            logContext(message, transaction, "nelcine-broadcast", error?.message ?? String(error)),
+          );
+          void commitArmedImpact(transaction.id, COMMIT_TRIGGERS.BROADCAST_FAILED);
+        });
+      } catch (error) {
+        logger.warn(
+          "NelCine broadcast threw; committing via NelFlow fallback",
+          logContext(message, transaction, "nelcine-broadcast", error?.message ?? String(error)),
+        );
+        await commitArmedImpact(transaction.id, COMMIT_TRIGGERS.BROADCAST_FAILED);
+      }
     } catch (error) {
       const reason = "internal-exception";
       logger.error(
@@ -443,4 +635,10 @@ export class StrikeResolver {
       }
     }
   }
+}
+
+function computeEmergencyMs(impactTimeoutMs) {
+  const n = Number(impactTimeoutMs);
+  const padded = (Number.isFinite(n) ? n : 5000) + 1500;
+  return Math.min(18000, Math.max(2000, padded));
 }

@@ -7,6 +7,11 @@ const recoveryQueues = new Map();
 
 const ALLOWED_TRANSITIONS = Object.freeze({
   [TRANSACTION_STATES.DAMAGE_ROLLED]: new Set([
+    TRANSACTION_STATES.AWAITING_IMPACT,
+    TRANSACTION_STATES.APPLIED,
+    TRANSACTION_STATES.FAILED,
+  ]),
+  [TRANSACTION_STATES.AWAITING_IMPACT]: new Set([
     TRANSACTION_STATES.APPLIED,
     TRANSACTION_STATES.FAILED,
   ]),
@@ -70,6 +75,7 @@ function transitionEvent(state) {
     [TRANSACTION_STATES.PROCESSING]: "claimed",
     [TRANSACTION_STATES.SKIPPED]: "application-complete",
     [TRANSACTION_STATES.DAMAGE_ROLLED]: "damage-message-linked",
+    [TRANSACTION_STATES.AWAITING_IMPACT]: "awaiting-impact",
     [TRANSACTION_STATES.APPLIED]: "application-complete",
     [TRANSACTION_STATES.FAILED]: "application-failed",
     [TRANSACTION_STATES.UNDONE]: "undo-complete",

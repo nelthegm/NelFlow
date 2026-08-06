@@ -19,6 +19,8 @@ export const SETTINGS = Object.freeze({
   PLAYER_STRIKE_AUTO_APPLY: "playerStrikeAutoApply",
   SHARED_ROLL_MULTI_TARGET_STRIKES: "sharedRollMultiTargetStrikes",
   SHOW_TRANSACTION_DIAGNOSTICS: "showTransactionDiagnostics",
+  NELCINE_IMPACT_SYNC: "nelcineImpactSync",
+  NELCINE_IMPACT_TIMEOUT_MS: "nelcineImpactTimeoutMs",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });
@@ -98,6 +100,7 @@ export const TRANSACTION_STATES = Object.freeze({
   PROCESSING: "processing",
   SKIPPED: "skipped",
   DAMAGE_ROLLED: "damage-rolled",
+  AWAITING_IMPACT: "awaiting-impact",
   APPLIED: "applied",
   FAILED: "failed",
   UNDONE: "undone",

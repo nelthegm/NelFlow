@@ -61,6 +61,11 @@ async function initializeReady() {
   await runNelflowBoundary({ subsystem: "legacy-save-resolver", operation: "initialize", task: () => SaveResolverService.initialize() });
   await runNelflowBoundary({ subsystem: "toolbelt-application", operation: "initialize", task: () => ToolbeltBasicSaveService.initialize() });
   await runNelflowBoundary({ subsystem: "turn-stack", operation: "initialize", task: () => TurnStackService.initialize() });
+  await runNelflowBoundary({
+    subsystem: "nelcine-impact",
+    operation: "initialize",
+    task: () => StrikeResolver.initializeImpactBridge(),
+  });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
   await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });
   Hooks.on("createChatMessage", (message) => {
@@ -109,5 +114,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.7.0 ready");
+  logger.debug("Nelflow 0.8.0 ready");
 }

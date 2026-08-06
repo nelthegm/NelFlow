@@ -192,6 +192,20 @@ const SETTING_DEFINITIONS = [
     config: false,
   },
   {
+    key: SETTINGS.NELCINE_IMPACT_SYNC,
+    name: "Nelflow.Settings.NelcineImpactSync.Name",
+    hint: "Nelflow.Settings.NelcineImpactSync.Hint",
+    default: false,
+  },
+  {
+    key: SETTINGS.NELCINE_IMPACT_TIMEOUT_MS,
+    name: "Nelflow.Settings.NelcineImpactTimeoutMs.Name",
+    hint: "Nelflow.Settings.NelcineImpactTimeoutMs.Hint",
+    type: Number,
+    default: 5000,
+    range: { min: 500, max: 15000, step: 100 },
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

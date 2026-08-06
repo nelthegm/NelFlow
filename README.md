@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow 0.8.0 adds an optional NelCine impact-sync bridge: when enabled and a
+compatible NelCine primary-GM presentation is available, prepared NPC Strike
+damage commits on `nelcine.strikeImpact` (with a NelFlow emergency timeout
+fallback). Default remains immediate application.
 Nelflow 0.7.0 adds attacker-scoped NPC stacks and opt-out shared-roll
 multi-target Strikes for NPCs and characters. An NPC in the active combat now
 receives a stack for its actual token even when it attacks during another
