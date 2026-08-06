@@ -690,6 +690,9 @@ export class ToolbeltBasicSaveService {
     diagnostic("toolbelt-detected", { reason: status.active ? status.version : "inactive" });
     if (status.active) diagnostic(status.supported ? "toolbelt-version-supported" : "toolbelt-version-unsupported");
     diagnostic(status.enabled ? "target-helper-enabled" : "target-helper-disabled");
+    if (status.active && status.supported && getSetting(SETTINGS.DEBUG)) {
+      logger.debug(`Toolbelt ${status.version} compatibility: supported`);
+    }
     if (getSetting(SETTINGS.BASIC_SAVE_WORKFLOW) === BASIC_SAVE_WORKFLOW_MODES.TOOLBELT) {
       if (!status.active) warningOnce("toolbelt-inactive", "Nelflow.Notification.ToolbeltInactive");
       else if (!status.enabled) warningOnce("target-helper-disabled", "Nelflow.Notification.TargetHelperDisabled");

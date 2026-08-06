@@ -31,6 +31,8 @@
   "Nelflow.Settings.NelcineImpactSync.Hint": "When enabled and a compatible NelCine primary-GM presentation is available, NelFlow prepares NPC Strike damage and commits it when NelCine emits its authoritative impact signal. Otherwise, damage applies immediately through the normal NelFlow path.",
   "Nelflow.Settings.NelcineImpactTimeoutMs.Name": "NelCine Impact Timeout (ms)",
   "Nelflow.Settings.NelcineImpactTimeoutMs.Hint": "Passed to NelCine as the impact fallback budget (500–15000). NelFlow also arms a separate emergency commit at this value plus 1500ms.",
+  "Nelflow.Settings.NelcineStrikeCinematics.Name": "Enable NelCine Strike Cinematics",
+  "Nelflow.Settings.NelcineStrikeCinematics.Hint": "When NelCine is active, supported NelFlow Strike results are sent to NelCine for synchronized presentation. This setting affects presentation only. Damage timing remains immediate unless Synchronize Damage with NelCine Impact is separately enabled.",
   "Nelflow.Settings.NelcineSaveBatchCinematics.Name": "Enable NelCine Basic-Save Batches",
   "Nelflow.Settings.NelcineSaveBatchCinematics.Hint": "When enabled and NelCine is active, NelFlow sends one cinematic batch after a multi-target NPC basic-save spell or ability finishes resolving. This changes presentation only; damage timing and Undo remain unchanged.",
   "Nelflow.Settings.NelcineSaveBatchMinimumTargets.Name": "NelCine Basic-Save Batch Minimum Targets",

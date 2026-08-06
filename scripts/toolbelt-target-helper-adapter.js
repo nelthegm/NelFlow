@@ -1,8 +1,13 @@
 import { classifyBasicSaveSource } from "./basic-save-source-classifier.js";
 
 const TOOLBELT_ID = "pf2e-toolbelt";
+/** Inclusive floor for known Target Helper flag semantics. */
 export const TOOLBELT_MIN_VERSION = "3.52.0";
-export const TOOLBELT_MAX_VERSION = "3.52.1";
+/**
+ * Inclusive ceiling for versions whose Target Helper flag contract has been
+ * structurally verified against NelFlow's adapter (includes 3.53.1).
+ */
+export const TOOLBELT_MAX_VERSION = "3.53.1";
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const OUTCOMES = new Set(["criticalSuccess", "success", "failure", "criticalFailure"]);
 
@@ -21,10 +26,94 @@ function compareVersions(left, right) {
   return 0;
 }
 
+/**
+ * Known-compatible Toolbelt versions for Target Helper automation.
+ * Prefer evaluateToolbeltCompatibility for capability-aware decisions.
+ */
 export function isSupportedToolbeltVersion(version) {
   const minimum = compareVersions(version, TOOLBELT_MIN_VERSION);
   const maximum = compareVersions(version, TOOLBELT_MAX_VERSION);
   return minimum !== null && maximum !== null && minimum >= 0 && maximum <= 0;
+}
+
+/**
+ * Capability/structure probe for Target Helper. Prefer this over a bare version gate.
+ * @param {object} args
+ * @returns {{
+ *   version: string|null,
+ *   supported: boolean,
+ *   targetFlagsSupported: boolean,
+ *   resultRowsSupported: boolean,
+ *   damageControlsSupported: boolean,
+ *   reason: string|null
+ * }}
+ */
+export function evaluateToolbeltCompatibility(args = {}) {
+  const version = args.version ?? null;
+  const versionOk = isSupportedToolbeltVersion(version);
+  const raw = args.rawFlag ?? null;
+  const hasType = raw && typeof raw.type === "string";
+  const hasTargets = Array.isArray(raw?.targets);
+  const hasSaveVariants = raw?.saveVariants && typeof raw.saveVariants === "object";
+  const basicVariants = Object.values(raw?.saveVariants ?? {}).filter(
+    (save) => save?.basic === true && SAVE_TYPES.has(save?.statistic),
+  );
+  const targetFlagsSupported = Boolean(hasType && hasTargets && hasSaveVariants);
+  const resultRowsSupported = Boolean(
+    targetFlagsSupported &&
+      (basicVariants.length === 0 ||
+        basicVariants.some((save) => save?.saves && typeof save.saves === "object")),
+  );
+  // Markup-only probe: when absent/unknown, do not disable save processing.
+  const damageControlsSupported =
+    args.damageControlsSupported === true
+      ? true
+      : args.damageControlsSupported === false
+        ? false
+        : versionOk;
+
+  if (!versionOk) {
+    return {
+      version,
+      supported: false,
+      targetFlagsSupported: false,
+      resultRowsSupported: false,
+      damageControlsSupported: false,
+      reason: "toolbelt-version-unverified",
+    };
+  }
+
+  // Version alone is enough for module-level support when no flag sample is provided.
+  if (!raw) {
+    return {
+      version,
+      supported: true,
+      targetFlagsSupported: true,
+      resultRowsSupported: true,
+      damageControlsSupported,
+      reason: null,
+    };
+  }
+
+  if (!targetFlagsSupported || !resultRowsSupported) {
+    return {
+      version,
+      supported: false,
+      targetFlagsSupported,
+      resultRowsSupported,
+      damageControlsSupported: false,
+      reason: "toolbelt-target-flags-unproven",
+    };
+  }
+
+  return {
+    version,
+    supported: true,
+    targetFlagsSupported: true,
+    resultRowsSupported: true,
+    damageControlsSupported,
+    reason: null,
+  };
 }
 
 export function electProcessingGm(users, authorUserId) {
@@ -126,8 +215,9 @@ function structuredMessageMode(message) {
 }
 
 /**
- * Toolbelt 3.52.x exposes only getMessageTargets/setMessageFlagTargets publicly.
- * This is the sole version-gated boundary that reads its persisted Target Helper flag.
+ * Toolbelt Target Helper boundary. Prefer evaluateToolbeltCompatibility over a
+ * bare version string. Public APIs remain limited to getMessageTargets /
+ * setMessageFlagTargets; NelFlow reads persisted Target Helper flags only.
  */
 export class ToolbeltTargetHelperAdapter {
   static module() {
@@ -146,11 +236,13 @@ export class ToolbeltTargetHelperAdapter {
         enabled = false;
       }
     }
+    const compatibility = evaluateToolbeltCompatibility({ version });
     return {
       active,
       enabled,
       version,
-      supported: active && isSupportedToolbeltVersion(version),
+      supported: active && compatibility.supported,
+      compatibility,
       publicApi: game.toolbelt?.targetHelper ?? null,
       hasPublicApplyApi: false,
       hasPublicQueueApi: false,

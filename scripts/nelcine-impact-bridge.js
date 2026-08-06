@@ -218,6 +218,20 @@ export function canUseNelcineImpactSync(args) {
   const impactTimeoutMs = clampImpactTimeoutMs(
     args.impactTimeoutMs ?? getSetting(SETTINGS.NELCINE_IMPACT_TIMEOUT_MS),
   );
+  let strikeCinematicsEnabled = true;
+  try {
+    strikeCinematicsEnabled = getSetting(SETTINGS.NELCINE_STRIKE_CINEMATICS) !== false;
+  } catch {
+    strikeCinematicsEnabled = true;
+  }
+  if (strikeCinematicsEnabled !== true) {
+    return {
+      eligible: false,
+      reason: "strike-cinematics-disabled",
+      runtime,
+      impactTimeoutMs,
+    };
+  }
   const result = evaluateNelcineImpactEligibility({
     settingEnabled: getSetting(SETTINGS.NELCINE_IMPACT_SYNC) === true,
     isGM: game.user?.isGM === true,

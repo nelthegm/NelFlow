@@ -23,6 +23,7 @@ import {
   playerStrikeAuthorId as authorId,
 } from "./player-strike-adapter.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
@@ -455,6 +456,23 @@ async function processDamage(message) {
         transactionId: transaction.id,
         stage: "player-strike-application",
         reason: null,
+      });
+      tryDeliverStrikePresentation({
+        transactionId: transaction.id,
+        transactionType: "player-strike",
+        attackMessage,
+        damageMessage,
+        damageSummary: PF2eAdapter.summarizeDamageRoll(damage.roll),
+        includeDamage: true,
+        multiTarget: false,
+        impactSyncSelected: false,
+        outcome: damage.evidence.outcome ?? transaction.snapshot?.outcome ?? null,
+        attackerTokenUuid: transaction.snapshot?.sourceTokenUuid ?? null,
+        attackerActorUuid: transaction.snapshot?.sourceActorUuid ?? null,
+        targetTokenUuid: transaction.snapshot?.targetTokenUuid ?? null,
+        targetActorUuid: transaction.snapshot?.targetActorUuid ?? null,
+        itemUuid: transaction.snapshot?.sourceItemUuid ?? null,
+        actionName: transaction.snapshot?.strikeName ?? null,
       });
       return true;
     } catch (error) {

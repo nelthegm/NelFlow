@@ -21,6 +21,7 @@ export const SETTINGS = Object.freeze({
   SHOW_TRANSACTION_DIAGNOSTICS: "showTransactionDiagnostics",
   NELCINE_IMPACT_SYNC: "nelcineImpactSync",
   NELCINE_IMPACT_TIMEOUT_MS: "nelcineImpactTimeoutMs",
+  NELCINE_STRIKE_CINEMATICS: "nelcineStrikeCinematics",
   NELCINE_SAVE_BATCH_CINEMATICS: "nelcineSaveBatchCinematics",
   NELCINE_SAVE_BATCH_MINIMUM_TARGETS: "nelcineSaveBatchMinimumTargets",
   MIGRATION_VERSION: "migrationVersion",

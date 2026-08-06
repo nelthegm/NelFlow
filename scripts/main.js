@@ -17,7 +17,7 @@ import { PlayerStrikeService } from "./player-strike-service.js";
 import { MultiTargetStrikeCapture } from "./multi-target-strike-capture.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 import { RollPopoverController } from "./roll-popover-controller.js";
-import { installSaveBatchPublicApi } from "./nelcine-save-batch-bridge.js";
+import { installNelcinePublicApi } from "./nelcine-strike-delivery.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -68,9 +68,9 @@ async function initializeReady() {
     task: () => StrikeResolver.initializeImpactBridge(),
   });
   await runNelflowBoundary({
-    subsystem: "nelcine-save-batch",
+    subsystem: "nelcine-integrations",
     operation: "initialize",
-    task: () => installSaveBatchPublicApi(),
+    task: () => installNelcinePublicApi(),
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
   await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });
@@ -120,5 +120,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.9.0 ready");
+  logger.debug("Nelflow 0.9.1 ready");
 }

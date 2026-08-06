@@ -524,9 +524,26 @@ if (/new\s+DamageRoll|construct.*formula|damage\.formula/i.test(`${correlation}\
 if (
   !resolver.includes("PF2eAdapter.persistDamageClaim") ||
   !resolver.includes("PF2eAdapter.validateDamageForApplication") ||
-  resolver.indexOf("PF2eAdapter.persistDamageClaim") >
-    resolver.indexOf("PF2eAdapter.applyDamageToRecordedTarget")
+  !resolver.includes("commitStrikeApplication") ||
+  !resolver.includes("PF2eAdapter.applyDamageToRecordedTarget")
 ) {
+  fail("damage application must occur only after exact claim persistence and revalidation");
+}
+// Ordering must be proven inside handleAttackMessage: durable claim before the
+// helper that performs asynchronous HP application. Do not use whole-file
+// indexOf — commitStrikeApplication is defined above the claim call site.
+const handleAttackSection =
+  resolver.match(/static async handleAttackMessage[\s\S]*?(?=static async undoFromMessage)/)?.[0] ?? "";
+const claimIdx = handleAttackSection.indexOf("PF2eAdapter.persistDamageClaim");
+const commitIdx = handleAttackSection.indexOf("commitStrikeApplication");
+if (claimIdx < 0 || commitIdx < 0 || claimIdx > commitIdx) {
+  fail("damage application must occur only after exact claim persistence and revalidation");
+}
+const commitHelper =
+  resolver.match(/async function commitStrikeApplication[\s\S]*?(?=async function commitArmedImpact)/)?.[0] ??
+  resolver.match(/async function commitStrikeApplication[\s\S]*?(?=export class StrikeResolver)/)?.[0] ??
+  "";
+if (!commitHelper.includes("PF2eAdapter.applyDamageToRecordedTarget")) {
   fail("damage application must occur only after exact claim persistence and revalidation");
 }
 if (
@@ -624,7 +641,8 @@ const toolbeltUi = read("scripts/toolbelt-basic-save-ui.js");
 const toolbeltModel = read("scripts/toolbelt-basic-save-model.js");
 for (const required of [
   'TOOLBELT_MIN_VERSION = "3.52.0"',
-  'TOOLBELT_MAX_VERSION = "3.52.1"',
+  'TOOLBELT_MAX_VERSION = "3.53.1"',
+  "evaluateToolbeltCompatibility",
   'game.settings.get(TOOLBELT_ID, "targetHelper.enabled")',
   'message?.flags?.[TOOLBELT_ID]?.targetHelper',
   'data.type !== "damage"',

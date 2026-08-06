@@ -206,6 +206,12 @@ const SETTING_DEFINITIONS = [
     range: { min: 500, max: 15000, step: 100 },
   },
   {
+    key: SETTINGS.NELCINE_STRIKE_CINEMATICS,
+    name: "Nelflow.Settings.NelcineStrikeCinematics.Name",
+    hint: "Nelflow.Settings.NelcineStrikeCinematics.Hint",
+    default: true,
+  },
+  {
     key: SETTINGS.NELCINE_SAVE_BATCH_CINEMATICS,
     name: "Nelflow.Settings.NelcineSaveBatchCinematics.Name",
     hint: "Nelflow.Settings.NelcineSaveBatchCinematics.Hint",

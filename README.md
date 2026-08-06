@@ -1,49 +1,16 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow 0.9.0 adds an optional NelCine multi-target basic-save batch bridge:
-when enabled and NelCine is active, NelFlow emits one
-`nelflow.basicSaveBatchResolved` cinematic payload after a completed NPC
-basic-save spell or ability has already applied per-target damage and created
-Undo. Presentation only — HP timing is unchanged, and no batch impact-commit
-protocol exists yet.
-Nelflow 0.8.0 adds an optional NelCine impact-sync bridge: when enabled and a
-compatible NelCine primary-GM presentation is available, prepared NPC Strike
-damage commits on `nelcine.strikeImpact` (with a NelFlow emergency timeout
-fallback). Default remains immediate application.
-Nelflow 0.7.0 adds attacker-scoped NPC stacks and opt-out shared-roll
-multi-target Strikes for NPCs and characters. An NPC in the active combat now
-receives a stack for its actual token even when it attacks during another
-creature's turn; two scene tokens linked to one actor remain separate.
-Slice 1 safely continues one GM-authored NPC Strike against one recorded target
-through PF2e's native damage and optional application pathways. Slice 2 groups
-supported Strikes from one combatant turn into a durable compact chat stack.
-Slice 2.1 compacts each safely linked native audit card and reduces redundant
-space inside that stack. Slice 2.2 makes the stack the primary visible record
-and warns the GM about structured PF2e Strike riders. Slice 2.2.1 makes those
-stacks reload-safe and gives new stack messages durable readable fallback HTML.
-Slice 2.2.2 gives simultaneous native damage invocations exact
-transaction-scoped correlation. Slice 3.1 integrates PF2e Toolbelt Target
-Helper so its existing target/save rows remain authoritative while Nelflow adds
-guarded native basic-save damage application on the same damage card. Slice
-3.1.1 guards the exact row's duplicate Toolbelt HP-damage controls after
-conclusive handling while leaving save, reroll, Block, and record controls
-available.
-Slice 3.2 extends that same Toolbelt transaction, application, guard, and Undo
-pipeline to structurally verified NPC `action` abilities with explicit basic
-saves and one exact native damage roll.
-Slice 3.3 automatically invokes PF2e's native spell damage API once for live,
-deterministic Toolbelt basic-save spell cards, then hands the resulting native
-damage message to the unchanged Slice 3.1/3.2 application workflow.
-Slice 3.4 adds GM-only transaction diagnostics, sanitized bug-report export,
-durable audit/recovery state, safe Toolbelt re-scan and existing-damage linking,
-and fail-open handling for interrupted work. It adds no new automation category.
-Slice 4.0, corrected through Nelflow 0.6.3, observes one character Strike regardless
-of whether its active OWNER author is a player or GM. The user chooses PF2e's
-native damage roll, then one authoritative GM applies that exact DamageRoll to
-the attack's snapshotted target. Nelflow 0.6.5 keeps those mechanics unchanged,
-uses one canonical application summary and guarded Undo, and never displays
-transaction internals in ordinary chat.
+Nelflow **0.9.1** is a runtime repair and packaging release: it restores automatic
+NelCine presentation for supported real Strikes, separates ordinary Strike
+cinematics from optional impact-synchronized damage, adds structurally verified
+Toolbelt **3.53.1** compatibility, repairs damage-claim static ordering
+validation, and ships an installable local ZIP. Mechanics and Undo behavior are
+preserved.
+
+Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
+after existing save mechanics. Nelflow 0.8.0 added optional NelCine impact-sync
+for single-target NPC Strike HP timing.
 
 ```text
 [Foundry speaker: Stone Giant]
@@ -70,47 +37,54 @@ linkage or presentation failure leaves the native card visible.
 - Pathfinder Second Edition system (character Strike integration source-checked with PF2e 8.4.0)
 - A supported NPC Strike or active player-/GM-owned character Strike with one
   target for the established flow, or two or more explicit targets for the
-  shared-roll 0.7.0 flow, or
-- PF2e Toolbelt 3.52.0-3.52.1 with Target Helper enabled for the recommended
-  player- or GM-authored basic-save spell workflow, or a supported GM-authored
-  NPC basic-save `action` ability
+  shared-roll multi-target flow, or
+- PF2e Toolbelt **3.52.0–3.53.1** with Target Helper enabled for the recommended
+  basic-save spell/ability workflow (capability-validated; unverified versions
+  fail open to manual Toolbelt controls)
 
 ## Install or update
 
-Foundry or Forge users can install the Nelflow 0.7.0 release-candidate build using this
-manifest URL:
+Prefer a **clean replace** of the module folder. Do not merge a new build into
+an older `0.7.0` directory.
 
-```text
-https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
-```
+### Local package (recommended for 0.9.1)
 
-The 0.7.0 manifest is prepared to download the eventual RC package from
-`https://github.com/nelthegm/NelFlow/releases/download/v0.7.0-rc1/nelflow.zip`.
-This development build has static and Node test coverage but has not yet
-received Foundry/Forge runtime acceptance. Nelflow 0.6.5 remains the last
-runtime-accepted stable release until 0.7.0 is published and tested.
-
-For a normal installation, extract `nelflow.zip` into Foundry's
-`Data/modules/nelflow` directory so `module.json` is directly inside that
-folder. Restart Foundry, enable **Nelflow** in a disposable PF2e world, and
-perform the runtime test plan before using it in a live campaign.
-
-For development, use this repository directly as `Data/modules/nelflow`. There
-are no runtime dependencies and no build step.
-
-Run static validation:
+From this repository:
 
 ```powershell
+npm run package
+```
+
+Install the produced archive:
+
+1. Stop Foundry.
+2. Back up or remove `Data/modules/nelflow`.
+3. Extract `dist/nelflow-0.9.1.zip` so that
+   `Data/modules/nelflow/module.json` exists.
+4. Restart Foundry and enable **Nelflow**.
+
+Confirm:
+
+```js
+game.modules.get("nelflow")?.version // "0.9.1"
+```
+
+A hosted GitHub `download` URL is intentionally omitted until a public 0.9.1
+release artifact is published. The `manifest` field continues to point at the
+repository `module.json` for development tracking.
+
+### Development checkout
+
+Use this repository directly as `Data/modules/nelflow`. There are no runtime
+dependencies and no build step beyond packaging.
+
+Run validation:
+
+```powershell
+npm test
 npm run check
+npm run package
 ```
-
-Build the upload archive from the repository root:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools/package.ps1
-```
-
-The output is `dist/nelflow.zip`, with `module.json` at the ZIP root.
 
 ## Nelflow 0.7.0 attacker stacks and multi-target Strikes
 
@@ -501,20 +475,53 @@ targets, and ambiguous structures also remain manual.
   target. Disable it to retain normal Toolbelt controls without changing
   Nelflow application, status, records, or Undo.
 - **Synchronize Damage with NelCine Impact** (`nelcineImpactSync`) — disabled by
-  default. When enabled with a compatible NelCine primary-GM presentation,
-  single-target NPC Strike damage commits on cinematic impact (or emergency
-  timeout). See [release notes 0.8.0](docs/RELEASE_NOTES_0.8.0.md).
+  default. Mechanical timing option for single-target NPC Strikes: prepare
+  damage, then commit HP on `nelcine.strikeImpact` (or NelFlow emergency
+  timeout). Requires Strike cinematics; otherwise damage applies immediately.
+- **Enable NelCine Strike Cinematics** (`nelcineStrikeCinematics`) — **enabled by
+  default**. Presentation only. When NelCine is active, supported Strike results
+  are delivered once via `nelflow.strikeResolved` (or via direct impact-sync
+  broadcast when impact sync owns the transaction). Does not change HP timing
+  unless impact sync is also enabled.
 - **Enable NelCine Basic-Save Batches** (`nelcineSaveBatchCinematics`) —
-  disabled by default. When enabled and NelCine is active, NelFlow emits one
-  `nelflow.basicSaveBatchResolved` payload after a multi-target NPC basic-save
-  spell or ability finishes resolving. Presentation only; damage timing and
-  Undo are unchanged. See [release notes 0.9.0](docs/RELEASE_NOTES_0.9.0.md).
+  disabled by default. Presentation after existing save mechanics finish.
 - **NelCine Basic-Save Batch Minimum Targets**
-  (`nelcineSaveBatchMinimumTargets`) — default `2` (range 2–24). Effects with
-  fewer authoritative target results keep the ordinary NelFlow workflow without
-  a batch cinematic.
+  (`nelcineSaveBatchMinimumTargets`) — default `2` (range 2–24).
 - The old Basic Save Spell Resolver setting remains hidden for migration only.
 - **Enable Debug Logging** — disabled by default.
+
+## NelCine Strike cinematics vs impact synchronization
+
+| Setting | Default | Role |
+|---|---|---|
+| Enable NelCine Strike Cinematics | **true** | Presentation delivery |
+| Synchronize Damage with NelCine Impact | **false** | Optional delayed HP commit |
+| Enable NelCine Basic-Save Batches | **false** | Save-batch presentation after HP |
+
+Ordinary presentation path:
+
+```text
+Hooks.callAll("nelflow.strikeResolved", rawPayload)
+```
+
+Impact-sync path (exclusive — never also emits the ordinary hook):
+
+```text
+game.nelcine.integrations.nelflow.broadcastStrike(rawPayload, { authoritativeImpact: true, ... })
+```
+
+Supported Strike paths: GM NPC single-target; supported character single-target
+after authoritative native damage linking. Shared-roll **multi-target Strikes**
+do not emit ordinary per-target Strike cinematics in 0.9.1 (NelCine has no
+dedicated multi-target Strike contract yet).
+
+Diagnostics:
+
+```js
+game.nelflow.integrations.nelcine.getStatus()
+game.nelflow.integrations.nelcine.getStrikeDelivery(transactionId) // GM-only
+game.nelflow.dev.watchNelCineStrikes()
+```
 
 ## NelCine basic-save batch integration (0.9.0)
 
@@ -747,12 +754,17 @@ Undo Blocked.
   may prevent batch emission; mechanics and Undo remain unaffected. More than
   24 targets truncate presentation to the first 24. No batch impact-commit
   protocol exists yet.
+- Shared-roll multi-target Strikes do not emit ordinary NelCine Strike
+  cinematics in 0.9.1 (no dedicated multi-target Strike presentation contract).
+- Toolbelt versions outside 3.52.0–3.53.1 remain unverified and fail open to
+  manual Target Helper controls without disabling NPC Strike cinematics.
 
 ## Testing and design documentation
 
 Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
+- [Nelflow 0.9.1 runtime repair notes](docs/RELEASE_NOTES_0.9.1.md)
 - [Nelflow 0.9.0 NelCine basic-save batch notes](docs/RELEASE_NOTES_0.9.0.md)
 - [Nelflow 0.8.0 NelCine impact commit notes](docs/RELEASE_NOTES_0.8.0.md)
 - [Slice 2 architecture](docs/SLICE_002_COMPACT_TURN_STACKS.md)

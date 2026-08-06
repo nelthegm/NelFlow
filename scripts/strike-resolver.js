@@ -11,6 +11,10 @@ import {
   registerNelcineImpactHook,
   transactionIdFromImpact,
 } from "./nelcine-impact-bridge.js";
+import {
+  tryDeliverStrikeImpactSync,
+  tryDeliverStrikePresentation,
+} from "./nelcine-strike-delivery.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
@@ -69,6 +73,38 @@ function makeSnapshot(attackMessage, strike, targetToken) {
 
 function appliedAmount(before, after) {
   return Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp);
+}
+
+function presentationArgsFromStrike({
+  transaction,
+  strike,
+  message,
+  targetToken,
+  damageMessage = null,
+  damageSummary = null,
+  includeDamage = false,
+  impactSyncSelected = false,
+}) {
+  return {
+    transactionId: transaction.id,
+    transactionType: "npc-strike",
+    strike,
+    attackMessage: message,
+    targetToken,
+    damageMessage,
+    damageSummary,
+    includeDamage,
+    impactSyncSelected,
+    multiTarget: false,
+    outcome: strike.outcome,
+    attackerTokenUuid: strike.sourceTokenUuid ?? message.token?.document?.uuid ?? null,
+    attackerActorUuid: strike.actor?.uuid ?? null,
+    targetTokenUuid: targetToken?.document?.uuid ?? null,
+    targetActorUuid: targetToken?.actor?.uuid ?? null,
+    itemUuid: strike.item?.uuid ?? null,
+    actionName: strike.item?.name ?? null,
+    mapPenalty: strike.mapPenalty ?? null,
+  };
 }
 
 async function syncStack(attackMessage, transaction, stage) {
@@ -318,6 +354,15 @@ export class StrikeResolver {
           targetName: targetToken.name,
         });
         await syncStack(message, transaction, "skipped");
+        tryDeliverStrikePresentation(
+          presentationArgsFromStrike({
+            transaction,
+            strike,
+            message,
+            targetToken,
+            includeDamage: false,
+          }),
+        );
         return;
       }
 
@@ -358,6 +403,17 @@ export class StrikeResolver {
             elapsedMs: rolled.elapsedMs ?? null,
           });
           notify("Nelflow.Notification.ManualApplicationRequired");
+          tryDeliverStrikePresentation(
+            presentationArgsFromStrike({
+              transaction,
+              strike,
+              message,
+              targetToken,
+              damageMessage: rolled.damageMessage,
+              damageSummary,
+              includeDamage: false,
+            }),
+          );
           return;
         }
         throw rolled.error ??
@@ -394,7 +450,20 @@ export class StrikeResolver {
       transaction = await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
       await syncStack(message, transaction, "damage-rolled");
 
-      if (!getSetting(SETTINGS.AUTO_APPLY)) return;
+      if (!getSetting(SETTINGS.AUTO_APPLY)) {
+        tryDeliverStrikePresentation(
+          presentationArgsFromStrike({
+            transaction,
+            strike,
+            message,
+            targetToken,
+            damageMessage: rolled.damageMessage,
+            damageSummary,
+            includeDamage: true,
+          }),
+        );
+        return;
+      }
 
       stage = "apply-damage";
       const applicationGuard = PF2eAdapter.validateDamageForApplication({
@@ -427,6 +496,17 @@ export class StrikeResolver {
           elapsedMs: transaction.damageCorrelation?.elapsedMs ?? null,
         });
         notify("Nelflow.Notification.ManualApplicationRequired");
+        tryDeliverStrikePresentation(
+          presentationArgsFromStrike({
+            transaction,
+            strike,
+            message,
+            targetToken,
+            damageMessage: rolled.damageMessage,
+            damageSummary,
+            includeDamage: true,
+          }),
+        );
         return;
       }
       const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
@@ -434,13 +514,16 @@ export class StrikeResolver {
         throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
       }
 
-      const syncGate = canUseNelcineImpactSync({
-        targetSceneId: targetToken.document.parent?.id ?? null,
-        outcome: strike.outcome,
-        hasAuthoritativeDamage: Boolean(damageSummary) && Number.isFinite(damageSummary.total),
-        damageTotal: damageSummary?.total,
-        supportsDelayedCommit: true,
-      });
+      const presentationRequired = getSetting(SETTINGS.NELCINE_STRIKE_CINEMATICS) === true;
+      const syncGate = presentationRequired
+        ? canUseNelcineImpactSync({
+            targetSceneId: targetToken.document.parent?.id ?? null,
+            outcome: strike.outcome,
+            hasAuthoritativeDamage: Boolean(damageSummary) && Number.isFinite(damageSummary.total),
+            damageTotal: damageSummary?.total,
+            supportsDelayedCommit: true,
+          })
+        : { eligible: false, reason: "strike-cinematics-disabled", runtime: null };
 
       if (!syncGate.eligible) {
         logger.debug("NelCine impact sync skipped; applying immediately", {
@@ -456,6 +539,18 @@ export class StrikeResolver {
           preApplication,
           triggerSource: COMMIT_TRIGGERS.IMMEDIATE,
         });
+        tryDeliverStrikePresentation(
+          presentationArgsFromStrike({
+            transaction,
+            strike,
+            message,
+            targetToken,
+            damageMessage: rolled.damageMessage,
+            damageSummary,
+            includeDamage: true,
+            impactSyncSelected: false,
+          }),
+        );
         return;
       }
 
@@ -496,19 +591,33 @@ export class StrikeResolver {
       await syncStack(message, transaction, "awaiting-impact");
 
       try {
-        // Do not await cinematic completion — commit arrives via impact hook or emergency timeout.
-        const broadcastPromise = syncGate.runtime.broadcast(rawPayload, {
-          authoritativeImpact: true,
-          impactTimeoutMs: syncGate.impactTimeoutMs,
-          impactFallbackMs: syncGate.impactTimeoutMs,
+        // Impact-sync owns cinematic delivery — do not also emit nelflow.strikeResolved.
+        const delivery = tryDeliverStrikeImpactSync({
+          transactionId: transaction.id,
+          payload: rawPayload,
+          broadcast: syncGate.runtime.broadcast,
+          broadcastOptions: {
+            authoritativeImpact: true,
+            impactTimeoutMs: syncGate.impactTimeoutMs,
+            impactFallbackMs: syncGate.impactTimeoutMs,
+          },
+          onBroadcastPromise: (broadcastPromise) => {
+            void Promise.resolve(broadcastPromise).catch((error) => {
+              logger.warn(
+                "NelCine broadcast failed; committing via NelFlow fallback",
+                logContext(message, transaction, "nelcine-broadcast", error?.message ?? String(error)),
+              );
+              void commitArmedImpact(transaction.id, COMMIT_TRIGGERS.BROADCAST_FAILED);
+            });
+          },
         });
-        void Promise.resolve(broadcastPromise).catch((error) => {
+        if (!delivery.delivered) {
           logger.warn(
-            "NelCine broadcast failed; committing via NelFlow fallback",
-            logContext(message, transaction, "nelcine-broadcast", error?.message ?? String(error)),
+            "NelCine impact delivery skipped; committing via NelFlow fallback",
+            logContext(message, transaction, "nelcine-broadcast", delivery.reason),
           );
-          void commitArmedImpact(transaction.id, COMMIT_TRIGGERS.BROADCAST_FAILED);
-        });
+          await commitArmedImpact(transaction.id, COMMIT_TRIGGERS.BROADCAST_FAILED);
+        }
       } catch (error) {
         logger.warn(
           "NelCine broadcast threw; committing via NelFlow fallback",

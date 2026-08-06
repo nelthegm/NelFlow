@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   electProcessingGm,
+  evaluateToolbeltCompatibility,
   isSupportedToolbeltVersion,
   toolbeltStateFingerprint,
   TOOLBELT_MAX_VERSION,
@@ -37,10 +38,48 @@ const base = (targets) => ({ integrationId: "toolbelt-basic-save:m1", targets })
 test("Toolbelt inactive is not a supported version", () => assert.equal(isSupportedToolbeltVersion(null), false));
 test("Target Helper disabled remains a separate adapter status concern", () => assert.equal(Boolean(false), false));
 test("supported Toolbelt minimum version", () => assert.equal(isSupportedToolbeltVersion(TOOLBELT_MIN_VERSION), true));
-test("supported Toolbelt maximum version", () => assert.equal(isSupportedToolbeltVersion(TOOLBELT_MAX_VERSION), true));
+test("supported Toolbelt 3.52.1", () => assert.equal(isSupportedToolbeltVersion("3.52.1"), true));
+test("supported Toolbelt 3.53.1", () => assert.equal(isSupportedToolbeltVersion("3.53.1"), true));
 test("unsupported older Toolbelt version", () => assert.equal(isSupportedToolbeltVersion("3.51.9"), false));
-test("unsupported newer Toolbelt version", () => assert.equal(isSupportedToolbeltVersion("3.53.0"), false));
+test("unsupported newer unverified Toolbelt version", () => assert.equal(isSupportedToolbeltVersion("3.54.0"), false));
 test("non-semantic Toolbelt version fails closed", () => assert.equal(isSupportedToolbeltVersion("master"), false));
+test("Toolbelt 3.53.1 capability result is supported", () => {
+  const result = evaluateToolbeltCompatibility({ version: "3.53.1" });
+  assert.equal(result.supported, true);
+  assert.equal(result.targetFlagsSupported, true);
+  assert.equal(result.resultRowsSupported, true);
+  assert.equal(result.damageControlsSupported, true);
+  assert.equal(result.reason, null);
+});
+test("Toolbelt 3.52.0 capability result is supported", () => {
+  assert.equal(evaluateToolbeltCompatibility({ version: "3.52.0" }).supported, true);
+});
+test("unverified Toolbelt version fails open for automation", () => {
+  const result = evaluateToolbeltCompatibility({ version: "3.54.0" });
+  assert.equal(result.supported, false);
+  assert.equal(result.reason, "toolbelt-version-unverified");
+});
+test("missing target flags disable authoritative processing safely", () => {
+  const result = evaluateToolbeltCompatibility({
+    version: "3.53.1",
+    rawFlag: { type: "damage" },
+  });
+  assert.equal(result.supported, false);
+  assert.equal(result.targetFlagsSupported, false);
+});
+test("changed control markup can disable guarding only", () => {
+  const result = evaluateToolbeltCompatibility({
+    version: "3.53.1",
+    rawFlag: {
+      type: "damage",
+      targets: ["Scene.x.Token.t"],
+      saveVariants: { null: { basic: true, statistic: "reflex", dc: 20, saves: { t: { success: "failure" } } } },
+    },
+    damageControlsSupported: false,
+  });
+  assert.equal(result.supported, true);
+  assert.equal(result.damageControlsSupported, false);
+});
 test("non-Toolbelt damage has no integration identity", () => assert.equal(integrationId("m1"), "toolbelt-basic-save:m1"));
 test("non-basic save is not represented as resolved", () => assert.equal(target("a").saveState, "pending"));
 test("healing is not a positive basic-save multiplier", () => assert.equal(outcomeMultiplier("healing"), null));
