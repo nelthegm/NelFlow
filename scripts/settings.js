@@ -206,6 +206,20 @@ const SETTING_DEFINITIONS = [
     range: { min: 500, max: 15000, step: 100 },
   },
   {
+    key: SETTINGS.NELCINE_SAVE_BATCH_CINEMATICS,
+    name: "Nelflow.Settings.NelcineSaveBatchCinematics.Name",
+    hint: "Nelflow.Settings.NelcineSaveBatchCinematics.Hint",
+    default: false,
+  },
+  {
+    key: SETTINGS.NELCINE_SAVE_BATCH_MINIMUM_TARGETS,
+    name: "Nelflow.Settings.NelcineSaveBatchMinimumTargets.Name",
+    hint: "Nelflow.Settings.NelcineSaveBatchMinimumTargets.Hint",
+    type: Number,
+    default: 2,
+    range: { min: 2, max: 24, step: 1 },
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

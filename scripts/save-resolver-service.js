@@ -35,6 +35,7 @@ import {
   RECOVERY_STATUSES,
   updateRecovery,
 } from "./transaction-failure.js";
+import { tryEmitLegacySaveBatch } from "./nelcine-save-batch-bridge.js";
 
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const mutationQueues = new Map();
@@ -1004,6 +1005,11 @@ export class SaveResolverService {
         completed.phase === RESOLVER_PHASES.COMPLETE ? "resolver-complete" : "resolver-partial",
         { resolverId: resolver.resolverId.slice(-12) },
       );
+      tryEmitLegacySaveBatch({
+        resolver: completed,
+        resolverMessage,
+        damageMessage: rolled.damageMessage,
+      });
     } catch (error) {
       logger.error(
         "Basic-save damage resolution failed",

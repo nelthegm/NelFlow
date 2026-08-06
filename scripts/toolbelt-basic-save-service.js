@@ -34,6 +34,7 @@ import {
   updateRecovery,
 } from "./transaction-failure.js";
 import { reconcileToolbeltTransaction } from "./transaction-reconciliation.js";
+import { tryEmitToolbeltSaveBatch } from "./nelcine-save-batch-bridge.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -574,6 +575,18 @@ async function process(message, draft, normalized, { confirmed = false } = {}) {
   ].includes(state)) ? "complete" : "observing";
   await persist(message, draft);
   diagnostic("toolbelt-integration-complete", { damageMessageId: message.id, integrationId: draft.integrationId });
+  if (draft.phase === "complete") {
+    const emitResult = tryEmitToolbeltSaveBatch({
+      draft,
+      message: messageById(message.id) ?? message,
+      normalized: ToolbeltTargetHelperAdapter.normalizeDamageMessage(
+        messageById(message.id) ?? message,
+      ),
+    });
+    if (emitResult.emitted || draft.nelcineSaveBatchEmitted === true) {
+      await persist(message, draft);
+    }
+  }
 }
 
 async function observe(message, { confirmed = false } = {}) {

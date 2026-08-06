@@ -1,6 +1,12 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow 0.9.0 adds an optional NelCine multi-target basic-save batch bridge:
+when enabled and NelCine is active, NelFlow emits one
+`nelflow.basicSaveBatchResolved` cinematic payload after a completed NPC
+basic-save spell or ability has already applied per-target damage and created
+Undo. Presentation only — HP timing is unchanged, and no batch impact-commit
+protocol exists yet.
 Nelflow 0.8.0 adds an optional NelCine impact-sync bridge: when enabled and a
 compatible NelCine primary-GM presentation is available, prepared NPC Strike
 damage commits on `nelcine.strikeImpact` (with a NelFlow emergency timeout
@@ -494,8 +500,157 @@ targets, and ambiguous structures also remain manual.
   Damage/Half/Double/Triple for an exactly identified, conclusively handled
   target. Disable it to retain normal Toolbelt controls without changing
   Nelflow application, status, records, or Undo.
+- **Synchronize Damage with NelCine Impact** (`nelcineImpactSync`) — disabled by
+  default. When enabled with a compatible NelCine primary-GM presentation,
+  single-target NPC Strike damage commits on cinematic impact (or emergency
+  timeout). See [release notes 0.8.0](docs/RELEASE_NOTES_0.8.0.md).
+- **Enable NelCine Basic-Save Batches** (`nelcineSaveBatchCinematics`) —
+  disabled by default. When enabled and NelCine is active, NelFlow emits one
+  `nelflow.basicSaveBatchResolved` payload after a multi-target NPC basic-save
+  spell or ability finishes resolving. Presentation only; damage timing and
+  Undo are unchanged. See [release notes 0.9.0](docs/RELEASE_NOTES_0.9.0.md).
+- **NelCine Basic-Save Batch Minimum Targets**
+  (`nelcineSaveBatchMinimumTargets`) — default `2` (range 2–24). Effects with
+  fewer authoritative target results keep the ordinary NelFlow workflow without
+  a batch cinematic.
 - The old Basic Save Spell Resolver setting remains hidden for migration only.
 - **Enable Debug Logging** — disabled by default.
+
+## NelCine basic-save batch integration (0.9.0)
+
+Optional presentation bridge for completed multi-target NPC basic-save effects
+(Toolbelt workflow and legacy resolver). **NelCine remains presentation-only.**
+**HP applies through the existing NelFlow path before the cinematic emits.**
+There is **no batch impact-commit protocol** in this release.
+
+### Eligibility
+
+Emit only when all are true:
+
+1. `nelcineSaveBatchCinematics` is enabled (default **false**).
+2. Current user is a GM.
+3. NelCine is installed and active.
+4. The effect used NelFlow’s supported NPC basic-save workflow.
+5. At least `nelcineSaveBatchMinimumTargets` authoritative target results
+   completed (default 2).
+6. Save type is Fortitude, Reflex, or Will.
+7. A stable batch transaction ID exists.
+8. Each included target has an authoritative degree of success.
+9. The batch has not already been emitted.
+10. The batch is complete enough to present without inventing data.
+
+When any requirement fails, existing NelFlow mechanics continue with no
+cinematic and no warning spam for NelCine absence.
+
+### One effect / one batch
+
+One completed spell or ability produces at most one batch cinematic. Targets
+aggregate under the existing group ID:
+
+- Toolbelt: `toolbelt-basic-save:<damageMessageId>`
+- Legacy resolver: `nelflow-save-<sourceMessageId>`
+- Fallback allocation (only when a group ID is missing): `nelflow-save-batch-…`
+
+Per-target `resultId` prefers the existing application ID
+(`…:target:<tokenId>` / legacy application ID). Duplicate result IDs prevent
+emission.
+
+### Ordering, damage, outcomes
+
+- Target order follows NelFlow’s authoritative `targetOrder` / collection order.
+- Shared `damageRoll` is the one authoritative shared roll (formula, dice when
+  extractable, modifier, rolled total, components). Basic-save scaling is **not**
+  applied to the shared total.
+- Per-target `appliedTotal` uses recorded HP delta / applied amount after IWR
+  (non-negative magnitude). Explicit zero is valid; missing totals are omitted.
+- Outcome labels (`none` / `half` / `full` / `double` / `custom`) map from the
+  resolver’s mechanical multiplier.
+- Consequences are empty in this slice unless authoritative labels already exist
+  (max 6). Descriptions and chat HTML are never parsed for consequences.
+
+### Completion and exactly-once emission
+
+Emission runs only after the Toolbelt/legacy parent reaches a terminal complete
+(or legacy partial) phase — after per-target applications and Undo metadata.
+`Hooks.callAll("nelflow.basicSaveBatchResolved", payload)` fires once per batch
+transaction ID. The batch is marked emitted **before** external listeners run;
+a throwing NelCine listener does not retry.
+
+More than 24 targets: the first 24 in authoritative order are presented and the
+payload records truncation. Mechanics for omitted targets are unchanged.
+
+### Toolbelt / Workbench / Undo / privacy
+
+Toolbelt application, duplicate guards, Apply/Undo controls, and compact turn
+stacks are unchanged. Workbench coexistence is unchanged. Emitting a cinematic
+creates no Undo and Undo does not replay the cinematic.
+
+Only the eligible GM client constructs the raw hook payload (including DC).
+NelCine owns network privacy and per-client redaction. Secret DCs default to
+`dcPublic: false`.
+
+### Diagnostics
+
+```js
+game.nelflow.integrations.nelcineSaveBatch.getStatus()
+game.nelflow.integrations.nelcineSaveBatch.getBatch(transactionId) // GM-only
+game.nelflow.dev.inspectSaveBatches() // GM-only
+game.nelflow.dev.watchSaveBatchCinematics()
+game.nelflow.dev.stopWatchingSaveBatchCinematics()
+```
+
+### Limitations
+
+- Aggregation/emission registries are memory-only. A GM reload during the short
+  resolution window may skip the cinematic; mechanics and Undo remain intact.
+- Primary-GM failover does not transfer in-memory aggregation between clients.
+- Toolbelt save rows may omit natural die / modifier; missing fields remain
+  valid when the degree is authoritative.
+- EXTERNAL / failed applications may omit `appliedTotal`.
+- Independent per-target damage rolls (if ever present) are ineligible.
+
+### Manual Foundry checklist
+
+**Baseline**
+
+1. Install NelFlow 0.9.0 and NelCine 0.7.0.
+2. Leave **Enable NelCine Basic-Save Batches** disabled.
+3. Resolve a multi-target NPC basic-save spell.
+4. Confirm damage and Undo unchanged; no batch cinematic.
+
+**Enable**
+
+5. Enable the setting; confirm `game.nelcine.sync.isPrimaryGM()`.
+6. Use an NPC spell/ability with 2–6 targets; resolve saves normally.
+7. Confirm HP applies immediately; each applied target has Undo.
+8. Confirm one NelCine batch cinematic afterward (one source, one shared roll,
+   each target once).
+
+**Mixed / zero / order / dedupe**
+
+9. Cover crit success through crit failure; confirm displayed applied totals
+   match HP changes (including resistance/weakness/immunity).
+10. Confirm immune / zero / no-damage targets show authoritative zeros or omit
+    fabricated damage.
+11. Confirm target order matches targeting order despite async completion.
+12. Re-trigger completion with the same transaction ID; no duplicate cinematic,
+    damage, or Undo.
+
+**Toolbelt / privacy / multi-client / absent NelCine**
+
+13. Confirm one shared roll, one apply/Undo per target, no duplicate Apply
+    buttons, turn stacks correct.
+14. Player clients: hidden source neutralized; hidden target omitted; secret DC
+    not delivered; public DC can display when marked.
+15. Full vs Quick vs Off presentation modes do not change NelFlow mechanics.
+16. Disable NelCine with the NelFlow setting still on; mechanics remain normal
+    with no warning spam.
+17. Inspect `getStatus()` / `inspectSaveBatches()`; no mutable documents or
+    secret full payloads for players.
+18. Strike cinematic + batch close together; NelCine queues FIFO; NelFlow does
+    not wait on the queue.
+19. Confirm throughout: damage before cinematic; NelCine applies neither HP nor
+    conditions; no `nelcine.strikeImpact` for this path.
 
 ## Safety and Undo
 
@@ -587,12 +742,19 @@ Undo Blocked.
   this workflow. Nelflow 0.6.3 adds no reaction prompt and uses no Shield Block;
   tables requiring reaction decisions should keep Player Strike Auto-Apply Off.
 - Private/self-roll documents unavailable to the elected GM cannot be applied.
+- NelCine basic-save batch cinematics (0.9.0) are presentation-only. HP still
+  applies before the cinematic. A GM reload during the short resolution window
+  may prevent batch emission; mechanics and Undo remain unaffected. More than
+  24 targets truncate presentation to the first 24. No batch impact-commit
+  protocol exists yet.
 
 ## Testing and design documentation
 
 Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
+- [Nelflow 0.9.0 NelCine basic-save batch notes](docs/RELEASE_NOTES_0.9.0.md)
+- [Nelflow 0.8.0 NelCine impact commit notes](docs/RELEASE_NOTES_0.8.0.md)
 - [Slice 2 architecture](docs/SLICE_002_COMPACT_TURN_STACKS.md)
 - [Slice 2 runtime test plan](docs/SLICE_002_TEST_PLAN.md)
 - [Slice 2.1 native-card compaction](docs/SLICE_002_1_NATIVE_CARD_COMPACTION.md)
