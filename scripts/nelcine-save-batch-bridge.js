@@ -607,6 +607,85 @@ function toolbeltTargetIsPresentable(record) {
 }
 
 /**
+ * Collect READY/AWAITING_IMPACT targets for pre-HP batch preparation.
+ * Does not require terminal application state.
+ * @param {object} draft
+ * @param {object|null} normalized
+ * @param {string[]} [keys]
+ * @returns {object[]}
+ */
+export function collectToolbeltPreparedBatchTargets(draft, normalized = null, keys = null) {
+  const orderKeys = Array.isArray(keys) && keys.length
+    ? keys
+    : Array.isArray(draft?.targetOrder)
+      ? draft.targetOrder
+      : Object.keys(draft?.targets ?? {});
+  const saveByKey = new Map(
+    (normalized?.targets ?? []).map((target) => [target.toolbeltTargetKey, target]),
+  );
+  const rawSaves = normalized?.message
+    ? (() => {
+        try {
+          const data = normalized.message.flags?.["pf2e-toolbelt"]?.targetHelper;
+          const variants = Object.values(data?.saveVariants ?? {});
+          const basic = variants.find((save) => save?.basic === true);
+          return basic?.saves ?? {};
+        } catch {
+          return {};
+        }
+      })()
+    : {};
+
+  const targets = [];
+  for (let index = 0; index < orderKeys.length; index += 1) {
+    const key = orderKeys[index];
+    const record = draft.targets?.[key];
+    if (
+      !record ||
+      ![
+        TOOLBELT_TARGET_STATES.READY,
+        TOOLBELT_TARGET_STATES.AWAITING_IMPACT,
+        TOOLBELT_TARGET_STATES.CLAIMED,
+      ].includes(record.state)
+    ) {
+      continue;
+    }
+    if (normalizeDegreeOfSuccess(record.effectiveOutcome ?? record.nativeOutcome) == null) {
+      continue;
+    }
+
+    const tokenUuid =
+      typeof record.tokenUuid === "string" && record.tokenUuid ? record.tokenUuid : null;
+    const actorUuid =
+      typeof record.actorUuid === "string" && record.actorUuid ? record.actorUuid : null;
+    if (!tokenUuid && !actorUuid) continue;
+
+    const toolbeltSave = rawSaves?.[key];
+    const saveTotal = Number.isFinite(Number(toolbeltSave?.roll))
+      ? Number(toolbeltSave.roll)
+      : null;
+
+    targets.push({
+      applicationId: record.applicationId,
+      resultId: record.applicationId,
+      targetKey: key,
+      order: Number.isInteger(saveByKey.get(key)?.order) ? saveByKey.get(key).order : index,
+      targetTokenUuid: tokenUuid,
+      targetActorUuid: actorUuid,
+      degreeOfSuccess: record.effectiveOutcome ?? record.nativeOutcome,
+      multiplier: record.multiplier,
+      save: {
+        dieResult: Number.isFinite(toolbeltSave?.dieResult) ? toolbeltSave.dieResult : null,
+        modifier: Number.isFinite(toolbeltSave?.modifier) ? toolbeltSave.modifier : null,
+        total: saveTotal,
+      },
+      consequences: [],
+    });
+  }
+  return targets;
+}
+
+/**
  * Build presentation targets from a completed Toolbelt transaction draft.
  * Does not mutate the draft.
  * @param {object} draft

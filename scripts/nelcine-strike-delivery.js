@@ -18,6 +18,7 @@ import {
   getSaveBatchIntegrationStatus,
   installSaveBatchPublicApi,
 } from "./nelcine-save-batch-bridge.js";
+import { installSaveBatchImpactPublicApi, getPendingImpactStatus } from "./nelcine-save-batch-impact.js";
 import { buildAttackRollInspection, buildDamageRollInspection } from "./strike-roll-inspection.js";
 import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
 
@@ -602,6 +603,7 @@ export function installNelcinePublicApi() {
   root.dev = root.dev ?? {};
 
   installSaveBatchPublicApi();
+  installSaveBatchImpactPublicApi();
 
   root.integrations.nelcine = Object.freeze({
     getStatus: () => {
@@ -612,6 +614,12 @@ export function installNelcinePublicApi() {
         liveToolbelt = ToolbeltTargetHelperAdapter.status();
       } catch {
         /* absent Toolbelt is fine */
+      }
+      let saveBatchImpactSyncEnabled = false;
+      try {
+        saveBatchImpactSyncEnabled = getSetting(SETTINGS.NELCINE_SAVE_BATCH_IMPACT_SYNC) === true;
+      } catch {
+        saveBatchImpactSyncEnabled = false;
       }
       return {
         available: strike.available,
@@ -624,7 +632,9 @@ export function installNelcinePublicApi() {
         toolbeltCompatible: liveToolbelt.supported === true,
         recentStrikeDeliveries: strike.recentStrikeDeliveries,
         saveBatchEnabled: batches.enabled,
+        saveBatchImpactSyncEnabled,
         recentSaveBatchDeliveries: batches.recentEmittedCount,
+        pendingSaveBatchImpactCount: getPendingImpactStatus().pendingBatchCount,
       };
     },
     getStrikeDelivery: (transactionId) => getStrikeDeliveryDiagnostic(transactionId),

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NelCine Strike presentation delivery tests (0.9.1).
  */
 import assert from "node:assert/strict";

@@ -1,13 +1,15 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.9.2** restores actionable Damage / Critical Damage controls on
-character Strike chat cards before damage is rolled, while preserving the 0.9.x
-NelCine integration architecture. Nelflow **0.9.1** is a runtime repair and
-packaging release: it restores automatic NelCine presentation for supported real
-Strikes, separates ordinary Strike cinematics from optional impact-synchronized
-damage, adds structurally verified Toolbelt **3.53.1** compatibility, repairs
-damage-claim static ordering validation, and ships an installable local ZIP.
+Nelflow **0.10.0** optionally synchronizes eligible multi-target basic-save HP
+commits with NelCine batch impacts. Nelflow **0.9.2** restores actionable
+Damage / Critical Damage controls on character Strike chat cards before damage
+is rolled, while preserving the 0.9.x NelCine integration architecture. Nelflow
+**0.9.1** is a runtime repair and packaging release: it restores automatic
+NelCine presentation for supported real Strikes, separates ordinary Strike
+cinematics from optional impact-synchronized damage, adds structurally verified
+Toolbelt **3.53.1** compatibility, repairs damage-claim static ordering
+validation, and ships an installable local ZIP.
 Mechanics and Undo behavior are preserved.
 
 Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
@@ -58,14 +60,14 @@ That manifest points at the published GitHub release asset (prepared for
 eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.9.2-rc1/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.10.0/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.9.2"
+game.modules.get("nelflow")?.version // "0.10.0"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -83,6 +85,14 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.10.0 save-batch impact synchronization
+
+When **Synchronize Basic-Save Damage with NelCine Impacts** is enabled together
+with basic-save batch cinematics, eligible Toolbelt multi-target basic saves
+prepare damage and commit each target when NelCine reaches that result's impact.
+See [0.10.0 release notes](docs/RELEASE_NOTES_0.10.0.md) and
+[runtime plan](docs/NELFLOW_0.10.0_TEST_PLAN.md).
 
 ## Nelflow 0.9.2 actionable PC Strike presentation
 
@@ -774,6 +784,7 @@ Undo Blocked.
 Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
+- [Nelflow 0.10.0 save-batch impact sync notes](docs/RELEASE_NOTES_0.10.0.md)
 - [Nelflow 0.9.2 actionable PC Strike notes](docs/RELEASE_NOTES_0.9.2.md)
 - [Nelflow 0.9.1 runtime repair notes](docs/RELEASE_NOTES_0.9.1.md)
 - [Nelflow 0.9.0 NelCine basic-save batch notes](docs/RELEASE_NOTES_0.9.0.md)

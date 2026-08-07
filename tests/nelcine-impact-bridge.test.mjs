@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NelCine impact commit bridge tests (Slice 1D-B).
  */
 import assert from "node:assert/strict";
@@ -20,13 +20,13 @@ describe("nelcine impact bridge", () => {
     clearAllPendingImpactCommits();
   });
 
-  it("clamps impact timeout to 500–15000", () => {
+  it("clamps impact timeout to 500â€“15000", () => {
     assert.equal(clampImpactTimeoutMs(100), 500);
     assert.equal(clampImpactTimeoutMs(20000), 15000);
     assert.equal(clampImpactTimeoutMs(5000), 5000);
   });
 
-  it("computes emergency timeout as impact + 1500 within 2000–18000", () => {
+  it("computes emergency timeout as impact + 1500 within 2000â€“18000", () => {
     assert.equal(computeEmergencyCommitTimeoutMs(500), 2000);
     assert.equal(computeEmergencyCommitTimeoutMs(5000), 6500);
     assert.equal(computeEmergencyCommitTimeoutMs(15000), 16500);

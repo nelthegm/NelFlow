@@ -51,6 +51,9 @@ export function recordProvesPriorApplication(record) {
 
 export function isConclusiveGuardRecord(record, { toolbeltApplied = false } = {}) {
   if (!record) return false;
+  // While cinematic impact sync holds a prepared result, block Toolbelt HP
+  // controls that would race the delayed commit path.
+  if (record.state === TOOLBELT_TARGET_STATES.AWAITING_IMPACT) return true;
   if ([TOOLBELT_TARGET_STATES.APPLIED, TOOLBELT_TARGET_STATES.NO_DAMAGE].includes(record.state)) {
     return true;
   }

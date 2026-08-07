@@ -24,6 +24,7 @@ export const SETTINGS = Object.freeze({
   NELCINE_STRIKE_CINEMATICS: "nelcineStrikeCinematics",
   NELCINE_SAVE_BATCH_CINEMATICS: "nelcineSaveBatchCinematics",
   NELCINE_SAVE_BATCH_MINIMUM_TARGETS: "nelcineSaveBatchMinimumTargets",
+  NELCINE_SAVE_BATCH_IMPACT_SYNC: "nelcineSaveBatchImpactSync",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });

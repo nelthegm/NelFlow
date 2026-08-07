@@ -2,6 +2,7 @@ export const TOOLBELT_TARGET_STATES = Object.freeze({
   PENDING_SAVE: "pending-save",
   READY: "ready",
   CLAIMED: "claimed",
+  AWAITING_IMPACT: "awaiting-impact",
   APPLYING: "applying",
   APPLIED: "applied",
   NO_DAMAGE: "no-damage",
@@ -62,7 +63,13 @@ export function targetResultChanged(record, normalized) {
 }
 
 export function isReplaySafe(record) {
-  return !record || (!TERMINAL_TOOLBELT_STATES.has(record.state) && record.state !== "applying");
+  return (
+    !record ||
+    (!TERMINAL_TOOLBELT_STATES.has(record.state) &&
+      record.state !== "applying" &&
+      record.state !== TOOLBELT_TARGET_STATES.AWAITING_IMPACT &&
+      record.state !== TOOLBELT_TARGET_STATES.CLAIMED)
+  );
 }
 
 export function createTargetRecord(integration, target) {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * NelCine basic-save batch bridge tests (0.9.0).
  */
 import assert from "node:assert/strict";

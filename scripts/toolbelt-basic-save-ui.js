@@ -41,6 +41,9 @@ function maySeeHp(record) {
 }
 
 function stateLabel(record) {
+  if (record.state === TOOLBELT_TARGET_STATES.AWAITING_IMPACT) {
+    return localize("Nelflow.Status.AwaitingImpact");
+  }
   const key = `Nelflow.Toolbelt.State.${record.state}`;
   if (record.state === TOOLBELT_TARGET_STATES.APPLIED && Number.isFinite(record.actualHpDelta) && maySeeHp(record)) {
     return localize("Nelflow.Toolbelt.State.appliedAmount", { amount: record.actualHpDelta });

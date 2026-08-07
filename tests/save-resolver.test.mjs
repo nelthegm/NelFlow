@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import test from "node:test";
 
 import { guardedHealthRestore } from "../scripts/guarded-health-restore.js";

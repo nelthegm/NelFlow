@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.10.0
+
+- Added optional Synchronize Basic-Save Damage with NelCine Impacts
+- Prepared Toolbelt multi-target basic-save applications before HP mutation
+- Committed each target when NelCine emits `nelcine.saveBatchImpact`
+- Suppressed ordinary `nelflow.basicSaveBatchResolved` for synchronized batches
+- Preserved immediate mechanics when sync is off or ineligible
+- Legacy basic-save resolver remains immediate (not impact-sync eligible)
+- Guarded Toolbelt HP controls while awaiting cinematic impact
+- Fail-open reload recovery for interrupted prepared rows
+
 ## 0.9.2
 
 - Restored actionable Damage / Critical Damage controls on PC Strike chat cards

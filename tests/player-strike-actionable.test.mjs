@@ -1,4 +1,4 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -124,7 +124,7 @@ test("5b. attack result is visible without opening Results", () => {
   assert.match(ui, /strikeOutcomeLabel/);
   assert.match(ui, /authorizedAttackTotal/);
   assert.match(css, /nelflow-player-strike__body[\s\S]*white-space:\s*pre-line/);
-  assert.match(ui, /→/);
+  assert.match(ui, /\u2192|→/);
 });
 
 test("12-13. completed card still projects Applied and Undo", () => {
@@ -226,15 +226,15 @@ test("localization exposes Damage and Critical Damage actions", () => {
   assert.equal(lang["Nelflow.PlayerStrike.RollCriticalDamage"], "Critical Damage");
 });
 
-test("0.9.2 metadata prepares eventual RC download without publishing", () => {
+test("0.10.0 metadata prepares 0.10.0 download URL", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.9.2");
-  assert.equal(packageMetadata.version, "0.9.2");
+  assert.equal(module.version, "0.10.0");
+  assert.equal(packageMetadata.version, "0.10.0");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.9.2-rc1/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.10.0/nelflow.zip",
   );
 });
 

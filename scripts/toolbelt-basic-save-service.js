@@ -34,7 +34,24 @@ import {
   updateRecovery,
 } from "./transaction-failure.js";
 import { reconcileToolbeltTransaction } from "./transaction-reconciliation.js";
-import { tryEmitToolbeltSaveBatch } from "./nelcine-save-batch-bridge.js";
+import {
+  buildSaveBatchPayload,
+  collectToolbeltPreparedBatchTargets,
+  ensureUniqueResultIds,
+  normalizeDegreeOfSuccess,
+  normalizeSaveType,
+  resolveBatchTransactionId,
+  tryEmitToolbeltSaveBatch,
+} from "./nelcine-save-batch-bridge.js";
+import {
+  abandonPendingSaveBatchesOnReload,
+  armPendingSaveBatch,
+  broadcastAuthoritativeSaveBatch,
+  canUseSaveBatchImpactSync,
+  commitRemainingPreparedResults,
+  registerSaveBatchImpactHook,
+  SAVE_BATCH_COMMIT_TRIGGERS,
+} from "./nelcine-save-batch-impact.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -555,6 +572,10 @@ async function process(message, draft, normalized, { confirmed = false } = {}) {
   const mode = getSetting(SETTINGS.TOOLBELT_BASIC_SAVE_APPLICATION);
   const keys = applicableKeys(draft, normalized, mode, confirmed);
   if (!keys.length) return;
+
+  const delayed = await tryDelayToolbeltBatchForNelcine(message, draft, normalized, keys);
+  if (delayed) return;
+
   draft.phase = "applying";
   await persist(message, draft);
   for (const key of keys) {
@@ -587,6 +608,194 @@ async function process(message, draft, normalized, { confirmed = false } = {}) {
       await persist(message, draft);
     }
   }
+}
+
+/**
+ * When eligible, prepare applications and hand timing to NelCine.
+ * @returns {Promise<boolean>} true when delayed path was armed
+ */
+async function tryDelayToolbeltBatchForNelcine(message, draft, normalized, keys) {
+  try {
+    if (draft.nelcineSaveBatchImpactArmed === true || draft.nelcineSaveBatchEmitted === true) {
+      return false;
+    }
+    const hpAlreadyStarted = Object.values(draft.targets ?? {}).some((record) =>
+      [
+        TOOLBELT_TARGET_STATES.APPLYING,
+        TOOLBELT_TARGET_STATES.APPLIED,
+        TOOLBELT_TARGET_STATES.NO_DAMAGE,
+      ].includes(record.state),
+    );
+    const preparedTargets = collectToolbeltPreparedBatchTargets(draft, normalized, keys);
+    const transactionId = resolveBatchTransactionId({ existingId: draft.integrationId });
+    const saveType = normalizeSaveType(draft.saveType ?? normalized?.saveType);
+    const uniqueness = ensureUniqueResultIds(
+      preparedTargets.map((target) => ({ resultId: target.applicationId ?? target.resultId })),
+    );
+    const gate = canUseSaveBatchImpactSync({
+      isProcessingGm: draft.processingUserId === game.user?.id,
+      supportedWorkflow: true,
+      hpAlreadyStarted,
+      transactionId,
+      alreadyPresented: draft.nelcineSaveBatchEmitted === true,
+      targetCount: preparedTargets.length,
+      saveType,
+      hasSharedDamageRoll: true,
+      hasAuthoritativeDegrees: preparedTargets.every(
+        (target) => normalizeDegreeOfSuccess(target.degreeOfSuccess) != null,
+      ),
+      hasStableResultIds: uniqueness.ok,
+    });
+    if (!gate.eligible) return false;
+
+    const sourceTokenUuid =
+      message?.token?.document?.uuid ?? message?.token?.uuid ?? null;
+    const effectName =
+      typeof message?.item?.name === "string" && message.item.name.trim()
+        ? message.item.name.trim()
+        : null;
+    const built = buildSaveBatchPayload({
+      transactionId,
+      saveType,
+      saveDc: Number.isFinite(normalized?.saveDC) ? normalized.saveDC : null,
+      dcPublic: false,
+      sourceTokenUuid,
+      sourceActorUuid: draft.sourceActorUuid ?? null,
+      itemUuid: draft.sourceItemUuid ?? null,
+      effectName,
+      damageMessage: message,
+      rollIndex: draft.rollIndex ?? 0,
+      targets: preparedTargets,
+    });
+    if (!built.ok) return false;
+
+    for (const key of keys) {
+      const record = draft.targets[key];
+      if (record?.state === TOOLBELT_TARGET_STATES.READY) {
+        record.state = TOOLBELT_TARGET_STATES.AWAITING_IMPACT;
+        record.reason = null;
+      }
+    }
+    draft.phase = "awaiting-impact";
+    draft.nelcineSaveBatchImpactArmed = true;
+    // Suppress ordinary post-complete cinematic for this synchronized batch.
+    draft.nelcineSaveBatchEmitted = true;
+    await persist(message, draft);
+
+    const damageMessageId = message.id;
+    armPendingSaveBatch(
+      {
+        transactionId,
+        workflow: "toolbelt",
+        damageMessageId,
+        processingUserId: draft.processingUserId ?? game.user.id,
+        impactTimeoutMs: gate.impactTimeoutMs,
+        rollIndex: draft.rollIndex ?? 0,
+        results: preparedTargets.map((target) => ({
+          resultId: target.applicationId ?? target.resultId,
+          targetKey: target.targetKey,
+          targetTokenUuid: target.targetTokenUuid,
+          targetActorUuid: target.targetActorUuid,
+          applicationId: target.applicationId,
+          degreeOfSuccess: target.degreeOfSuccess,
+          multiplier: target.multiplier,
+          damageMessageId,
+          rollIndex: draft.rollIndex ?? 0,
+        })),
+        commitHandler: async ({ result }) => {
+          const liveMessage = messageById(damageMessageId);
+          if (!liveMessage) return { ok: false, reason: "damage-message-missing" };
+          const liveDraft = transaction(liveMessage);
+          if (!liveDraft || liveDraft.processingUserId !== game.user.id) {
+            return { ok: false, reason: "processing-gm-mismatch" };
+          }
+          const key = result.targetKey;
+          if (!key || !liveDraft.targets?.[key]) {
+            return { ok: false, reason: "target-missing" };
+          }
+          if (liveDraft.targets[key].state !== TOOLBELT_TARGET_STATES.AWAITING_IMPACT) {
+            // Already terminal elsewhere — treat as success for exactly-once.
+            if (
+              [
+                TOOLBELT_TARGET_STATES.APPLIED,
+                TOOLBELT_TARGET_STATES.NO_DAMAGE,
+                TOOLBELT_TARGET_STATES.EXTERNAL,
+                TOOLBELT_TARGET_STATES.MANUAL,
+                TOOLBELT_TARGET_STATES.ERROR,
+              ].includes(liveDraft.targets[key].state)
+            ) {
+              return { ok: true, reason: "already-terminal" };
+            }
+            return { ok: false, reason: "unexpected-target-state" };
+          }
+          // Restore READY so applyOne's claim path can run unchanged.
+          liveDraft.targets[key].state = TOOLBELT_TARGET_STATES.READY;
+          await persist(liveMessage, liveDraft);
+          await applyOne(liveMessage, liveDraft, key);
+          const after = transaction(messageById(damageMessageId) ?? liveMessage);
+          const state = after?.targets?.[key]?.state;
+          const terminalOk = [
+            TOOLBELT_TARGET_STATES.APPLIED,
+            TOOLBELT_TARGET_STATES.NO_DAMAGE,
+            TOOLBELT_TARGET_STATES.EXTERNAL,
+            TOOLBELT_TARGET_STATES.MANUAL,
+            TOOLBELT_TARGET_STATES.ERROR,
+          ].includes(state);
+          await maybeCompleteToolbeltImpactBatch(messageById(damageMessageId) ?? liveMessage);
+          return terminalOk ? { ok: true } : { ok: false, reason: state ?? "commit-incomplete" };
+        },
+      },
+      {
+        onEmergency: (id) => {
+          void commitRemainingPreparedResults(id, SAVE_BATCH_COMMIT_TRIGGERS.TIMEOUT);
+        },
+      },
+    );
+
+    const delivery = await broadcastAuthoritativeSaveBatch({
+      payload: built.payload,
+      broadcast: gate.runtime.broadcast,
+      impactTimeoutMs: gate.impactTimeoutMs,
+      transactionId,
+    });
+    if (!delivery.delivered) {
+      diagnostic("toolbelt-save-batch-impact-broadcast-failed", {
+        integrationId: draft.integrationId,
+        reason: delivery.reason,
+      });
+    }
+    return true;
+  } catch (error) {
+    logger.error("Toolbelt save-batch impact preparation failed open", {
+      stage: "toolbelt-save-batch-impact",
+      reason: error instanceof Error ? error.message : String(error),
+    }, error);
+    return false;
+  }
+}
+
+async function maybeCompleteToolbeltImpactBatch(message) {
+  const draft = transaction(message);
+  if (!draft || draft.phase !== "awaiting-impact") return;
+  const states = Object.values(draft.targets).map((target) => target.state);
+  const remaining = states.some((state) => state === TOOLBELT_TARGET_STATES.AWAITING_IMPACT);
+  if (remaining) return;
+  draft.phase = states.every((state) => [
+    TOOLBELT_TARGET_STATES.APPLIED,
+    TOOLBELT_TARGET_STATES.NO_DAMAGE,
+    TOOLBELT_TARGET_STATES.EXTERNAL,
+    TOOLBELT_TARGET_STATES.MANUAL,
+    TOOLBELT_TARGET_STATES.ERROR,
+    TOOLBELT_TARGET_STATES.RESULT_CHANGED,
+    TOOLBELT_TARGET_STATES.INTERRUPTED,
+  ].includes(state))
+    ? "complete"
+    : "observing";
+  await persist(message, draft);
+  diagnostic("toolbelt-integration-complete", {
+    damageMessageId: message.id,
+    integrationId: draft.integrationId,
+  });
 }
 
 async function observe(message, { confirmed = false } = {}) {
@@ -698,9 +907,32 @@ export class ToolbeltBasicSaveService {
       else if (!status.enabled) warningOnce("target-helper-disabled", "Nelflow.Notification.TargetHelperDisabled");
       else if (!status.supported) warningOnce("toolbelt-version-unsupported", "Nelflow.Notification.ToolbeltUnsupported");
     }
+    registerSaveBatchImpactHook();
+    abandonPendingSaveBatchesOnReload();
     for (const message of game.messages ?? []) {
       const draft = transaction(message);
-      if (!draft || (draft.phase !== "applying" && draft.undoOperation?.state !== "undoing") || !currentUserOwns(draft)) continue;
+      if (!draft || !currentUserOwns(draft)) continue;
+      if (draft.phase === "awaiting-impact" || draft.nelcineSaveBatchImpactArmed === true) {
+        void queue(message.id, async () => {
+          for (const record of Object.values(draft.targets ?? {})) {
+            if (record.state === TOOLBELT_TARGET_STATES.AWAITING_IMPACT) {
+              record.state = TOOLBELT_TARGET_STATES.INTERRUPTED;
+              record.reason = "reload-during-awaiting-impact";
+              record.manualControlsEnabled = true;
+            }
+          }
+          draft.phase = "interrupted";
+          draft.nelcineSaveBatchImpactArmed = false;
+          await persist(message, draft);
+        }).catch((error) => {
+          logger.error("Toolbelt awaiting-impact recovery failed", {
+            stage: "toolbelt-reload",
+            reason: error instanceof Error ? error.message : String(error),
+          }, error);
+        });
+        continue;
+      }
+      if ((draft.phase !== "applying" && draft.undoOperation?.state !== "undoing")) continue;
       void queue(message.id, () => markInterrupted(message, draft, "reload-during-application")).catch((error) => {
         logger.error("Toolbelt interrupted-state persistence failed", {
           stage: "toolbelt-reload",

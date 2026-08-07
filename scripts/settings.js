@@ -226,6 +226,12 @@ const SETTING_DEFINITIONS = [
     range: { min: 2, max: 24, step: 1 },
   },
   {
+    key: SETTINGS.NELCINE_SAVE_BATCH_IMPACT_SYNC,
+    name: "Nelflow.Settings.NelcineSaveBatchImpactSync.Name",
+    hint: "Nelflow.Settings.NelcineSaveBatchImpactSync.Hint",
+    default: false,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",
