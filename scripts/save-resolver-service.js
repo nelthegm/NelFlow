@@ -7,6 +7,7 @@ import {
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import {
   SaveMessageClaimRegistry,
   buildSaveCorrelationOption,
@@ -968,6 +969,17 @@ export class SaveResolverService {
           );
         }
         const after = applied ? PF2eAdapter.healthSnapshot(targetToken.actor) : null;
+        if (applied && after) {
+          noteLethalApplicationIfZeroHp({
+            actor: targetToken.actor,
+            token: targetToken.document ?? targetToken,
+            transactionId: resolver.resolverId,
+            causeType: "save",
+            postApplication: after,
+            sourceActor: resolverMessage.actor ?? null,
+            sourceToken: resolverMessage.token ?? null,
+          });
+        }
         await enqueue(resolver.resolverId, () =>
           persistResolver(resolverMessage, (draft) => {
             const entry = draft.targets.find((item) => item.targetEntryId === target.targetEntryId);

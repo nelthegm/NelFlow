@@ -15,6 +15,7 @@ import {
   tryDeliverStrikeImpactSync,
   tryDeliverStrikePresentation,
 } from "./nelcine-strike-delivery.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
@@ -156,6 +157,16 @@ async function commitStrikeApplication({
   if (!postApplication) {
     throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
   }
+
+  noteLethalApplicationIfZeroHp({
+    actor: targetToken.actor,
+    token: targetToken.document ?? targetToken,
+    transactionId: transaction.id,
+    causeType: "strike",
+    postApplication,
+    sourceActor: strike?.actor ?? message?.actor,
+    sourceToken: strike?.token ?? message?.token,
+  });
 
   let next = transaction;
   if (applied.applicationMessage) {

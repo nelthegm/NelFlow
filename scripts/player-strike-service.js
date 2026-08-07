@@ -23,6 +23,7 @@ import {
   playerStrikeAuthorId as authorId,
 } from "./player-strike-adapter.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
@@ -433,6 +434,15 @@ async function processDamage(message) {
       if (!applied) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
       const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
       if (!postApplication) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
+      noteLethalApplicationIfZeroHp({
+        actor: targetToken.actor,
+        token: targetToken.document ?? targetToken,
+        transactionId: transaction.id,
+        causeType: "strike",
+        postApplication,
+        sourceActor,
+        sourceToken: attackMessage.token ?? null,
+      });
       if (applied.applicationMessage) {
         transaction = await TransactionStore.linkMessage(attackMessage, applied.applicationMessage, "application");
       }

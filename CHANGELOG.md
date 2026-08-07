@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0
+
+- Added NelCine NPC Defeated presentation bridge (battlefield marker only)
+- Authoritative boundary: Combatant `defeated` false → true via `updateCombatant`
+- NPC-only, active-combat Combatant required; out-of-combat HP edits ignored
+- Exact NelFlow lethal-application cause correlation (Strike / save / damage)
+- Setting: `nelcineDefeatedCinematics` (default On)
+- Diagnostics: `game.nelflow.integrations.nelcineDefeated`
+- Preserved Strike impact sync, save-batch, actions, healing, effects, Toolbelt, Undo
+
 ## 0.13.0
 
 - Added NelCine combat actionResult bridge for Trip, Grapple, Shove, Reposition,

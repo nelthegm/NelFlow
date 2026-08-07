@@ -13,6 +13,7 @@ import {
   multiTargetModeAllows,
 } from "./multi-target-strike-model.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { playerStrikeModeAllows } from "./player-strike-model.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
@@ -218,6 +219,15 @@ async function processDamageGroup(message, strike, transaction, groupName, group
       transaction = await update(message, { targets, state: batchState(targets) });
       continue;
     }
+    noteLethalApplicationIfZeroHp({
+      actor: token.actor,
+      token: token.document ?? token,
+      transactionId: transaction.id,
+      causeType: "strike",
+      postApplication,
+      sourceActor: strike.actor,
+      sourceToken: strike.token ?? null,
+    });
     if (applied.applicationMessage) {
       transaction = await TransactionStore.linkMultiTargetMessage(message, applied.applicationMessage, {
         role: "application",

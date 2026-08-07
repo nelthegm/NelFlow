@@ -609,7 +609,7 @@ test("49-51. Adapter/preview helpers remain presentation-only", async () => {
 
 // --- REGRESSION / WIRING ---
 
-test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.13.0", () => {
+test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.14.0", () => {
   const strike = source("scripts/nelcine-strike-delivery.js");
   const impact = source("scripts/nelcine-impact-bridge.js");
   const batch = source("scripts/nelcine-save-batch-bridge.js");
@@ -627,11 +627,11 @@ test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.13.0", 
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.13.0");
-  assert.equal(pkg.version, "0.13.0");
+  assert.equal(module.version, "0.14.0");
+  assert.equal(pkg.version, "0.14.0");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.13.0/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.0/nelflow.zip",
   );
 });
 

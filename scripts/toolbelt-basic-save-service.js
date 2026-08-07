@@ -10,6 +10,7 @@ import { sourceModeAllows } from "./basic-save-source-classifier.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { isConclusiveGuardRecord } from "./toolbelt-control-guard.js";
@@ -536,6 +537,15 @@ async function applyOne(message, draft, targetKey) {
       await persist(message, draft);
       return;
     }
+    noteLethalApplicationIfZeroHp({
+      actor: targetToken.actor,
+      token: targetToken.document ?? targetToken,
+      transactionId: draft.integrationId,
+      causeType: "save",
+      postApplication: after,
+      sourceActor,
+      sourceToken: message.token ?? null,
+    });
     record.preApplicationHp = before.hp;
     record.preApplicationTempHp = before.tempHp;
     record.postApplicationHp = after.hp;

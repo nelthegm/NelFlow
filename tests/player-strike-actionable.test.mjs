@@ -226,15 +226,15 @@ test("localization exposes Damage and Critical Damage actions", () => {
   assert.equal(lang["Nelflow.PlayerStrike.RollCriticalDamage"], "Critical Damage");
 });
 
-test("0.13.0 metadata prepares 0.13.0 download URL", () => {
+test("0.14.0 metadata prepares 0.14.0 download URL", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.13.0");
-  assert.equal(packageMetadata.version, "0.13.0");
+  assert.equal(module.version, "0.14.0");
+  assert.equal(packageMetadata.version, "0.14.0");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.13.0/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.0/nelflow.zip",
   );
 });
 

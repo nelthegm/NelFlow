@@ -1,20 +1,22 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.13.0** presents supported PF2e combat action results through NelCine
-after resolution. Nelflow **0.12.0** presents explicitly classified beneficial
-and harmful PF2e Effect Items through NelCine after application. Nelflow
-**0.11.0** presents real PF2e healing and condition changes through NelCine
-after mechanics complete (no mechanical delay). Nelflow **0.10.0** optionally
-synchronizes eligible multi-target basic-save HP commits with NelCine batch
-impacts. Nelflow **0.9.2** restores actionable Damage / Critical Damage
-controls on character Strike chat cards before damage is rolled, while
-preserving the 0.9.x NelCine integration architecture. Nelflow **0.9.1** is a
-runtime repair and packaging release: it restores automatic NelCine presentation
-for supported real Strikes, separates ordinary Strike cinematics from optional
-impact-synchronized damage, adds structurally verified Toolbelt **3.53.1**
-compatibility, repairs damage-claim static ordering validation, and ships an
-installable local ZIP.
+Nelflow **0.14.0** bridges NPC combat defeat to NelCine Defeated battlefield
+markers after mechanics (presentation only; Strike handoff via
+`cause.transactionId`). Nelflow **0.13.0** presents supported PF2e combat
+action results through NelCine after resolution. Nelflow **0.12.0** presents
+explicitly classified beneficial and harmful PF2e Effect Items through NelCine
+after application. Nelflow **0.11.0** presents real PF2e healing and condition
+changes through NelCine after mechanics complete (no mechanical delay).
+Nelflow **0.10.0** optionally synchronizes eligible multi-target basic-save HP
+commits with NelCine batch impacts. Nelflow **0.9.2** restores actionable
+Damage / Critical Damage controls on character Strike chat cards before damage
+is rolled, while preserving the 0.9.x NelCine integration architecture.
+Nelflow **0.9.1** is a runtime repair and packaging release: it restores
+automatic NelCine presentation for supported real Strikes, separates ordinary
+Strike cinematics from optional impact-synchronized damage, adds structurally
+verified Toolbelt **3.53.1** compatibility, repairs damage-claim static
+ordering validation, and ships an installable local ZIP.
 Mechanics and Undo behavior are preserved.
 
 Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
@@ -65,14 +67,14 @@ That manifest points at the published GitHub release asset (prepared for
 eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.13.0/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.0/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.13.0"
+game.modules.get("nelflow")?.version // "0.14.0"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -89,6 +91,22 @@ Run validation:
 npm test
 npm run check
 npm run package
+```
+
+## Nelflow 0.14.0 NPC Defeated cinematics
+
+When NelCine **0.10.2+** is active, NelFlow broadcasts one Defeated battlefield
+marker when an NPC Combatant in the active combat transitions
+`defeated: false → true`. Cause correlation uses exact NelFlow lethal
+application notes (Strike / save / damage) when available; manual defeat still
+presents. PCs and out-of-combat HP edits are never automated.
+See [0.14.0 release notes](docs/RELEASE_NOTES_0.14.0.md) and
+[runtime plan](docs/NELFLOW_0.14.0_TEST_PLAN.md).
+
+```js
+game.nelflow.integrations.nelcineDefeated.getStatus()
+game.nelflow.integrations.nelcineDefeated.getRecent()
+game.nelflow.dev.watchDefeatedCinematics()
 ```
 
 ## Nelflow 0.13.0 combat action cinematics

@@ -262,6 +262,12 @@ const SETTING_DEFINITIONS = [
     default: true,
   },
   {
+    key: SETTINGS.NELCINE_DEFEATED_CINEMATICS,
+    name: "Nelflow.Settings.NelcineDefeatedCinematics.Name",
+    hint: "Nelflow.Settings.NelcineDefeatedCinematics.Hint",
+    default: true,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

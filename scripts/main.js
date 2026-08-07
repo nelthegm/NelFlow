@@ -26,6 +26,10 @@ import {
   installActionPublicApi,
   registerNelcineActionHooks,
 } from "./nelcine-action-bridge.js";
+import {
+  installDefeatedPublicApi,
+  registerNelcineDefeatedHooks,
+} from "./nelcine-defeated-bridge.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -84,6 +88,8 @@ async function initializeReady() {
       registerNelcineEffectHooks();
       installActionPublicApi();
       registerNelcineActionHooks();
+      installDefeatedPublicApi();
+      registerNelcineDefeatedHooks();
     },
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });

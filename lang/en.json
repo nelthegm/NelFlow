@@ -49,6 +49,8 @@
   "Nelflow.Settings.NelcineGenericEffectCinematics.Hint": "When master effect cinematics are enabled, show NelCine presentations for explicitly classified beneficial or harmful PF2e Effect Items after they are applied. Unsupported effects are never guessed. This setting affects presentation only.",
   "Nelflow.Settings.NelcineActionCinematics.Name": "Enable NelCine Combat Action Cinematics",
   "Nelflow.Settings.NelcineActionCinematics.Hint": "Shows short NelCine presentations for supported PF2e combat actions (Trip, Grapple, Demoralize, and related checks) after they resolve. This setting affects presentation only.",
+  "Nelflow.Settings.NelcineDefeatedCinematics.Name": "Show NPC Defeated Cinematics",
+  "Nelflow.Settings.NelcineDefeatedCinematics.Hint": "Shows a short NelCine battlefield marker when an NPC in combat is defeated. This setting affects presentation only.",
   "Nelflow.Settings.BasicSaveResolver.Name": "Basic Save Spell Resolver",
   "Nelflow.Settings.BasicSaveResolver.Hint": "Add an explicit resolver workflow to eligible GM-authored NPC spells with structured basic saves and native damage.",
   "Nelflow.Settings.BasicSaveResolver.Off": "Off",
