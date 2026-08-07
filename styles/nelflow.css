@@ -669,6 +669,15 @@
   line-height: 1.15;
   min-width: 0;
   overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.nelflow-player-strike__damage-action {
+  font-size: inherit;
+  line-height: 1.2;
+  min-height: 1.35rem;
+  padding: 0.05rem 0.3rem;
+  width: auto;
 }
 
 .nelflow-player-strike--applied .nelflow-player-strike__body,

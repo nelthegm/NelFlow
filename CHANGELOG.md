@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.2
+
+- Restored actionable Damage / Critical Damage controls on PC Strike chat cards
+- Canonical waiting presentation shows attack result without requiring Results
+- Native attack cards fail open when an equivalent continuation control is missing
+- Damage actions delegate to the exact native PF2e `strike-damage` control
+- Preserved 0.9.x NelCine Strike delivery, impact-sync, and save-batch bridges
+- Preserved NPC autoroll, multi-target, application, Undo, and privacy behavior
+
 ## 0.9.1
 
 - Restored automatic NelCine presentation for supported real Strikes

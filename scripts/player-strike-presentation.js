@@ -1,5 +1,7 @@
 import { TRANSACTION_STATES } from "./constants.js";
 
+const HIT_OUTCOMES = new Set(["success", "criticalSuccess"]);
+
 /**
  * The native damage card is the stable compact host once it exists. Fallbacks
  * keep the projection available when a linked message is hidden or deleted,
@@ -38,6 +40,39 @@ export function playerStrikePresentationState(transaction) {
     [TRANSACTION_STATES.SKIPPED]: "not-a-hit",
     [TRANSACTION_STATES.INTERRUPTED]: "interrupted",
   }[transaction?.state] ?? "manual-review";
+}
+
+/**
+ * Whether this attack still requires a user-facing Damage / Critical Damage action.
+ * @param {string|null|undefined} outcome
+ * @returns {"damage"|"critical"|null}
+ */
+export function playerStrikeDamageActionKind(outcome) {
+  if (outcome === "success") return "damage";
+  if (outcome === "criticalSuccess") return "critical";
+  return null;
+}
+
+export function playerStrikeIsHit(outcome) {
+  return HIT_OUTCOMES.has(outcome);
+}
+
+/**
+ * Invariant: never hide a native attack card while damage is still required
+ * unless the canonical presentation already exposes an equivalent action and
+ * the native continuation button remains present for delegation.
+ */
+export function canSuppressPlayerStrikeNativeAttack({
+  transactionState,
+  outcome,
+  hasCanonicalDamageAction,
+  hasNativeDamageControl,
+  hasCanonicalPresentation,
+} = {}) {
+  if (!hasCanonicalPresentation) return false;
+  if (transactionState !== TRANSACTION_STATES.WAITING_FOR_DAMAGE) return true;
+  if (!playerStrikeIsHit(outcome)) return true;
+  return hasCanonicalDamageAction === true && hasNativeDamageControl === true;
 }
 
 export function canShowPlayerStrikeUndo(transaction, { isGM, undoEnabled } = {}) {

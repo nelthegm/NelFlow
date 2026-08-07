@@ -1,12 +1,14 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.9.1** is a runtime repair and packaging release: it restores automatic
-NelCine presentation for supported real Strikes, separates ordinary Strike
-cinematics from optional impact-synchronized damage, adds structurally verified
-Toolbelt **3.53.1** compatibility, repairs damage-claim static ordering
-validation, and ships an installable local ZIP. Mechanics and Undo behavior are
-preserved.
+Nelflow **0.9.2** restores actionable Damage / Critical Damage controls on
+character Strike chat cards before damage is rolled, while preserving the 0.9.x
+NelCine integration architecture. Nelflow **0.9.1** is a runtime repair and
+packaging release: it restores automatic NelCine presentation for supported real
+Strikes, separates ordinary Strike cinematics from optional impact-synchronized
+damage, adds structurally verified Toolbelt **3.53.1** compatibility, repairs
+damage-claim static ordering validation, and ships an installable local ZIP.
+Mechanics and Undo behavior are preserved.
 
 Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
 after existing save mechanics. Nelflow 0.8.0 added optional NelCine impact-sync
@@ -52,17 +54,18 @@ In Foundry: **Add-on Modules → Install Module**, paste:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-That manifest points at the published GitHub release asset:
+That manifest points at the published GitHub release asset (prepared for
+eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.9.1/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.9.2-rc1/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.9.1"
+game.modules.get("nelflow")?.version // "0.9.2"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -80,6 +83,16 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.9.2 actionable PC Strike presentation
+
+Successful character Strikes keep an actionable **Damage** or **Critical
+Damage** control in the ordinary chat presentation. Nelflow never hides the
+native attack card unless that replacement control exists and can delegate to
+PF2e's own `strike-damage` button. 0.9.x NelCine Strike delivery, impact-sync,
+and basic-save batch bridges are unchanged. See the
+[0.9.2 release notes](docs/RELEASE_NOTES_0.9.2.md) and
+[runtime plan](docs/NELFLOW_0.9.2_TEST_PLAN.md).
 
 ## Nelflow 0.7.0 attacker stacks and multi-target Strikes
 
@@ -178,9 +191,11 @@ and reconnect render, with defensive CSS preventing a first-paint flash.
 Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. A
 character's player or GM user targets once and rolls the Strike normally.
 Nelflow snapshots the exact PF2e attack, source, target, author, action/index,
-MAP, and final outcome, then shows **Waiting for Damage**. It never calls Damage
-or Critical Damage. A capture-phase listener records a 30-second pending
-intent for that exact attack card without stopping PF2e's handler. The outgoing
+MAP, and final outcome, then shows the attack result with an actionable
+**Damage** or **Critical Damage** chat control that delegates to PF2e's native
+button. It never autorolls Damage or Critical Damage. A capture-phase listener
+records a 30-second pending intent for that exact attack card without stopping
+PF2e's handler. The outgoing
 native damage message receives an inert exact binding. Binding does not finalize
 the intent: one elected GM revalidates and claims that persisted relationship,
 then applies its unchanged DamageRoll through PF2e's contextual
@@ -759,6 +774,7 @@ Undo Blocked.
 Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
+- [Nelflow 0.9.2 actionable PC Strike notes](docs/RELEASE_NOTES_0.9.2.md)
 - [Nelflow 0.9.1 runtime repair notes](docs/RELEASE_NOTES_0.9.1.md)
 - [Nelflow 0.9.0 NelCine basic-save batch notes](docs/RELEASE_NOTES_0.9.0.md)
 - [Nelflow 0.8.0 NelCine impact commit notes](docs/RELEASE_NOTES_0.8.0.md)

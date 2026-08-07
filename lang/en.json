@@ -450,6 +450,8 @@
   "Nelflow.PlayerStrike.Summary.Undone": "Application undone for {target}",
   "Nelflow.PlayerStrike.Summary.UndoBlocked": "Undo blocked for {target}",
   "Nelflow.PlayerStrike.Summary.ManualReview": "Manual review required for {target}",
+  "Nelflow.PlayerStrike.RollDamage": "Damage",
+  "Nelflow.PlayerStrike.RollCriticalDamage": "Critical Damage",
   "Nelflow.Diagnostics.RescanPlayerStrike": "Re-scan Player Strike",
   "Nelflow.Diagnostics.Field.SettingMode": "Player Strike Setting",
   "Nelflow.Diagnostics.Field.AttackOutcome": "Attack Outcome",

@@ -3,6 +3,7 @@ import { logger } from "./logger.js";
 import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { formatDamageSummary, strikeOutcomeLabel } from "./presentation-format.js";
+import { canSuppressPlayerStrikeNativeAttack } from "./player-strike-presentation.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
 import { TransactionStore } from "./transaction-store.js";
@@ -227,6 +228,29 @@ function suppressCanonicalStrikeMessage(message, html, linked) {
   // If the canonical Nelflow projection is missing, preserve the native card as
   // the only safe recovery surface rather than creating an empty chat entry.
   if (!presentation || !header || !content) return false;
+
+  // Actionability invariant: never hide a PC Strike attack card while damage
+  // is still required unless the canonical presentation already exposes an
+  // equivalent Damage / Critical Damage action and the native control remains
+  // available for safe delegation.
+  if (linked.transaction.transactionType === "player-strike") {
+    const outcome = linked.transaction.snapshot?.outcome ?? null;
+    const dataOutcome = outcome === "criticalSuccess" ? "critical-success" : "success";
+    const hasNativeDamageControl = Boolean(
+      html.querySelector(`button[data-action="strike-damage"][data-outcome="${dataOutcome}"]`) ??
+      html.querySelector(`button[data-action="strike-damage"][data-outcome="${outcome}"]`),
+    );
+    if (!canSuppressPlayerStrikeNativeAttack({
+      transactionState: linked.transaction.state,
+      outcome,
+      hasCanonicalPresentation: true,
+      hasCanonicalDamageAction: presentation.dataset?.nelflowDamageActionable === "true",
+      hasNativeDamageControl,
+    })) {
+      return false;
+    }
+  }
+
   header.classList.add("nelflow-native-header");
   for (const child of content.children) {
     if (child === presentation || child.classList.contains("nelflow-recovery")) continue;
