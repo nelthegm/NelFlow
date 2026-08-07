@@ -45,6 +45,8 @@
   "Nelflow.Settings.NelcineHealingCinematics.Hint": "When master effect cinematics are enabled, show NelCine presentations for supported healing after HP has already changed.",
   "Nelflow.Settings.NelcineConditionCinematics.Name": "Show Condition Cinematics",
   "Nelflow.Settings.NelcineConditionCinematics.Hint": "When master effect cinematics are enabled, show NelCine presentations for condition gain and removal after the condition change has already completed. Routine valued decrements are not presented.",
+  "Nelflow.Settings.NelcineGenericEffectCinematics.Name": "Show Buff & Debuff Cinematics",
+  "Nelflow.Settings.NelcineGenericEffectCinematics.Hint": "When master effect cinematics are enabled, show NelCine presentations for explicitly classified beneficial or harmful PF2e Effect Items after they are applied. Unsupported effects are never guessed. This setting affects presentation only.",
   "Nelflow.Settings.BasicSaveResolver.Name": "Basic Save Spell Resolver",
   "Nelflow.Settings.BasicSaveResolver.Hint": "Add an explicit resolver workflow to eligible GM-authored NPC spells with structured basic saves and native damage.",
   "Nelflow.Settings.BasicSaveResolver.Off": "Off",

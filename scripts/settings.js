@@ -250,6 +250,12 @@ const SETTING_DEFINITIONS = [
     default: true,
   },
   {
+    key: SETTINGS.NELCINE_GENERIC_EFFECT_CINEMATICS,
+    name: "Nelflow.Settings.NelcineGenericEffectCinematics.Name",
+    hint: "Nelflow.Settings.NelcineGenericEffectCinematics.Hint",
+    default: true,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

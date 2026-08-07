@@ -1,12 +1,21 @@
 /**
- * NelCine healing & condition presentation bridge (0.11.0 / Slice 3B).
- * Presentation only — never delays or mutates healing/conditions.
+ * NelCine healing, condition, and explicit effect presentation bridge
+ * (0.12.0 / Slice 3C-B). Presentation only — never delays or mutates mechanics.
  */
 
-import { MODULE_ID, SETTINGS } from "./constants.js";
+import { SETTINGS } from "./constants.js";
 import { logger } from "./logger.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
+import {
+  classifyEffect,
+  evaluateGenericEffectItemEligibility,
+  NELCINE_EFFECT_KIND_REGISTRY,
+  resolveEffectStableIdentity,
+  resolveGenericEffectTransactionId,
+} from "./nelcine-effect-classification.js";
+
+export { classifyEffect, NELCINE_EFFECT_KIND_REGISTRY } from "./nelcine-effect-classification.js";
 
 export const NELCINE_MODULE_ID = "nelcine";
 export const EFFECT_KINDS = Object.freeze({
@@ -25,6 +34,10 @@ const CONDITION_TYPE = "condition";
 const emittedKeys = new Map();
 /** @type {Map<string, number|null>} previous valued-condition values (preUpdate) */
 const pendingConditionValues = new Map();
+/** Aura-transmitted grant noise window (ms). */
+const AURA_GRANT_DEDUPE_MS = 2500;
+/** @type {Map<string, number>} actorUuid:identity → last presented */
+const recentAuraGrants = new Map();
 /** @type {object[]} */
 const recentEvents = [];
 /** @type {((summary: object) => void)|null} */
@@ -112,6 +125,7 @@ function readEffectSettings() {
   let masterEnabled = true;
   let healingEnabled = true;
   let conditionsEnabled = true;
+  let genericEffectsEnabled = true;
   try {
     masterEnabled = getSetting(SETTINGS.NELCINE_EFFECT_CINEMATICS) !== false;
   } catch {
@@ -127,7 +141,12 @@ function readEffectSettings() {
   } catch {
     conditionsEnabled = true;
   }
-  return { masterEnabled, healingEnabled, conditionsEnabled };
+  try {
+    genericEffectsEnabled = getSetting(SETTINGS.NELCINE_GENERIC_EFFECT_CINEMATICS) !== false;
+  } catch {
+    genericEffectsEnabled = true;
+  }
+  return { masterEnabled, healingEnabled, conditionsEnabled, genericEffectsEnabled };
 }
 
 /**
@@ -256,7 +275,9 @@ export async function emitEffectPresentation({
       ? settings.healingEnabled
       : kind === EFFECT_KINDS.CONDITION_GAIN || kind === EFFECT_KINDS.CONDITION_REMOVE
         ? settings.conditionsEnabled
-        : settings.masterEnabled;
+        : kind === EFFECT_KINDS.BENEFICIAL || kind === EFFECT_KINDS.HARMFUL
+          ? settings.genericEffectsEnabled
+          : settings.masterEnabled;
 
   const gate = evaluateEffectPresentationEligibility({
     gameReady: game.ready === true,
@@ -284,6 +305,10 @@ export async function emitEffectPresentation({
   }
 
   if (!claimEffectPresentationKey(dedupeKey)) {
+    const duplicateReason =
+      kind === EFFECT_KINDS.BENEFICIAL || kind === EFFECT_KINDS.HARMFUL
+        ? "duplicate-effect"
+        : "duplicate";
     rememberRecent({
       kind,
       transactionId: payload?.transactionId ?? null,
@@ -294,9 +319,9 @@ export async function emitEffectPresentation({
       value: payload?.value ?? null,
       emittedAt: Date.now(),
       outcome: "suppressed",
-      reason: "duplicate",
+      reason: duplicateReason,
     });
-    return { emitted: false, reason: "duplicate" };
+    return { emitted: false, reason: duplicateReason };
   }
 
   try {
@@ -540,6 +565,132 @@ export async function presentConditionValueUpdate(item, changes, options = {}) {
   return presentConditionChange(item, EFFECT_KINDS.CONDITION_GAIN, { forceValue: next });
 }
 
+/**
+ * @param {string} actorUuid
+ * @param {string} identity
+ * @returns {boolean} true when this aura grant should be suppressed as churn
+ */
+function shouldSuppressAuraGrantNoise(actorUuid, identity) {
+  const key = `${actorUuid}:${identity}`;
+  const now = Date.now();
+  const previous = recentAuraGrants.get(key);
+  if (Number.isFinite(previous) && now - previous < AURA_GRANT_DEDUPE_MS) {
+    return true;
+  }
+  recentAuraGrants.set(key, now);
+  while (recentAuraGrants.size > MAX_EMITTED) {
+    const oldest = recentAuraGrants.keys().next().value;
+    recentAuraGrants.delete(oldest);
+  }
+  return false;
+}
+
+/**
+ * Present a completed Actor-owned non-condition Effect Item application.
+ * Routine deletions/expirations are not presented in 0.12.0.
+ *
+ * @param {Item} item
+ * @param {{ transactionKind?: unknown }} [options]
+ * @returns {Promise<{ emitted: boolean, reason?: string, classification?: object }>}
+ */
+export async function presentGenericEffectCreate(item, options = {}) {
+  const eligibility = evaluateGenericEffectItemEligibility(item);
+  if (!eligibility.eligible) {
+    rememberRecent({
+      kind: null,
+      transactionId: null,
+      targetName: null,
+      actionName: safeString(item?.name),
+      conditionSlug: null,
+      conditionValue: null,
+      value: null,
+      emittedAt: Date.now(),
+      outcome: "suppressed",
+      reason: eligibility.reason === "granted-item" || eligibility.reason === "aura-carrier"
+        ? "noise-suppressed"
+        : eligibility.reason,
+    });
+    return { emitted: false, reason: eligibility.reason };
+  }
+
+  const classification = classifyEffect(item, {
+    transactionKind: options.transactionKind,
+  });
+  if (!classification.supported || !classification.kind) {
+    rememberRecent({
+      kind: null,
+      transactionId: null,
+      targetName: null,
+      actionName: safeString(item?.name),
+      conditionSlug: null,
+      conditionValue: null,
+      value: null,
+      emittedAt: Date.now(),
+      outcome: "suppressed",
+      reason: "unsupported-effect",
+    });
+    return { emitted: false, reason: "unsupported-effect", classification };
+  }
+
+  const actor = item.actor;
+  const actorUuid = safeString(actor?.uuid);
+  const identity = resolveEffectStableIdentity(item) ?? safeString(item.id);
+  if (item.flags?.pf2e?.aura && actorUuid && identity) {
+    if (shouldSuppressAuraGrantNoise(actorUuid, identity)) {
+      rememberRecent({
+        kind: classification.kind,
+        transactionId: null,
+        targetName: safeString(actor?.name),
+        actionName: safeString(item.name),
+        conditionSlug: null,
+        conditionValue: null,
+        value: null,
+        emittedAt: Date.now(),
+        outcome: "suppressed",
+        reason: "noise-suppressed",
+      });
+      return { emitted: false, reason: "noise-suppressed", classification };
+    }
+  }
+
+  const tokenDoc = actor.getActiveTokens?.(true, true)?.[0]?.document ?? actor.token ?? null;
+  const transactionId =
+    safeString(options.transactionId) ?? resolveGenericEffectTransactionId(item);
+  const originActor =
+    safeString(item.system?.context?.origin?.actor) ??
+    safeString(item.flags?.pf2e?.aura?.origin);
+  const originToken = safeString(item.system?.context?.origin?.token);
+
+  const payload = buildEffectPayload({
+    transactionId,
+    effectKind: classification.kind,
+    value: null,
+    condition: null,
+    detail: null,
+    action: {
+      name: safeString(item.name) ?? identity,
+      img: safeString(item.img),
+    },
+    source: {
+      actorUuid: originActor,
+      tokenUuid: originToken,
+    },
+    target: {
+      actorUuid,
+      tokenUuid: safeString(tokenDoc?.uuid),
+    },
+    sceneId: safeString(tokenDoc?.parent?.id) ?? safeString(canvas?.scene?.id),
+  });
+  if (!payload) return { emitted: false, reason: "payload-invalid", classification };
+
+  const result = await emitEffectPresentation({
+    dedupeKey: `effect-create:${safeString(item.uuid) ?? `${actorUuid}:${item.id}`}:${transactionId}`,
+    payload,
+    logLabel: { targetName: safeString(tokenDoc?.name) ?? safeString(actor?.name) },
+  });
+  return { ...result, classification };
+}
+
 function onCreateChatMessage(message) {
   void presentHealingFromDamageTakenMessage(message).catch((error) => {
     logger.warn("Healing presentation failed open", {
@@ -552,14 +703,24 @@ function onCreateChatMessage(message) {
 function onCreateItem(item, _data, options = {}) {
   if (game.ready !== true) return;
   if (options?.pack || item?.pack) return;
-  if (!isPf2eConditionItem(item)) return;
   if (!isAuthoritativeEffectEmitter()) return;
-  void presentConditionChange(item, EFFECT_KINDS.CONDITION_GAIN).catch((error) => {
-    logger.warn("Condition-gain presentation failed open", {
-      stage: "nelcine-effect-condition",
-      reason: error instanceof Error ? error.message : String(error),
+  if (isPf2eConditionItem(item)) {
+    void presentConditionChange(item, EFFECT_KINDS.CONDITION_GAIN).catch((error) => {
+      logger.warn("Condition-gain presentation failed open", {
+        stage: "nelcine-effect-condition",
+        reason: error instanceof Error ? error.message : String(error),
+      });
     });
-  });
+    return;
+  }
+  if (item?.type === "effect") {
+    void presentGenericEffectCreate(item).catch((error) => {
+      logger.warn("Generic effect presentation failed open", {
+        stage: "nelcine-effect-generic",
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }
 }
 
 function onPreUpdateItem(item, changes, options = {}) {
@@ -636,6 +797,13 @@ export function getEffectIntegrationStatus() {
     masterEnabled: settings.masterEnabled,
     healingEnabled: settings.healingEnabled,
     conditionsEnabled: settings.conditionsEnabled,
+    genericEffectsEnabled: settings.genericEffectsEnabled,
+    classification: {
+      flag: true,
+      transaction: true,
+      pf2eNative: false,
+      registryEntries: Object.keys(NELCINE_EFFECT_KIND_REGISTRY).length,
+    },
     nelcineVersion: runtime.version,
     hasBroadcastApi: runtime.hasBroadcastApi,
     isAuthoritativeEmitter: isAuthoritativeEffectEmitter(),
@@ -656,6 +824,7 @@ export function watchEffectCinematics() {
       console.debug("NelFlow | Effect | SUPPRESSED", entry.reason, {
         kind,
         condition: entry.conditionSlug,
+        action: entry.actionName,
         value: entry.value,
       });
       return;
@@ -681,6 +850,15 @@ export function watchEffectCinematics() {
       console.debug(
         "NelFlow | Effect | CONDITION -",
         entry.conditionSlug,
+        entry.targetName ? `→ ${entry.targetName}` : null,
+      );
+      return;
+    }
+    if (kind === EFFECT_KINDS.BENEFICIAL || kind === EFFECT_KINDS.HARMFUL) {
+      console.debug(
+        "NelFlow | Effect | EFFECT +",
+        kind,
+        entry.actionName,
         entry.targetName ? `→ ${entry.targetName}` : null,
       );
     }
@@ -764,26 +942,83 @@ export async function previewResolvedConditionEvent(event = {}) {
   });
 }
 
+/**
+ * Dev preview: presentation only, no Item/Actor mutation.
+ * @param {object} event
+ */
+export async function previewResolvedBeneficialEffect(event = {}) {
+  return previewResolvedGenericEffect({ ...event, effectKind: EFFECT_KINDS.BENEFICIAL });
+}
+
+/**
+ * Dev preview: presentation only, no Item/Actor mutation.
+ * @param {object} event
+ */
+export async function previewResolvedHarmfulEffect(event = {}) {
+  return previewResolvedGenericEffect({ ...event, effectKind: EFFECT_KINDS.HARMFUL });
+}
+
+/**
+ * @param {object} event
+ */
+async function previewResolvedGenericEffect(event = {}) {
+  if (game.user?.isGM !== true) return { emitted: false, reason: "not-gm" };
+  const effectKind =
+    event.effectKind === EFFECT_KINDS.HARMFUL
+      ? EFFECT_KINDS.HARMFUL
+      : EFFECT_KINDS.BENEFICIAL;
+  const payload = buildEffectPayload({
+    transactionId:
+      safeString(event.transactionId) ?? `effect-preview:${effectKind}:${Date.now()}`,
+    effectKind,
+    value: null,
+    detail: safeString(event.detail),
+    action: {
+      name: safeString(event.actionName) ?? safeString(event.name) ?? "Effect",
+      img: safeString(event.img),
+    },
+    source: {
+      actorUuid: safeString(event.sourceActorUuid),
+      tokenUuid: safeString(event.sourceTokenUuid),
+    },
+    target: {
+      actorUuid: safeString(event.targetActorUuid),
+      tokenUuid: safeString(event.targetTokenUuid),
+    },
+    sceneId: safeString(event.sceneId) ?? safeString(canvas?.scene?.id),
+  });
+  if (!payload) return { emitted: false, reason: "payload-invalid" };
+  return emitEffectPresentation({
+    dedupeKey: payload.transactionId,
+    payload,
+    logLabel: { targetName: safeString(event.targetName) },
+  });
+}
+
 export function installEffectPublicApi() {
   const root = (game.nelflow ??= {});
   root.integrations = root.integrations ?? {};
   root.integrations.nelcineEffects = Object.freeze({
     getStatus: () => getEffectIntegrationStatus(),
     getRecent: () => getRecentEffectEvents(),
+    classifyEffect: (item, options) => {
+      if (game.user?.isGM !== true) return null;
+      return classifyEffect(item, options);
+    },
   });
   root.dev = root.dev ?? {};
   root.dev.watchEffectCinematics = () => watchEffectCinematics();
   root.dev.stopWatchingEffectCinematics = () => stopWatchingEffectCinematics();
   root.dev.previewResolvedHealingEvent = (event) => previewResolvedHealingEvent(event);
   root.dev.previewResolvedConditionEvent = (event) => previewResolvedConditionEvent(event);
+  root.dev.previewResolvedBeneficialEffect = (event) => previewResolvedBeneficialEffect(event);
+  root.dev.previewResolvedHarmfulEffect = (event) => previewResolvedHarmfulEffect(event);
 }
 
 export function clearEffectBridgeState() {
   emittedKeys.clear();
   pendingConditionValues.clear();
+  recentAuraGrants.clear();
   recentEvents.length = 0;
   watcher = null;
 }
-
-// Keep MODULE_ID available for future durable flags without forcing persistence now.
-void MODULE_ID;

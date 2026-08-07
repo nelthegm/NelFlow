@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.12.0
+
+- Added explicit beneficial/harmful PF2e Effect Item presentation through NelCine
+- Classification via transaction override, `flags.nelflow.nelcineEffectKind`, or
+  reviewed sourceId/slug registry (never name/description guessing)
+- Setting: `nelcineGenericEffectCinematics` (default On), gated by master effects
+- CREATE presentations only; routine effect expiration/removal suppressed
+- Shared transaction IDs when PF2e origin evidence allows NelCine coalescing
+- Preserved healing, condition, Strike, save-batch, Toolbelt, and Undo behavior
+
 ## 0.11.0
 
 - Added NelCine healing and condition presentation bridge (presentation only)

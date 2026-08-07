@@ -1,11 +1,11 @@
 {
   "id": "nelflow",
   "title": "Nelflow",
-  "description": "PF2e NPC and player Strike flow with attacker-scoped stacks, shared-roll multi-target resolution, and Toolbelt Target Helper basic-save damage automation. 0.11.0 presents real healing and condition changes through NelCine after mechanics complete.",
-  "version": "0.11.0",
+  "description": "PF2e NPC and player Strike flow with attacker-scoped stacks, shared-roll multi-target resolution, and Toolbelt Target Helper basic-save damage automation. 0.12.0 presents explicitly classified beneficial and harmful PF2e Effect Items through NelCine after application.",
+  "version": "0.12.0",
   "url": "https://github.com/nelthegm/NelFlow",
   "manifest": "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json",
-  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.11.0/nelflow.zip",
+  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.12.0/nelflow.zip",
   "authors": [
     {
       "name": "Nelson Cruz"
