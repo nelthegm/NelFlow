@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0
+
+- Added NelCine combat actionResult bridge for Trip, Grapple, Shove, Reposition,
+  Disarm, Demoralize, Feint, and Escape
+- Detect actions via authoritative `action:<slug>` check options only
+- Setting: `nelcineActionCinematics` (default On)
+- Presentation-only condition correlation to avoid duplicate child cinematics
+- Preserved healing, condition, effect, Strike, save-batch, Toolbelt, and Undo
+
 ## 0.12.0
 
 - Added explicit beneficial/harmful PF2e Effect Item presentation through NelCine

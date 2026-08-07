@@ -361,8 +361,12 @@ test("21-26. Condition gain valued/unvalued, increase, dedupe", async () => {
     img: "icons/frightened.webp",
     value: 2,
   });
-  const g1 = await presentConditionChange(valued, EFFECT_KINDS.CONDITION_GAIN);
-  const g2 = await presentConditionChange(valued, EFFECT_KINDS.CONDITION_GAIN);
+  const g1 = await presentConditionChange(valued, EFFECT_KINDS.CONDITION_GAIN, {
+    skipActionCorrelation: true,
+  });
+  const g2 = await presentConditionChange(valued, EFFECT_KINDS.CONDITION_GAIN, {
+    skipActionCorrelation: true,
+  });
   assert.equal(g1.emitted, true);
   assert.equal(g2.reason, "duplicate");
   assert.equal(broadcasts[0].effectKind, "condition-gain");
@@ -384,7 +388,9 @@ test("21-26. Condition gain valued/unvalued, increase, dedupe", async () => {
     },
   };
   assert.equal(conditionDisplayFields(unvalued).value, null);
-  const g3 = await presentConditionChange(unvalued, EFFECT_KINDS.CONDITION_GAIN);
+  const g3 = await presentConditionChange(unvalued, EFFECT_KINDS.CONDITION_GAIN, {
+    skipActionCorrelation: true,
+  });
   assert.equal(g3.emitted, true);
   assert.equal(broadcasts[1].condition.value, null);
 
@@ -603,7 +609,7 @@ test("49-51. Adapter/preview helpers remain presentation-only", async () => {
 
 // --- REGRESSION / WIRING ---
 
-test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.12.0", () => {
+test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.13.0", () => {
   const strike = source("scripts/nelcine-strike-delivery.js");
   const impact = source("scripts/nelcine-impact-bridge.js");
   const batch = source("scripts/nelcine-save-batch-bridge.js");
@@ -621,11 +627,11 @@ test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.12.0", 
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.12.0");
-  assert.equal(pkg.version, "0.12.0");
+  assert.equal(module.version, "0.13.0");
+  assert.equal(pkg.version, "0.13.0");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.12.0/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.13.0/nelflow.zip",
   );
 });
 

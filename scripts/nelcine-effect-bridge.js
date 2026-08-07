@@ -14,8 +14,15 @@ import {
   resolveEffectStableIdentity,
   resolveGenericEffectTransactionId,
 } from "./nelcine-effect-classification.js";
+import {
+  CONDITION_PRESENTATION_DEFER_MS,
+  evaluateConditionPresentationCorrelation,
+} from "./nelcine-action-correlation.js";
 
 export { classifyEffect, NELCINE_EFFECT_KIND_REGISTRY } from "./nelcine-effect-classification.js";
+
+/** Condition slugs that may be represented by combat actionResult cinematics. */
+const ACTION_CHILD_CONDITION_SLUGS = new Set(["prone", "grabbed", "frightened"]);
 
 export const NELCINE_MODULE_ID = "nelcine";
 export const EFFECT_KINDS = Object.freeze({
@@ -473,7 +480,7 @@ function conditionActorEligible(actor) {
 /**
  * @param {Item} item
  * @param {"condition-gain"|"condition-remove"} effectKind
- * @param {{ previousValue?: number|null, forceValue?: number|null }} [opts]
+ * @param {{ previousValue?: number|null, forceValue?: number|null, skipActionCorrelation?: boolean }} [opts]
  */
 export async function presentConditionChange(item, effectKind, opts = {}) {
   if (!isPf2eConditionItem(item)) return { emitted: false, reason: "not-condition" };
@@ -491,6 +498,53 @@ export async function presentConditionChange(item, effectKind, opts = {}) {
         : fields.value;
 
   const tokenDoc = actor.getActiveTokens?.(true, true)?.[0]?.document ?? actor.token ?? null;
+  const targetActorUuid = safeString(actor.uuid);
+  const targetTokenUuid = safeString(tokenDoc?.uuid);
+
+  // Bidirectional actionResult correlation for child conditions (presentation only).
+  if (
+    effectKind === EFFECT_KINDS.CONDITION_GAIN &&
+    !opts.skipActionCorrelation &&
+    fields.slug &&
+    ACTION_CHILD_CONDITION_SLUGS.has(fields.slug)
+  ) {
+    const decision = evaluateConditionPresentationCorrelation(
+      {
+        targetActorUuid,
+        targetTokenUuid,
+        conditionSlug: fields.slug,
+        conditionValue: value,
+      },
+      {
+        deferMs: CONDITION_PRESENTATION_DEFER_MS,
+        flush: () =>
+          presentConditionChange(item, effectKind, {
+            ...opts,
+            forceValue: value,
+            skipActionCorrelation: true,
+          }),
+      },
+    );
+    if (decision.action === "suppress") {
+      rememberRecent({
+        kind: EFFECT_KINDS.CONDITION_GAIN,
+        transactionId: decision.claim?.transactionId ?? item.id,
+        targetName: safeString(tokenDoc?.name) ?? safeString(actor.name),
+        actionName: null,
+        conditionSlug: fields.slug,
+        conditionValue: value,
+        value: null,
+        emittedAt: Date.now(),
+        outcome: "suppressed",
+        reason: "action-represented-consequence",
+      });
+      return { emitted: false, reason: "action-represented-consequence" };
+    }
+    if (decision.action === "defer") {
+      return { emitted: false, reason: "awaiting-action-correlation" };
+    }
+  }
+
   const transactionId =
     effectKind === EFFECT_KINDS.CONDITION_REMOVE
       ? `condition-remove:${actor.uuid}:${fields.slug}:${item.id}`
@@ -510,8 +564,8 @@ export async function presentConditionChange(item, effectKind, opts = {}) {
       img: fields.img,
     },
     target: {
-      actorUuid: safeString(actor.uuid),
-      tokenUuid: safeString(tokenDoc?.uuid),
+      actorUuid: targetActorUuid,
+      tokenUuid: targetTokenUuid,
     },
     source: null,
     sceneId: safeString(tokenDoc?.parent?.id) ?? safeString(canvas?.scene?.id),
@@ -562,7 +616,11 @@ export async function presentConditionValueUpdate(item, changes, options = {}) {
     return { emitted: false, reason: "condition-decrement" };
   }
   // Increase: present as condition-gain with new authoritative value.
-  return presentConditionChange(item, EFFECT_KINDS.CONDITION_GAIN, { forceValue: next });
+  // Valued increases are not action-child creates; do not defer for actionResult.
+  return presentConditionChange(item, EFFECT_KINDS.CONDITION_GAIN, {
+    forceValue: next,
+    skipActionCorrelation: true,
+  });
 }
 
 /**

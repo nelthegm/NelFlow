@@ -29,6 +29,7 @@ export const SETTINGS = Object.freeze({
   NELCINE_HEALING_CINEMATICS: "nelcineHealingCinematics",
   NELCINE_CONDITION_CINEMATICS: "nelcineConditionCinematics",
   NELCINE_GENERIC_EFFECT_CINEMATICS: "nelcineGenericEffectCinematics",
+  NELCINE_ACTION_CINEMATICS: "nelcineActionCinematics",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });

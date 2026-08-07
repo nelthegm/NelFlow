@@ -1,18 +1,20 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.12.0** presents explicitly classified beneficial and harmful PF2e
-Effect Items through NelCine after application. Nelflow **0.11.0** presents real
-PF2e healing and condition changes through NelCine after mechanics complete (no
-mechanical delay). Nelflow **0.10.0** optionally synchronizes eligible
-multi-target basic-save HP commits with NelCine batch impacts. Nelflow
-**0.9.2** restores actionable Damage / Critical Damage controls on character
-Strike chat cards before damage is rolled, while preserving the 0.9.x NelCine
-integration architecture. Nelflow **0.9.1** is a runtime repair and packaging
-release: it restores automatic NelCine presentation for supported real Strikes,
-separates ordinary Strike cinematics from optional impact-synchronized damage,
-adds structurally verified Toolbelt **3.53.1** compatibility, repairs
-damage-claim static ordering validation, and ships an installable local ZIP.
+Nelflow **0.13.0** presents supported PF2e combat action results through NelCine
+after resolution. Nelflow **0.12.0** presents explicitly classified beneficial
+and harmful PF2e Effect Items through NelCine after application. Nelflow
+**0.11.0** presents real PF2e healing and condition changes through NelCine
+after mechanics complete (no mechanical delay). Nelflow **0.10.0** optionally
+synchronizes eligible multi-target basic-save HP commits with NelCine batch
+impacts. Nelflow **0.9.2** restores actionable Damage / Critical Damage
+controls on character Strike chat cards before damage is rolled, while
+preserving the 0.9.x NelCine integration architecture. Nelflow **0.9.1** is a
+runtime repair and packaging release: it restores automatic NelCine presentation
+for supported real Strikes, separates ordinary Strike cinematics from optional
+impact-synchronized damage, adds structurally verified Toolbelt **3.53.1**
+compatibility, repairs damage-claim static ordering validation, and ships an
+installable local ZIP.
 Mechanics and Undo behavior are preserved.
 
 Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
@@ -63,14 +65,14 @@ That manifest points at the published GitHub release asset (prepared for
 eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.12.0/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.13.0/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.12.0"
+game.modules.get("nelflow")?.version // "0.13.0"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -87,6 +89,19 @@ Run validation:
 npm test
 npm run check
 npm run package
+```
+
+## Nelflow 0.13.0 combat action cinematics
+
+When NelCine **0.10+** is active, NelFlow presents supported PF2e combat action
+checks (Trip, Grapple, Demoralize, and related) after they resolve. Child
+conditions represented by the action cinematic are not double-presented.
+See [0.13.0 release notes](docs/RELEASE_NOTES_0.13.0.md) and
+[runtime plan](docs/NELFLOW_0.13.0_TEST_PLAN.md).
+
+```js
+game.nelflow.integrations.nelcineActions.getStatus()
+game.nelflow.integrations.nelcineActions.inspectCorrelation() // GM-only
 ```
 
 ## Nelflow 0.12.0 buff & debuff cinematics
@@ -544,6 +559,8 @@ targets, and ambiguous structures also remain manual.
   default; sub-gates under the master effect setting.
 - **Show Buff & Debuff Cinematics** (`nelcineGenericEffectCinematics`) —
   **enabled by default**; sub-gate for explicitly classified Effect Items.
+- **Enable NelCine Combat Action Cinematics** (`nelcineActionCinematics`) —
+  **enabled by default**. Presentation after supported combat action checks resolve.
 - The old Basic Save Spell Resolver setting remains hidden for migration only.
 - **Enable Debug Logging** — disabled by default.
 
@@ -821,6 +838,7 @@ Undo Blocked.
 Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
+- [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
 - [Nelflow 0.12.0 buff & debuff cinematic notes](docs/RELEASE_NOTES_0.12.0.md)
 - [Nelflow 0.11.0 healing & condition cinematic notes](docs/RELEASE_NOTES_0.11.0.md)
 - [Nelflow 0.10.0 save-batch impact sync notes](docs/RELEASE_NOTES_0.10.0.md)
