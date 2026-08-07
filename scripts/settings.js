@@ -232,6 +232,24 @@ const SETTING_DEFINITIONS = [
     default: false,
   },
   {
+    key: SETTINGS.NELCINE_EFFECT_CINEMATICS,
+    name: "Nelflow.Settings.NelcineEffectCinematics.Name",
+    hint: "Nelflow.Settings.NelcineEffectCinematics.Hint",
+    default: true,
+  },
+  {
+    key: SETTINGS.NELCINE_HEALING_CINEMATICS,
+    name: "Nelflow.Settings.NelcineHealingCinematics.Name",
+    hint: "Nelflow.Settings.NelcineHealingCinematics.Hint",
+    default: true,
+  },
+  {
+    key: SETTINGS.NELCINE_CONDITION_CINEMATICS,
+    name: "Nelflow.Settings.NelcineConditionCinematics.Name",
+    hint: "Nelflow.Settings.NelcineConditionCinematics.Hint",
+    default: true,
+  },
+  {
     key: SETTINGS.MIGRATION_VERSION,
     name: "Nelflow internal migration version",
     hint: "",

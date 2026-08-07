@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import test from "node:test";
@@ -321,14 +321,14 @@ test("Localization and setting keys exist", () => {
   assert.equal(lang["Nelflow.Toolbelt.State.awaiting-impact"], "Waiting for cinematic impact");
 });
 
-test("0.10.0 metadata prepares download URL", () => {
+test("0.11.0 metadata prepares download URL", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.10.0");
-  assert.equal(packageMetadata.version, "0.10.0");
+  assert.equal(module.version, "0.11.0");
+  assert.equal(packageMetadata.version, "0.11.0");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.10.0/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.11.0/nelflow.zip",
   );
 });

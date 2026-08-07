@@ -18,6 +18,10 @@ import { MultiTargetStrikeCapture } from "./multi-target-strike-capture.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 import { RollPopoverController } from "./roll-popover-controller.js";
 import { installNelcinePublicApi } from "./nelcine-strike-delivery.js";
+import {
+  installEffectPublicApi,
+  registerNelcineEffectHooks,
+} from "./nelcine-effect-bridge.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -70,7 +74,11 @@ async function initializeReady() {
   await runNelflowBoundary({
     subsystem: "nelcine-integrations",
     operation: "initialize",
-    task: () => installNelcinePublicApi(),
+    task: () => {
+      installNelcinePublicApi();
+      installEffectPublicApi();
+      registerNelcineEffectHooks();
+    },
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
   await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });

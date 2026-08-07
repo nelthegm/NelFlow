@@ -25,6 +25,9 @@ export const SETTINGS = Object.freeze({
   NELCINE_SAVE_BATCH_CINEMATICS: "nelcineSaveBatchCinematics",
   NELCINE_SAVE_BATCH_MINIMUM_TARGETS: "nelcineSaveBatchMinimumTargets",
   NELCINE_SAVE_BATCH_IMPACT_SYNC: "nelcineSaveBatchImpactSync",
+  NELCINE_EFFECT_CINEMATICS: "nelcineEffectCinematics",
+  NELCINE_HEALING_CINEMATICS: "nelcineHealingCinematics",
+  NELCINE_CONDITION_CINEMATICS: "nelcineConditionCinematics",
   MIGRATION_VERSION: "migrationVersion",
   DEBUG: "debug",
 });

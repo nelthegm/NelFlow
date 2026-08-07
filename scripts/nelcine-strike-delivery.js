@@ -621,6 +621,12 @@ export function installNelcinePublicApi() {
       } catch {
         saveBatchImpactSyncEnabled = false;
       }
+      let effectMasterEnabled = true;
+      try {
+        effectMasterEnabled = getSetting(SETTINGS.NELCINE_EFFECT_CINEMATICS) !== false;
+      } catch {
+        effectMasterEnabled = true;
+      }
       return {
         available: strike.available,
         active: strike.active,
@@ -635,6 +641,7 @@ export function installNelcinePublicApi() {
         saveBatchImpactSyncEnabled,
         recentSaveBatchDeliveries: batches.recentEmittedCount,
         pendingSaveBatchImpactCount: getPendingImpactStatus().pendingBatchCount,
+        effectCinematicsEnabled: effectMasterEnabled,
       };
     },
     getStrikeDelivery: (transactionId) => getStrikeDeliveryDiagnostic(transactionId),

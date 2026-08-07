@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.11.0
+
+- Added NelCine healing and condition presentation bridge (presentation only)
+- Actual HP gain from PF2e appliedDamage deltas; overheal shows recovered HP
+- Suppress routine zero-heal and valued condition decrement cinematics
+- Condition-remove only when the condition document is actually deleted
+- Settings: `nelcineEffectCinematics`, `nelcineHealingCinematics`,
+  `nelcineConditionCinematics` (defaults On)
+- Diagnostics and preview helpers under `game.nelflow.integrations.nelcineEffects`
+  and `game.nelflow.dev`
+- Preserved Strike, save-batch, Toolbelt, Undo, and compact-stack behavior
+
 ## 0.10.0
 
 - Added optional Synchronize Basic-Save Damage with NelCine Impacts
