@@ -26,6 +26,11 @@ import { canUndoBatchChild } from "./multi-target-strike-model.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 import { RollPopoverController } from "./roll-popover-controller.js";
 import { buildRollInspection, inspectionKind } from "./strike-roll-inspection.js";
+import {
+  ridersForStackRow,
+  shouldExpandStrikeRiders,
+} from "./strike-riders.js";
+import { renderActionResultPresentation } from "./action-result-presentation.js";
 
 const reportedRenderFailures = new Set();
 
@@ -225,6 +230,65 @@ function renderSupplementalActions(row, stackId) {
   return note;
 }
 
+function renderStrikeRiders(row, stack) {
+  const riders = ridersForStackRow(row);
+  if (!riders.length) return null;
+
+  const section = document.createElement("div");
+  section.className = "nelflow-stack__riders";
+  const expanded = shouldExpandStrikeRiders({ outcome: row.outcome, riders });
+  section.dataset.expanded = expanded ? "true" : "false";
+  if (expanded) section.classList.add("nelflow-stack__riders--open");
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "nelflow-stack__riders-toggle";
+  toggle.setAttribute("aria-expanded", String(expanded));
+  const toggleLabel = format("Nelflow.Stack.RidersCount", { count: riders.length });
+  toggle.append(icon("fa-solid fa-bolt"), document.createTextNode(toggleLabel));
+  toggle.title = localize("Nelflow.Stack.RidersTitle");
+  toggle.addEventListener("click", () => {
+    const open = section.classList.toggle("nelflow-stack__riders--open");
+    section.dataset.expanded = String(open);
+    toggle.setAttribute("aria-expanded", String(open));
+  });
+
+  const list = document.createElement("ul");
+  list.className = "nelflow-stack__riders-list";
+  for (const rider of riders) {
+    const item = document.createElement("li");
+    item.className = `nelflow-stack__rider nelflow-stack__rider--${rider.kind}`;
+    const label = document.createElement("strong");
+    label.textContent = rider.label;
+    item.append(label);
+    if (rider.detail) {
+      const detail = document.createElement("span");
+      detail.textContent = rider.detail;
+      item.append(document.createTextNode(" — "), detail);
+    }
+    list.append(item);
+  }
+
+  section.append(toggle, list);
+
+  const needsDetails = riders.some((rider) => rider.actionable || rider.kind === "native-control");
+  if (needsDetails && canRevealNativeRecord(row.attackMessageId ?? row.damageMessageId)) {
+    const openDetails = labeledButton({
+      className: "nelflow-stack__rider-details",
+      iconClass: "fa-solid fa-up-right-from-square",
+      label: localize("Nelflow.Stack.OpenRiderDetails"),
+      title: localize("Nelflow.Stack.OpenRiderDetailsHint"),
+    });
+    openDetails.addEventListener("click", () => {
+      const messageId = row.damageMessageId ?? row.attackMessageId;
+      if (messageId) NativeCardCompactor.reveal(messageId, { focus: true, highlight: true });
+    });
+    section.append(openDetails);
+  }
+
+  return section;
+}
+
 function canUseUndo(row, stack) {
   return Boolean(
     game.user.isGM &&
@@ -306,8 +370,13 @@ function renderRow(row, stack, records) {
     });
   }
   if (row.transactionState !== TRANSACTION_STATES.SKIPPED) resultLine.append(stateLabel);
-  const supplementalActions = renderSupplementalActions(row, stackId);
-  if (supplementalActions) resultLine.append(supplementalActions);
+  const riders = renderStrikeRiders(row, stack);
+  if (riders) {
+    // Rider section replaces the coarse Actions badge when structured notes exist.
+  } else {
+    const supplementalActions = renderSupplementalActions(row, stackId);
+    if (supplementalActions) resultLine.append(supplementalActions);
+  }
   const inspection = resultsPanel(records);
   if (inspection) resultLine.append(inspection);
 
@@ -333,6 +402,7 @@ function renderRow(row, stack, records) {
   }
 
   main.append(attackLine, resultLine);
+  if (riders) main.append(riders);
   summary.append(image, main);
   item.append(summary);
   return item;
@@ -605,6 +675,7 @@ export function renderNelflowChat(message, html) {
     if (!message.visible || !message.isContentVisible) return;
     if (!renderMultiTargetStrike(message, html)) renderPlayerStrike(message, html);
     renderLegacyStatus(message, html);
+    renderActionResultPresentation(message, html);
     NativeCardCompactor.render(message, html);
     renderTransactionRecovery(message, html);
   } catch (error) {
@@ -616,10 +687,13 @@ export function renderNelflowChat(message, html) {
       "nelflow-native-collapsed",
       "nelflow-strike-canonical-host",
       "nelflow-save-native-hidden",
+      "nelflow-action-collapsed",
+      "nelflow-action-compact",
     );
-    html.querySelectorAll(".nelflow-native-detail, .nelflow-native-header").forEach((node) => {
-      node.classList.remove("nelflow-native-detail", "nelflow-native-header");
+    html.querySelectorAll(".nelflow-native-detail, .nelflow-native-header, .nelflow-action-native-detail, .nelflow-action-header").forEach((node) => {
+      node.classList.remove("nelflow-native-detail", "nelflow-native-header", "nelflow-action-native-detail", "nelflow-action-header");
     });
+    html.querySelector(":scope > .nelflow-action-summary")?.remove();
     NativeRecordsController.failOpen(stack?.id);
     failOpenSaveResolver(
       message.getFlag(MODULE_ID, "saveResolver")?.resolverId ??

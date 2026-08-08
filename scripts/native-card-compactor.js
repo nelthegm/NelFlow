@@ -349,7 +349,12 @@ export class NativeCardCompactor {
   static reveal(messageId, { focus = false, highlight = false } = {}) {
     const element = findRenderedMessage(messageId);
     if (!element) return false;
+    // Rider / Details navigation must be able to recover stack-first-hidden cards.
+    element.classList.remove("nelflow-native-record-hidden");
     if (element.querySelector(":scope > .nelflow-native-summary")) setExpanded(element, true);
+    if (element.classList.contains("nelflow-action-collapsed")) {
+      element.classList.remove("nelflow-action-collapsed");
+    }
     element.classList.remove("nelflow-native-highlight");
     if (highlight) {
       void element.offsetWidth;

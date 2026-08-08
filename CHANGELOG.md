@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.1
+
+- Preserve authoritative PF2e Strike riders (critical specialization, conditions,
+  saves, persistent effects) in compact stacks from `flags.pf2e.context.notes`
+- Auto-expand Riders on critical hits; Open Details recovers native controls
+- Compact supported action results with structured target names and IMMUNE
+  presentation when authoritative; preserve Workbench apply-effects via Details
+- Diagnostics: `game.nelflow.integrations.strikeRiders` and action presentation helpers
+- Presentation only — no new damage/condition/effect application engines
+
 ## 0.14.0
 
 - Added NelCine NPC Defeated presentation bridge (battlefield marker only)

@@ -181,11 +181,13 @@
   font-weight: 600;
 }
 
-.nelflow-stack__undo,
 .nelflow-stack__actions,
 .nelflow-stack__reference,
 .nelflow-stack__native-records,
-.nelflow-native-toggle {
+.nelflow-stack__riders-toggle,
+.nelflow-stack__rider-details,
+.nelflow-native-toggle,
+.nelflow-action-details {
   align-items: center;
   display: inline-flex;
   font-size: inherit;
@@ -197,8 +199,88 @@
 
 .nelflow-stack__actions,
 .nelflow-stack__native-records,
-.nelflow-stack__reference {
+.nelflow-stack__reference,
+.nelflow-stack__riders-toggle {
   font-size: var(--font-size-11, 0.6875rem);
+}
+
+.nelflow-stack__riders {
+  flex: 1 0 100%;
+  margin-top: 0.15rem;
+  min-width: 0;
+}
+
+.nelflow-stack__riders-list {
+  display: none;
+  list-style: none;
+  margin: 0.15rem 0 0;
+  padding: 0 0 0 0.15rem;
+}
+
+.nelflow-stack__riders--open .nelflow-stack__riders-list {
+  display: block;
+}
+
+.nelflow-stack__rider {
+  color: var(--color-text-primary, #222);
+  font-size: var(--font-size-12, 0.75rem);
+  line-height: 1.25;
+  margin: 0.08rem 0;
+}
+
+.nelflow-stack__rider--critical-specialization strong {
+  color: var(--color-level-warning, #936b00);
+}
+
+.nelflow-stack__rider-details {
+  margin-top: 0.15rem;
+}
+
+.nelflow-action-summary {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.6rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.nelflow-action-summary__title {
+  flex: 1 1 auto;
+  font-size: var(--font-size-13, 0.8125rem);
+}
+
+.nelflow-action-summary__result {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.nelflow-action-summary__immune {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.nelflow-action-summary__trait {
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.nelflow-action-summary__none,
+.nelflow-action-summary__control {
+  color: var(--color-text-subtle, #666);
+  font-size: var(--font-size-11, 0.6875rem);
+}
+
+.nelflow-action-compact.nelflow-action-collapsed > .nelflow-action-header,
+.nelflow-action-compact.nelflow-action-collapsed > .nelflow-action-native-detail {
+  display: none;
+}
+
+.nelflow-action-compact:not(.nelflow-action-collapsed) > .nelflow-action-native-detail {
+  display: block;
 }
 
 .nelflow-stack__native-records {
