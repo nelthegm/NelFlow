@@ -1,11 +1,11 @@
 {
   "id": "nelflow",
   "title": "Nelflow",
-  "description": "PF2e NPC and player Strike flow with attacker-scoped stacks, shared-roll multi-target resolution, and Toolbelt Target Helper basic-save damage automation. 0.14.1 preserves Strike riders and compact action/immunity results for readable combat presentation.",
-  "version": "0.14.1",
+  "description": "PF2e NPC and player Strike flow with attacker-scoped stacks, shared-roll multi-target resolution, and Toolbelt Target Helper basic-save damage automation. 0.14.2 emits correlated post-application damage events for optional NelZones fire/cold reactions.",
+  "version": "0.14.2",
   "url": "https://github.com/nelthegm/NelFlow",
   "manifest": "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json",
-  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.14.1/nelflow.zip",
+  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.14.2/nelflow.zip",
   "authors": [
     {
       "name": "Nelson Cruz"

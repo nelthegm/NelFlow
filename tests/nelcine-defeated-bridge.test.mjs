@@ -338,7 +338,7 @@ test("40-43. Failure fails open", async () => {
   assert.equal(broadcasts.length, 0);
 });
 
-test("44-55. Regression wiring + version 0.14.1", () => {
+test("44-55. Regression wiring + version 0.14.2", () => {
   const main = source("scripts/main.js");
   assert.match(main, /registerNelcineDefeatedHooks/);
   assert.match(source("scripts/nelcine-action-bridge.js"), /broadcastActionResult/);
@@ -350,10 +350,10 @@ test("44-55. Regression wiring + version 0.14.1", () => {
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.14.1");
-  assert.equal(pkg.version, "0.14.1");
+  assert.equal(module.version, "0.14.2");
+  assert.equal(pkg.version, "0.14.2");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.1/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.2/nelflow.zip",
   );
 });

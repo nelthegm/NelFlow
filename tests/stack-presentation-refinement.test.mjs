@@ -245,8 +245,8 @@ test("Results is omitted when no inspection records exist", () => {
   assert.match(source("scripts/player-strike-ui.js"), /if \(!records\.length\) return null/);
   assert.match(source("scripts/save-resolver-ui.js"), /if \(nativeIds\.length\)/);
 });
-test("version remains 0.14.1", () => {
+test("version remains 0.14.2", () => {
   const manifest = JSON.parse(source("module.json"));
   assert.equal(manifest.id, "nelflow");
-  assert.equal(manifest.version, "0.14.1");
+  assert.equal(manifest.version, "0.14.2");
 });

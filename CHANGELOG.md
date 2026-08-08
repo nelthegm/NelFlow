@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.2
+
+- Emit versioned `nelflow.damageApplied` after exact DamageRoll → damage-taken
+  correlation on NelFlow-owned applications
+- Payload carries pre-IWR `immediateDamageTypes` plus authoritative AppliedDamageFlag
+  subset — never fabricated post-IWR typed amounts
+- Optional for consumers (e.g. NelZones); NelFlow remains standalone
+
 ## 0.14.1
 
 - Preserve authoritative PF2e Strike riders (critical specialization, conditions,

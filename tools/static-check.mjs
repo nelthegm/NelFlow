@@ -1189,6 +1189,23 @@ if (tracked.status === 0) {
   }
 }
 
+const damageApplied = read("scripts/damage-applied-bridge.js");
+if (!damageApplied.includes('DAMAGE_APPLIED_HOOK = "nelflow.damageApplied"')) {
+  fail("damageApplied hook name is missing");
+}
+if (!damageApplied.includes("DAMAGE_APPLIED_PROTOCOL = 1")) {
+  fail("damageApplied protocol version is missing");
+}
+if (/damageByType\s*:/.test(damageApplied)) {
+  fail("damageApplied must not invent post-IWR typed amounts");
+}
+if (!read("scripts/pf2e-adapter.js").includes("emitDamageAppliedFromApplication")) {
+  fail("pf2e-adapter must emit damageApplied after unique capture");
+}
+if (!read("scripts/main.js").includes("installDamageAppliedPublicApi")) {
+  fail("damageApplied public API is not installed");
+}
+
 if (failures.length) {
   console.error(`Static checks failed (${failures.length}):`);
   for (const failure of failures) console.error(`- ${failure}`);

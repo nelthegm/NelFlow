@@ -1,25 +1,15 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.1** preserves authoritative Strike riders and compact
-action/immunity results so critical specializations and related follow-ups stay
-visible after chat compaction. Nelflow **0.14.0** bridges NPC combat defeat to
-NelCine Defeated battlefield markers after mechanics (presentation only; Strike
-handoff via `cause.transactionId`). Nelflow **0.13.0** presents supported PF2e
-combat action results through NelCine after resolution. Nelflow **0.12.0** presents
-explicitly classified beneficial and harmful PF2e Effect Items through NelCine
-after application. Nelflow **0.11.0** presents real PF2e healing and condition
-changes through NelCine after mechanics complete (no mechanical delay).
-Nelflow **0.10.0** optionally synchronizes eligible multi-target basic-save HP
-commits with NelCine batch impacts. Nelflow **0.9.2** restores actionable
-Damage / Critical Damage controls on character Strike chat cards before damage
-is rolled, while preserving the 0.9.x NelCine integration architecture.
-Nelflow **0.9.1** is a runtime repair and packaging release: it restores
-automatic NelCine presentation for supported real Strikes, separates ordinary
-Strike cinematics from optional impact-synchronized damage, adds structurally
-verified Toolbelt **3.53.1** compatibility, repairs damage-claim static
-ordering validation, and ships an installable local ZIP.
-Mechanics and Undo behavior are preserved.
+Nelflow **0.14.2** emits a versioned post-application `nelflow.damageApplied`
+integration event that pairs an exact DamageRoll with its uniquely captured
+PF2e `damage-taken` result (pre-IWR type presence only — never fabricated
+post-IWR typed amounts). Optional consumers such as NelZones may use this for
+conservative single-type fire/cold reactions. Nelflow **0.14.1** preserves
+authoritative Strike riders and compact action/immunity results so critical
+specializations and related follow-ups stay visible after chat compaction.
+Nelflow **0.14.0** bridges NPC combat defeat to NelCine Defeated battlefield
+markers after mechanics.
 
 Nelflow 0.9.0 added optional NelCine multi-target basic-save batch presentation
 after existing save mechanics. Nelflow 0.8.0 added optional NelCine impact-sync
@@ -69,14 +59,14 @@ That manifest points at the published GitHub release asset (prepared for
 eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.1/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.2/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.1"
+game.modules.get("nelflow")?.version // "0.14.2"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s

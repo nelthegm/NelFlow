@@ -32,6 +32,7 @@ import {
 } from "./nelcine-defeated-bridge.js";
 import { installStrikeRidersPublicApi } from "./strike-riders.js";
 import { installActionResultPresentationApi } from "./action-result-presentation.js";
+import { installDamageAppliedPublicApi } from "./damage-applied-bridge.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -94,6 +95,7 @@ async function initializeReady() {
       registerNelcineDefeatedHooks();
       installStrikeRidersPublicApi();
       installActionResultPresentationApi();
+      installDamageAppliedPublicApi();
     },
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });

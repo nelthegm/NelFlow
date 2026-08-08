@@ -6,6 +6,7 @@ import {
   validateDamageCandidate,
 } from "./damage-correlation.js";
 import { logger } from "./logger.js";
+import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
 
 const pendingApplicationCaptures = new Map();
 const pendingSpellDamageCaptures = new Map();
@@ -797,8 +798,35 @@ export class PF2eAdapter {
         shieldBlockRequest: false,
         outcome,
       });
+      const applicationMessage = finishApplicationCapture(capture);
+      // Post-application integration event: exact DamageRoll ↔ unique damage-taken
+      // capture only. Never emits on undo (undo does not use this path).
+      if (applicationMessage) {
+        try {
+          emitDamageAppliedFromApplication({
+            transactionId: applicationId,
+            applicationMessage,
+            transformedRoll,
+            damageMessage,
+            targetActorUuid: targetActor.uuid,
+            targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid ?? null,
+            sourceActor,
+            sourceItem,
+          });
+        } catch (error) {
+          logger.error(
+            "damageApplied emission failed",
+            {
+              stage: "damage-applied-emit",
+              reason: error instanceof Error ? error.message : String(error),
+              applicationId,
+            },
+            error,
+          );
+        }
+      }
       return {
-        applicationMessage: finishApplicationCapture(capture),
+        applicationMessage,
         transformedRoll,
       };
     } finally {
