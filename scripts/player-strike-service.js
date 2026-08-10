@@ -25,6 +25,7 @@ import {
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
+import { tryEmitStrikePresentationFeed } from "./strike-presentation-feed.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
@@ -467,7 +468,7 @@ async function processDamage(message) {
         stage: "player-strike-application",
         reason: null,
       });
-      tryDeliverStrikePresentation({
+      const presentationArgs = {
         transactionId: transaction.id,
         transactionType: "player-strike",
         attackMessage,
@@ -483,7 +484,9 @@ async function processDamage(message) {
         targetActorUuid: transaction.snapshot?.targetActorUuid ?? null,
         itemUuid: transaction.snapshot?.sourceItemUuid ?? null,
         actionName: transaction.snapshot?.strikeName ?? null,
-      });
+      };
+      tryEmitStrikePresentationFeed(presentationArgs);
+      tryDeliverStrikePresentation(presentationArgs);
       return true;
     } catch (error) {
       await TransactionStore.update(attackMessage, {

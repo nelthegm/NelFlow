@@ -1,6 +1,9 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.4** adds a presentation-neutral resolved Strike integration feed for
+battlefield presentation consumers such as NelTactics (`nelflow.strikeResolvedPresentation`,
+protocol 1 via `game.nelflow.integrations.strikePresentation`). NelTactics is optional.
 Nelflow **0.14.3** keeps ordinary player-character Strike attack and damage
 presentation fully native to PF2e. Nelflow silently correlates and applies the
 exact native damage roll, then adds only a small application/guarded-Undo footer
@@ -59,18 +62,17 @@ In Foundry: **Add-on Modules → Install Module**, paste:
 https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 ```
 
-That manifest points at the published GitHub release asset (prepared for
-eventual RC packaging):
+That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.3-rc1/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.4/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.3"
+game.modules.get("nelflow")?.version // "0.14.4"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -88,6 +90,26 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.4 presentation-neutral Strike feed
+
+Nelflow emits `nelflow.strikeResolvedPresentation` once per supported resolved
+Strike transaction so optional presentation modules (for example NelTactics) can
+consume attack/damage identity without depending on NelCine.
+
+```js
+game.nelflow.integrations.strikePresentation.getStatus()
+// { protocol: 1, hook: "nelflow.strikeResolvedPresentation", available: true, ... }
+
+game.nelflow.dev.watchStrikePresentationFeed()
+```
+
+`nelflow.strikeResolved` remains the NelCine-specific delivery hook. The neutral
+feed is independent of NelCine install/active settings and impact sync. It does
+not compact cards, suppress Damage buttons, reroll damage, or apply HP.
+
+See [0.14.4 release notes](docs/RELEASE_NOTES_0.14.4.md) and
+[runtime plan](docs/NELFLOW_0.14.4_TEST_PLAN.md).
 
 ## Nelflow 0.14.3 native character Strikes
 
@@ -887,6 +909,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.4 presentation-neutral Strike feed](docs/RELEASE_NOTES_0.14.4.md)
 - [Nelflow 0.14.3 native character Strike notes](docs/RELEASE_NOTES_0.14.3.md)
 - [Nelflow 0.12.0 buff & debuff cinematic notes](docs/RELEASE_NOTES_0.12.0.md)
 - [Nelflow 0.11.0 healing & condition cinematic notes](docs/RELEASE_NOTES_0.11.0.md)

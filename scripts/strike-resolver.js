@@ -15,6 +15,7 @@ import {
   tryDeliverStrikeImpactSync,
   tryDeliverStrikePresentation,
 } from "./nelcine-strike-delivery.js";
+import { tryEmitStrikePresentationFeed } from "./strike-presentation-feed.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
@@ -106,6 +107,18 @@ function presentationArgsFromStrike({
     actionName: strike.item?.name ?? null,
     mapPenalty: strike.mapPenalty ?? null,
   };
+}
+
+/**
+ * Always emit the presentation-neutral feed, then optionally deliver to NelCine.
+ * Feed is independent of NelCine gates; NelCine path is unchanged.
+ * @param {object} args
+ * @returns {{ feed: object, nelcine: object }}
+ */
+function deliverResolvedStrikePresentation(args) {
+  const feed = tryEmitStrikePresentationFeed(args);
+  const nelcine = tryDeliverStrikePresentation(args);
+  return { feed, nelcine };
 }
 
 async function syncStack(attackMessage, transaction, stage) {
@@ -365,7 +378,7 @@ export class StrikeResolver {
           targetName: targetToken.name,
         });
         await syncStack(message, transaction, "skipped");
-        tryDeliverStrikePresentation(
+        deliverResolvedStrikePresentation(
           presentationArgsFromStrike({
             transaction,
             strike,
@@ -414,7 +427,7 @@ export class StrikeResolver {
             elapsedMs: rolled.elapsedMs ?? null,
           });
           notify("Nelflow.Notification.ManualApplicationRequired");
-          tryDeliverStrikePresentation(
+          deliverResolvedStrikePresentation(
             presentationArgsFromStrike({
               transaction,
               strike,
@@ -462,7 +475,7 @@ export class StrikeResolver {
       await syncStack(message, transaction, "damage-rolled");
 
       if (!getSetting(SETTINGS.AUTO_APPLY)) {
-        tryDeliverStrikePresentation(
+        deliverResolvedStrikePresentation(
           presentationArgsFromStrike({
             transaction,
             strike,
@@ -507,7 +520,7 @@ export class StrikeResolver {
           elapsedMs: transaction.damageCorrelation?.elapsedMs ?? null,
         });
         notify("Nelflow.Notification.ManualApplicationRequired");
-        tryDeliverStrikePresentation(
+        deliverResolvedStrikePresentation(
           presentationArgsFromStrike({
             transaction,
             strike,
@@ -550,7 +563,7 @@ export class StrikeResolver {
           preApplication,
           triggerSource: COMMIT_TRIGGERS.IMMEDIATE,
         });
-        tryDeliverStrikePresentation(
+        deliverResolvedStrikePresentation(
           presentationArgsFromStrike({
             transaction,
             strike,
@@ -572,6 +585,21 @@ export class StrikeResolver {
         targetToken,
         damageMessage: rolled.damageMessage,
         damageSummary,
+      });
+
+      // Neutral feed once; impact-sync owns NelCine cinematic delivery separately.
+      tryEmitStrikePresentationFeed({
+        ...presentationArgsFromStrike({
+          transaction,
+          strike,
+          message,
+          targetToken,
+          damageMessage: rolled.damageMessage,
+          damageSummary,
+          includeDamage: true,
+          impactSyncSelected: true,
+        }),
+        payload: rawPayload,
       });
 
       armPendingImpactCommit(

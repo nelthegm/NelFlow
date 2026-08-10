@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.4
+
+- Add presentation-neutral resolved Strike feed `nelflow.strikeResolvedPresentation`
+  (protocol 1) for optional battlefield consumers such as NelTactics
+- Expose `game.nelflow.integrations.strikePresentation` and concise feed watchers
+- Keep `nelflow.strikeResolved` as the NelCine-specific delivery path
+- Preserve 0.14.3 native character Strike cards, NPC stacks, and
+  `nelflow.damageApplied` semantics
+
 ## 0.14.3
 
 - Keep ordinary single-target character Strike attack and damage cards fully

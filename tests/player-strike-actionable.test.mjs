@@ -217,7 +217,9 @@ test("39. PF2e remains authoritative for native damage construction and IWR", ()
 
 test("40. character mechanics still deliver NelCine after application", () => {
   const service = source("scripts/player-strike-service.js");
-  assert.match(service, /tryDeliverStrikePresentation\(\{[\s\S]*transactionType: "player-strike"/);
+  assert.match(service, /tryDeliverStrikePresentation\(presentationArgs\)/);
+  assert.match(service, /tryEmitStrikePresentationFeed\(presentationArgs\)/);
+  assert.match(service, /transactionType: "player-strike"/);
   assert.match(service, /impactSyncSelected: false/);
 });
 
@@ -248,12 +250,44 @@ test("44. recovery remains separate and fail-open", () => {
   assert.match(chat, /NativeRecordsController\.failOpen/);
 });
 
-test("45. 0.14.3 metadata targets the RC1 package", () => {
+test("45. 0.14.4 metadata targets the published package", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.3");
-  assert.equal(packageMetadata.version, "0.14.3");
+  assert.equal(module.version, "0.14.4");
+  assert.equal(packageMetadata.version, "0.14.4");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.3-rc1/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.4/nelflow.zip");
+});
+
+test("46. NelCine strike delivery remains after PC actionable presentation", () => {
+  const service = source("scripts/player-strike-service.js");
+  const delivery = source("scripts/nelcine-strike-delivery.js");
+  assert.match(service, /tryDeliverStrikePresentation/);
+  assert.match(delivery, /NELCINE_STRIKE_RESOLVED_HOOK/);
+  assert.match(delivery, /nelflow\.strikeResolved/);
+});
+
+test("47. NelCine impact and save-batch bridges remain present and exclusive with presentation delivery", () => {
+  const delivery = source("scripts/nelcine-strike-delivery.js");
+  const impact = source("scripts/nelcine-impact-bridge.js");
+  const batch = source("scripts/nelcine-save-batch-bridge.js");
+  const resolver = source("scripts/strike-resolver.js");
+  assert.match(impact, /nelcine\.strikeImpact/);
+  assert.match(batch, /tryEmitToolbeltSaveBatch|tryEmitLegacySaveBatch/);
+  assert.match(delivery, /impactSyncSelected/);
+  assert.match(resolver, /tryDeliverStrikePresentation|nelcine/);
+});
+
+test("48. PC actionable UI does not invent NelCine hooks or impact commits", () => {
+  const ui = source("scripts/player-strike-ui.js");
+  assert.doesNotMatch(ui, /nelflow\.strikeResolved|nelcine\.strikeImpact|tryDeliverStrikePresentation/);
+  assert.doesNotMatch(ui, /commitStrikeApplication|AWAITING_IMPACT/);
+});
+
+test("49. player Strike application emits neutral feed then NelCine delivery, without impact-sync by default", () => {
+  const service = source("scripts/player-strike-service.js");
+  assert.match(service, /tryEmitStrikePresentationFeed\(presentationArgs\)/);
+  assert.match(service, /tryDeliverStrikePresentation\(presentationArgs\)/);
+  assert.match(service, /impactSyncSelected:\s*false/);
 });
