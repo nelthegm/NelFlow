@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.3
+
+- Keep ordinary single-target character Strike attack and damage cards fully
+  native to PF2e, including native Damage/Critical Damage controls and card content
+- Add only one privacy-aware application/guarded-Undo footer to the exact native
+  damage card after Nelflow silently correlates and applies damage
+- Preserve compact NPC stacks and the existing shared-roll multi-target character
+  summary exception
+- Preserve exact correlation, IWR, application proof, reload recovery, NelCine,
+  NelZones, Toolbelt, riders, actions, effects, healing, and defeated integrations
+
 ## 0.14.2
 
 - Emit versioned `nelflow.damageApplied` after exact DamageRoll → damage-taken

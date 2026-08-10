@@ -52,8 +52,8 @@ test("one transaction has exactly one canonical presentation host", () => {
   assert.deepEqual(hosts, ["damage"]);
 });
 
-test("hidden or deleted damage falls back to the visible attack card", () => {
-  assert.equal(selectPlayerStrikePresentationHost(transaction(), (id) => id === "attack"), "attack");
+test("hidden or deleted damage never turns the native attack card into an application host", () => {
+  assert.equal(selectPlayerStrikePresentationHost(transaction(), (id) => id === "attack"), null);
 });
 
 test("application card is used only when earlier hosts are unavailable", () => {
@@ -77,7 +77,7 @@ test("canonical selection is deterministic after reload", () => {
 test("duplicate linked IDs are deduplicated without reordering", () => {
   assert.deepEqual(
     playerStrikePresentationCandidates(transaction({ applicationMessageId: "damage" })),
-    ["damage", "attack"],
+    ["damage"],
   );
 });
 
@@ -148,7 +148,7 @@ test("legacy diagnostic modes do not mutate persistent diagnostic data", () => {
 
 test("viewer visibility callback prevents hidden-message hosting", () => {
   const visible = new Set(["attack"]);
-  assert.equal(selectPlayerStrikePresentationHost(transaction(), (id) => visible.has(id)), "attack");
+  assert.equal(selectPlayerStrikePresentationHost(transaction(), (id) => visible.has(id)), null);
   assert.equal(visible.has("damage"), false);
 });
 
@@ -216,7 +216,8 @@ test("diagnostic flags, sanitized export, and guarded recovery remain available"
 test("application summary and Undo each have one canonical player host", () => {
   const playerUi = source("scripts/player-strike-ui.js");
   assert.equal((playerUi.match(/status\.append\(undo\)/g) ?? []).length, 1);
-  assert.equal((playerUi.match(/body\.textContent = summaryText/g) ?? []).length, 1);
+  assert.equal((playerUi.match(/body\.textContent = applicationText/g) ?? []).length, 1);
+  assert.match(playerUi, /data-nelflow-application-status/);
   assert.doesNotMatch(playerUi, /nelflowCanonicalTransaction/);
 });
 
@@ -240,12 +241,12 @@ test("player and NPC presentation omit transaction identifiers from status DOM",
   assert.doesNotMatch(source("scripts/chat-ui.js"), /textContent\s*=\s*row\.presentationError/);
 });
 
-test("0.14.2 metadata preserves GitHub distribution structure", () => {
+test("0.14.3 metadata preserves GitHub distribution structure", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.2");
-  assert.equal(packageMetadata.version, "0.14.2");
+  assert.equal(module.version, "0.14.3");
+  assert.equal(packageMetadata.version, "0.14.3");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.2/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.3-rc1/nelflow.zip");
 });

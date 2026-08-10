@@ -1,7 +1,11 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.2** emits a versioned post-application `nelflow.damageApplied`
+Nelflow **0.14.3** keeps ordinary player-character Strike attack and damage
+presentation fully native to PF2e. Nelflow silently correlates and applies the
+exact native damage roll, then adds only a small application/guarded-Undo footer
+to that native damage card. NPC Strikes retain Nelflow's compact stacks.
+Nelflow **0.14.2** introduced the versioned post-application `nelflow.damageApplied`
 integration event that pairs an exact DamageRoll with its uniquely captured
 PF2e `damage-taken` result (pre-IWR type presence only — never fabricated
 post-IWR typed amounts). Optional consumers such as NelZones may use this for
@@ -26,13 +30,13 @@ Fist · MAP −10 → Brynna
 Miss
 ```
 
-Original PF2e attack, damage, and damage-taken messages remain intact. With
-stack-first linked-card suppression enabled, those exact messages are hidden
-only in the rendered chat DOM once the canonical Nelflow presentation is
-available. **Results** then provides viewer-authorized Attack, Damage, and
-Critical Damage roll inspection by hover or keyboard focus. Stored content,
-rolls, PF2e flags, privacy, and native controls are never rewritten; uncertain
-linkage or presentation failure leaves the native card visible.
+Original PF2e attack, damage, and damage-taken messages remain intact. Ordinary
+single-target PC attack and damage cards always stay fully visible. For NPC and
+shared-roll batch workflows, stack-first linked-card suppression may hide exact
+records only in the rendered chat DOM once canonical Nelflow presentation is
+available. **Results** then provides viewer-authorized roll inspection. Stored
+content, rolls, PF2e flags, privacy, and native controls are never rewritten;
+uncertain linkage or presentation failure leaves the native card visible.
 
 ## Requirements
 
@@ -59,14 +63,14 @@ That manifest points at the published GitHub release asset (prepared for
 eventual RC packaging):
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.2/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.3-rc1/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.2"
+game.modules.get("nelflow")?.version // "0.14.3"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -84,6 +88,22 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.3 native character Strikes
+
+Ordinary single-target Strikes by PF2e `character` actors keep PF2e's complete
+native attack card, Damage/Critical Damage buttons, roll notes, effects, links,
+tooltips, and listeners. Clicking PF2e's native damage control creates the normal
+full damage card. Nelflow uses its existing exact click-intent correlation and
+PF2e-compatible application path silently, adding only `Applied … HP … · Undo`
+to the exact native damage card. Reload reconstructs the footer from durable
+flags without rerolling or reapplying damage.
+
+NPC Strikes keep compact Nelflow stacks. Shared-roll multi-target character
+Strikes retain their minimum Nelflow batch summary because one native PF2e card
+cannot represent their independent target outcomes and guarded Undo operations.
+See [0.14.3 release notes](docs/RELEASE_NOTES_0.14.3.md) and
+[runtime plan](docs/NELFLOW_0.14.3_TEST_PLAN.md).
 
 ## Nelflow 0.14.1 Strike riders & action readability
 
@@ -248,8 +268,9 @@ passed Foundry/Forge runtime testing before stable promotion.
 
 Player Strike application status renders once per logical transaction. The
 viewer-visible native damage message is the preferred canonical host; if that
-message is hidden or deleted, the visible attack and then application record
-are deterministic fallbacks. A normal completed Strike adds one concise line,
+message is unavailable, the visible application record is the only ordinary
+fallback. The native attack card is never repurposed as an application host in
+0.14.3. A normal completed Strike adds one concise line,
 for example `Applied 9 damage to Skeletal Mage`, and one guarded GM Undo when
 legal. Linked attack/application cards do not repeat Nelflow-owned status or
 Undo. Linked NPC application cards use a neutral **PF2e Application Record**
@@ -273,9 +294,9 @@ and reconnect render, with defensive CSS preventing a first-paint flash.
 Set **Player Strike Auto-Apply** to **Hostile Targets** or **All Targets**. A
 character's player or GM user targets once and rolls the Strike normally.
 Nelflow snapshots the exact PF2e attack, source, target, author, action/index,
-MAP, and final outcome, then shows the attack result with an actionable
-**Damage** or **Critical Damage** chat control that delegates to PF2e's native
-button. It never autorolls Damage or Critical Damage. A capture-phase listener
+MAP, and final outcome while leaving PF2e's native attack card and its
+**Damage** or **Critical Damage** controls fully visible. It never autorolls
+Damage or Critical Damage. A capture-phase listener
 records a 30-second pending intent for that exact attack card without stopping
 PF2e's handler. The outgoing
 native damage message receives an inert exact binding. Binding does not finalize
@@ -339,8 +360,9 @@ The stack is presentation only. The native attack message's canonical
 
 - Exact linked PF2e attack, damage, critical-damage, and application messages
   remain intact as private recovery/audit documents.
-- When configured, their ordinary visual card is suppressed only after an
-  exact canonical Nelflow stack or character summary renders successfully.
+- When configured, NPC and shared-roll batch cards are suppressed only after an
+  exact canonical Nelflow stack or batch summary renders successfully. Ordinary
+  single-target character attack and damage cards are never suppressed.
 - The visible stack heading identifies the attacker and may say **Out of
   Turn**. Round remains in the internal stack identity but is not displayed.
 - Guarded Undo stays on the canonical application summary; application records
@@ -865,6 +887,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.3 native character Strike notes](docs/RELEASE_NOTES_0.14.3.md)
 - [Nelflow 0.12.0 buff & debuff cinematic notes](docs/RELEASE_NOTES_0.12.0.md)
 - [Nelflow 0.11.0 healing & condition cinematic notes](docs/RELEASE_NOTES_0.11.0.md)
 - [Nelflow 0.10.0 save-batch impact sync notes](docs/RELEASE_NOTES_0.10.0.md)

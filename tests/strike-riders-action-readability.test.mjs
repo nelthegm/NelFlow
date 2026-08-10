@@ -53,9 +53,9 @@ function installGame(user = { isGM: true, isOwner: false }) {
   };
 }
 
-test("version is 0.14.2", () => {
-  assert.match(source("module.json"), /"version": "0.14.2"/);
-  assert.match(source("package.json"), /"version": "0.14.2"/);
+test("version is 0.14.3", () => {
+  assert.match(source("module.json"), /"version": "0.14.3"/);
+  assert.match(source("package.json"), /"version": "0.14.3"/);
 });
 
 test("1. Critical Strike with no riders shows no empty Rider section", () => {

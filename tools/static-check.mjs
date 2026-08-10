@@ -1105,8 +1105,11 @@ if ((diagnosticsTests.match(/\btest\s*\(/g) ?? []).length < 70) {
 }
 for (const path of [
   "scripts/player-strike-presentation.js",
+  "scripts/strike-presentation-mode.js",
   "scripts/transaction-diagnostics-policy.js",
   "tests/presentation-cleanup.test.mjs",
+  "docs/NELFLOW_0.14.3_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.3.md",
 ]) {
   if (!existsSync(join(root, path))) fail(`Nelflow 0.6.5 presentation cleanup file is missing: ${path}`);
 }
@@ -1138,6 +1141,40 @@ if (!read("styles/nelflow.css").match(/\.nelflow-diagnostics,[\s\S]*display:\s*n
 }
 if (/deleteChatMessage|\.delete\s*\(|\.setFlag\s*\(|\.update\s*\(/.test(read("scripts/player-strike-ui.js"))) {
   fail("player Strike presentation must not mutate or delete native ChatMessages");
+}
+const strikePresentationMode = read("scripts/strike-presentation-mode.js");
+const playerStrikeUi = read("scripts/player-strike-ui.js");
+const nativeCompactor = read("scripts/native-card-compactor.js");
+for (const required of [
+  'NATIVE_AUGMENTED: "native-augmented"',
+  'CANONICAL_STACK: "canonical-stack"',
+  'transaction?.transactionType === "multi-target-strike"',
+  '[undefined, null, "character"].includes(transaction?.snapshot?.actorType)',
+]) {
+  if (!strikePresentationMode.includes(required)) {
+    fail(`Nelflow 0.14.3 Strike presentation selector is missing: ${required}`);
+  }
+}
+for (const required of [
+  "bindCharacterStrikeIntentCapture",
+  "data-nelflow-application-status",
+  "canShowPlayerStrikeUndo",
+  "StrikeResolver.undoFromMessage",
+  "usesNativeAugmentedStrikePresentation",
+]) {
+  if (!playerStrikeUi.includes(required)) {
+    fail(`Nelflow 0.14.3 native PC augmentation is missing: ${required}`);
+  }
+}
+if (/damageActionControl|activateNativeStrikeDamage|resultsControl|authorizedAttackTotal|RollPopoverController/.test(playerStrikeUi)) {
+  fail("Nelflow 0.14.3 must not recreate PC Strike controls, summaries, or Results");
+}
+if (!nativeCompactor.match(/usesNativeAugmentedStrikePresentation\(linked\.transaction\)[\s\S]*restoreFullCard\(html\)/)) {
+  fail("Nelflow 0.14.3 must restore full native PC attack and damage cards");
+}
+const nativePcTests = read("tests/player-strike-actionable.test.mjs");
+if ((nativePcTests.match(/\btest\s*\(/g) ?? []).length < 40) {
+  fail("Nelflow 0.14.3 requires at least 40 focused native PC presentation scenarios");
 }
 const diagnosticsTestPlan = read("docs/SLICE_003_4_TEST_PLAN.md");
 if ((diagnosticsTestPlan.match(/^\d+\.\s+/gm) ?? []).length < 55) {

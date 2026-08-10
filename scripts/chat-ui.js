@@ -681,6 +681,7 @@ export function renderNelflowChat(message, html) {
   } catch (error) {
     removeLegacyTransactionDiagnostics(html);
     html.querySelectorAll(".nelflow-recovery").forEach((node) => node.remove());
+    html.querySelectorAll("[data-nelflow-application-status]").forEach((node) => node.remove());
     failOpenAutoDamageRoll(html);
     html.classList.remove(
       "nelflow-native-record-hidden",

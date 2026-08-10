@@ -146,5 +146,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.9.1 ready");
+  logger.debug("Nelflow 0.14.3 ready");
 }
