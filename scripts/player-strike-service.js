@@ -27,6 +27,7 @@ import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
 import {
   tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikeDamageRolledPresentationFeed,
   tryEmitStrikePresentationFeed,
 } from "./strike-presentation-feed.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
@@ -411,6 +412,32 @@ async function processDamage(message) {
       authorityClaimState: "claimed-by-this-gm",
       claimedAt: transaction.claimedAt ?? Date.now(),
     });
+
+    const damageSummary = PF2eAdapter.summarizeDamageRoll(damage.roll);
+    const presentationArgs = {
+      transactionId: transaction.id,
+      transactionType: "player-strike",
+      attackMessage,
+      damageMessage,
+      damageSummary,
+      includeDamage: true,
+      multiTarget: false,
+      impactSyncSelected: false,
+      outcome: damage.evidence.outcome ?? transaction.snapshot?.outcome ?? null,
+      damageVariant: damageValidation.variant ?? null,
+      critical: damageValidation.variant === "critical",
+      sceneId: transaction.snapshot?.sceneId ?? null,
+      attackerTokenUuid: transaction.snapshot?.sourceTokenUuid ?? null,
+      attackerActorUuid: transaction.snapshot?.sourceActorUuid ?? null,
+      targetTokenUuid: transaction.snapshot?.targetTokenUuid ?? null,
+      targetActorUuid: transaction.snapshot?.targetActorUuid ?? null,
+      itemUuid: transaction.snapshot?.sourceItemUuid ?? null,
+      actionName: transaction.snapshot?.strikeName ?? null,
+    };
+
+    // Stage 2: exact correlated native DamageRoll — before HP application.
+    tryEmitStrikeDamageRolledPresentationFeed(presentationArgs);
+
     const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
     if (!preApplication) {
       await markManual(attackMessage, transaction, PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
@@ -471,23 +498,6 @@ async function processDamage(message) {
         stage: "player-strike-application",
         reason: null,
       });
-      const presentationArgs = {
-        transactionId: transaction.id,
-        transactionType: "player-strike",
-        attackMessage,
-        damageMessage,
-        damageSummary: PF2eAdapter.summarizeDamageRoll(damage.roll),
-        includeDamage: true,
-        multiTarget: false,
-        impactSyncSelected: false,
-        outcome: damage.evidence.outcome ?? transaction.snapshot?.outcome ?? null,
-        attackerTokenUuid: transaction.snapshot?.sourceTokenUuid ?? null,
-        attackerActorUuid: transaction.snapshot?.sourceActorUuid ?? null,
-        targetTokenUuid: transaction.snapshot?.targetTokenUuid ?? null,
-        targetActorUuid: transaction.snapshot?.targetActorUuid ?? null,
-        itemUuid: transaction.snapshot?.sourceItemUuid ?? null,
-        actionName: transaction.snapshot?.strikeName ?? null,
-      };
       tryEmitStrikePresentationFeed(presentationArgs);
       tryDeliverStrikePresentation(presentationArgs);
       return true;

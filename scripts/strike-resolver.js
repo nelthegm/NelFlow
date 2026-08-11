@@ -17,6 +17,7 @@ import {
 } from "./nelcine-strike-delivery.js";
 import {
   tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikeDamageRolledPresentationFeed,
   tryEmitStrikePresentationFeed,
 } from "./strike-presentation-feed.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
@@ -102,6 +103,8 @@ function presentationArgsFromStrike({
     impactSyncSelected,
     multiTarget: false,
     outcome: strike.outcome,
+    critical: strike.outcome === "criticalSuccess",
+    sceneId: transaction.snapshot?.sceneId ?? targetToken?.document?.parent?.id ?? null,
     attackerTokenUuid: strike.sourceTokenUuid ?? message.token?.document?.uuid ?? null,
     attackerActorUuid: strike.actor?.uuid ?? null,
     targetTokenUuid: targetToken?.document?.uuid ?? null,
@@ -487,6 +490,19 @@ export class StrikeResolver {
       unpersistedDamageClaimId = null;
       transaction = await TransactionStore.linkMessage(message, rolled.damageMessage, "damage");
       await syncStack(message, transaction, "damage-rolled");
+
+      // Stage 2: authoritative native DamageRoll exists — before application / final.
+      tryEmitStrikeDamageRolledPresentationFeed(
+        presentationArgsFromStrike({
+          transaction,
+          strike,
+          message,
+          targetToken,
+          damageMessage: rolled.damageMessage,
+          damageSummary,
+          includeDamage: true,
+        }),
+      );
 
       if (!getSetting(SETTINGS.AUTO_APPLY)) {
         deliverResolvedStrikePresentation(

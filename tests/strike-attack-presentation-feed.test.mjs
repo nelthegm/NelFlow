@@ -1,5 +1,5 @@
 /**
- * Two-stage presentation-neutral Strike feed (0.14.5).
+ * Attack-stage presentation-neutral Strike feed (protocol 3 / 0.14.6).
  */
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
@@ -45,7 +45,7 @@ function attackArgs(overrides = {}) {
   };
 }
 
-describe("0.14.5 two-stage Strike presentation feed", () => {
+describe("Strike attack presentation feed", () => {
   beforeEach(() => {
     clearStrikePresentationFeedEmissions();
     globalThis.game = {
@@ -62,17 +62,22 @@ describe("0.14.5 two-stage Strike presentation feed", () => {
     };
   });
 
-  it("1-4. attack hook + protocol 2 + preserves resolved hook", () => {
+  it("1-4. attack hook + protocol 3 + preserves resolved hook", () => {
     assert.equal(STRIKE_ATTACK_PRESENTATION_FEED_HOOK, "nelflow.strikeAttackResolvedPresentation");
     assert.equal(STRIKE_PRESENTATION_FEED_HOOK, "nelflow.strikeResolvedPresentation");
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 2);
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 3);
     installStrikePresentationFeedApi();
     const api = game.nelflow.integrations.strikePresentation;
-    assert.equal(api.protocol, 2);
+    assert.equal(api.protocol, 3);
     assert.equal(api.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
+    assert.equal(api.damageRolledHook, "nelflow.strikeDamageRolledPresentation");
     assert.equal(api.resolvedHook, STRIKE_PRESENTATION_FEED_HOOK);
     assert.equal(api.hook, STRIKE_PRESENTATION_FEED_HOOK);
-    assert.deepEqual(api.stages, { attack: true, damage: true });
+    assert.deepEqual(api.stages, {
+      attack: true,
+      damageRolled: true,
+      resolved: true,
+    });
   });
 
   it("5-9. NPC degrees emit attack; attack precedes resolved in source order", () => {
@@ -220,6 +225,6 @@ describe("0.14.5 two-stage Strike presentation feed", () => {
     assert.match(resolver, /nelflow\.strikeResolved|tryDeliverStrikePresentation/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.5");
+    assert.equal(module.version, "0.14.6");
   });
 });

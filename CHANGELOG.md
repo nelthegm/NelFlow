@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.6
+
+- Add Stage 2 presentation-neutral feed `nelflow.strikeDamageRolledPresentation`
+  (protocol 3) when an exact native Strike DamageRoll is correlated
+- Emit before HP application / IWR verification; `damage.total` is rolled damage
+- Preserve Stage 1 attack and Stage 3 resolved hooks; shared transactionId
+- Preserve native PC cards, NelCine, and `nelflow.damageApplied` semantics
+
 ## 0.14.5
 
 - Add Stage 1 presentation-neutral attack feed

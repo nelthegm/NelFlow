@@ -1,12 +1,12 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.5** adds a two-stage presentation-neutral Strike feed for
-battlefield consumers such as NelTactics:
-`nelflow.strikeAttackResolvedPresentation` (immediate attack check) and
-`nelflow.strikeResolvedPresentation` (existing damage/final stage), protocol 2
-via `game.nelflow.integrations.strikePresentation`. NelTactics is optional.
-Nelflow **0.14.4** introduced the resolved-stage feed (protocol 1).
+Nelflow **0.14.6** adds Stage 2 of the presentation-neutral Strike feed:
+`nelflow.strikeDamageRolledPresentation` when an exact native DamageRoll exists
+(before HP application; rolled total, not post-IWR HP loss), protocol 3 via
+`game.nelflow.integrations.strikePresentation`. NelTactics is optional.
+Nelflow **0.14.5** added Stage 1 `nelflow.strikeAttackResolvedPresentation`.
+Nelflow **0.14.4** introduced the resolved-stage feed.
 Nelflow **0.14.3** keeps ordinary player-character Strike attack and damage
 presentation fully native to PF2e. Nelflow silently correlates and applies the
 exact native damage roll, then adds only a small application/guarded-Undo footer
@@ -68,14 +68,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.5/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.6/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.5"
+game.modules.get("nelflow")?.version // "0.14.6"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -93,6 +93,54 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.6 three-stage presentation-neutral Strike feed
+
+Stage 1 — attack check resolved:
+
+```text
+nelflow.strikeAttackResolvedPresentation
+```
+
+Stage 2 — authoritative native DamageRoll exists (pre-application):
+
+```text
+nelflow.strikeDamageRolledPresentation
+```
+
+Stage 2 `damage.total` is the **rolled** Strike damage result, not post-IWR HP
+loss. Later `nelflow.damageApplied` remains the application event.
+
+Stage 3 — existing final resolved feed:
+
+```text
+nelflow.strikeResolvedPresentation
+```
+
+```js
+game.nelflow.integrations.strikePresentation.getStatus()
+// {
+//   protocol: 3,
+//   attackHook: "nelflow.strikeAttackResolvedPresentation",
+//   damageRolledHook: "nelflow.strikeDamageRolledPresentation",
+//   resolvedHook: "nelflow.strikeResolvedPresentation",
+//   hook: "nelflow.strikeResolvedPresentation",
+//   available: true,
+//   stages: { attack: true, damageRolled: true, resolved: true }
+// }
+
+game.nelflow.dev.watchStrikePresentationFeed()
+```
+
+All three stages share the same `transactionId`. Misses emit Stage 1 (and may
+emit Stage 3 on NPC paths) but never Stage 2. Clicking Damage without a created
+roll does not emit Stage 2.
+
+`nelflow.strikeResolved` remains the NelCine-specific delivery hook. The neutral
+feed is independent of NelCine and does not compact cards or apply HP.
+
+See [0.14.6 release notes](docs/RELEASE_NOTES_0.14.6.md) and
+[runtime plan](docs/NELFLOW_0.14.6_TEST_PLAN.md).
 
 ## Nelflow 0.14.5 two-stage presentation-neutral Strike feed
 
@@ -927,6 +975,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.6 immediate Strike damage-rolled feed](docs/RELEASE_NOTES_0.14.6.md)
 - [Nelflow 0.14.5 two-stage Strike presentation feed](docs/RELEASE_NOTES_0.14.5.md)
 - [Nelflow 0.14.4 presentation-neutral Strike feed](docs/RELEASE_NOTES_0.14.4.md)
 - [Nelflow 0.14.3 native character Strike notes](docs/RELEASE_NOTES_0.14.3.md)

@@ -2,10 +2,10 @@
   "id": "nelflow",
   "title": "Nelflow",
   "description": "PF2e combat flow with native player-character Strike cards, compact NPC Strike stacks, exact damage auto-application and Undo, shared-roll multi-target resolution, and Toolbelt Target Helper basic-save automation.",
-  "version": "0.14.5",
+  "version": "0.14.6",
   "url": "https://github.com/nelthegm/NelFlow",
   "manifest": "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json",
-  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.14.5/nelflow.zip",
+  "download": "https://github.com/nelthegm/NelFlow/releases/download/v0.14.6/nelflow.zip",
   "authors": [
     {
       "name": "Nelson Cruz"

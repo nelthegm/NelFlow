@@ -4,7 +4,10 @@
  * Stage 1 — attack check resolved:
  *   Hooks.callAll("nelflow.strikeAttackResolvedPresentation", payload)
  *
- * Stage 2 — damage / final resolved (existing):
+ * Stage 2 — authoritative native damage roll exists (pre-application):
+ *   Hooks.callAll("nelflow.strikeDamageRolledPresentation", payload)
+ *
+ * Stage 3 — final / resolved (existing):
  *   Hooks.callAll("nelflow.strikeResolvedPresentation", payload)
  *
  * Exactly-once guards are independent per stage.
@@ -13,6 +16,7 @@
  * nelflow.strikeResolved / impact-sync only.
  *
  * Presentation only: never mutates HP, conditions, Undo, or rolls.
+ * Stage 2 damage.total is the rolled DamageRoll total — not post-IWR HP loss.
  */
 
 import { logger } from "./logger.js";
@@ -23,11 +27,12 @@ import {
 } from "./nelcine-strike-delivery.js";
 
 export const STRIKE_ATTACK_PRESENTATION_FEED_HOOK = "nelflow.strikeAttackResolvedPresentation";
+export const STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK = "nelflow.strikeDamageRolledPresentation";
 export const STRIKE_PRESENTATION_FEED_HOOK = "nelflow.strikeResolvedPresentation";
-/** @deprecated Alias for the Stage 2 / resolved hook. */
+/** @deprecated Alias for the Stage 3 / resolved hook. */
 export const STRIKE_RESOLVED_PRESENTATION_FEED_HOOK = STRIKE_PRESENTATION_FEED_HOOK;
 
-export const STRIKE_PRESENTATION_FEED_PROTOCOL = 2;
+export const STRIKE_PRESENTATION_FEED_PROTOCOL = 3;
 
 const LOG_PREFIX = "NelFlow | Strike presentation feed |";
 const MAX_RECENT = 64;
@@ -36,7 +41,13 @@ const MAX_RECENT = 64;
 const attackEmittedByTransactionId = new Map();
 
 /** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
+const damageRolledEmittedByTransactionId = new Map();
+
+/** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
 const resolvedEmittedByTransactionId = new Map();
+
+/** @type {Map<string, { attack?: number, damageRolled?: number, resolved?: number }>} */
+const stageTimingByTransactionId = new Map();
 
 /** @type {((summary: object) => void)|null} */
 let feedWatcher = null;
@@ -54,13 +65,22 @@ export function hasStrikeAttackPresentationFeedEmission(transactionId) {
  * @param {string} transactionId
  * @returns {boolean}
  */
+export function hasStrikeDamageRolledPresentationFeedEmission(transactionId) {
+  if (!transactionId) return false;
+  return damageRolledEmittedByTransactionId.has(transactionId);
+}
+
+/**
+ * @param {string} transactionId
+ * @returns {boolean}
+ */
 export function hasStrikePresentationFeedEmission(transactionId) {
   if (!transactionId) return false;
   return resolvedEmittedByTransactionId.has(transactionId);
 }
 
 /**
- * Pure eligibility for either stage of the neutral feed (no NelCine gates).
+ * Pure eligibility for any stage of the neutral feed (no NelCine gates).
  * @param {object} ctx
  * @returns {{ eligible: boolean, reason?: string }}
  */
@@ -71,6 +91,9 @@ export function evaluateStrikePresentationFeedEligibility(ctx = {}) {
   if (ctx.alreadyEmitted === true) return { eligible: false, reason: "already-emitted" };
   if (ctx.hasAuthoritativeAttack !== true) {
     return { eligible: false, reason: "missing-authoritative-attack" };
+  }
+  if (ctx.requireAuthoritativeDamage === true && ctx.hasAuthoritativeDamage !== true) {
+    return { eligible: false, reason: "missing-authoritative-damage" };
   }
   return { eligible: true };
 }
@@ -87,11 +110,28 @@ export function tryEmitStrikeAttackPresentationFeed(args = {}) {
     hook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
     emittedMap: attackEmittedByTransactionId,
     forceIncludeDamage: false,
+    requireAuthoritativeDamage: false,
   });
 }
 
 /**
- * Emit Stage 2 — existing final / damage presentation feed.
+ * Emit Stage 2 — authoritative native Strike DamageRoll exists (pre-application).
+ * @param {object} args
+ * @returns {{ emitted: boolean, reason?: string, hook?: string }}
+ */
+export function tryEmitStrikeDamageRolledPresentationFeed(args = {}) {
+  return emitFeedStage({
+    args,
+    stage: "damageRolled",
+    hook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
+    emittedMap: damageRolledEmittedByTransactionId,
+    forceIncludeDamage: true,
+    requireAuthoritativeDamage: true,
+  });
+}
+
+/**
+ * Emit Stage 3 — existing final / resolved presentation feed.
  * @param {object} args
  * @returns {{ emitted: boolean, reason?: string, hook?: string }}
  */
@@ -102,19 +142,50 @@ export function tryEmitStrikePresentationFeed(args = {}) {
     hook: STRIKE_PRESENTATION_FEED_HOOK,
     emittedMap: resolvedEmittedByTransactionId,
     forceIncludeDamage: null,
+    requireAuthoritativeDamage: false,
   });
+}
+
+/**
+ * @param {object} args
+ * @returns {boolean}
+ */
+function hasAuthoritativeDamageTotal(args) {
+  if (Number.isFinite(args?.damageSummary?.total)) return true;
+  if (Number.isFinite(args?.payload?.damage?.total)) return true;
+  return false;
+}
+
+/**
+ * @param {object} args
+ * @returns {boolean}
+ */
+function resolveCriticalFlag(args) {
+  if (args.critical === true) return true;
+  if (args.critical === false) return false;
+  if (args.damageVariant === "critical") return true;
+  if (args.outcome === "criticalSuccess") return true;
+  return false;
 }
 
 /**
  * @param {{
  *   args: object,
- *   stage: "attack"|"resolved",
+ *   stage: "attack"|"damageRolled"|"resolved",
  *   hook: string,
  *   emittedMap: Map<string, object>,
- *   forceIncludeDamage: boolean|null
+ *   forceIncludeDamage: boolean|null,
+ *   requireAuthoritativeDamage: boolean
  * }} opts
  */
-function emitFeedStage({ args, stage, hook, emittedMap, forceIncludeDamage }) {
+function emitFeedStage({
+  args,
+  stage,
+  hook,
+  emittedMap,
+  forceIncludeDamage,
+  requireAuthoritativeDamage,
+}) {
   try {
     const transactionId =
       typeof args.transactionId === "string" && args.transactionId.trim()
@@ -129,6 +200,8 @@ function emitFeedStage({ args, stage, hook, emittedMap, forceIncludeDamage }) {
       transactionId,
       alreadyEmitted: emittedMap.has(transactionId),
       hasAuthoritativeAttack: args.hasAuthoritativeAttack !== false,
+      requireAuthoritativeDamage,
+      hasAuthoritativeDamage: hasAuthoritativeDamageTotal(args),
     });
     if (!gate.eligible) {
       return { emitted: false, reason: gate.reason };
@@ -144,7 +217,9 @@ function emitFeedStage({ args, stage, hook, emittedMap, forceIncludeDamage }) {
       const buildArgs =
         forceIncludeDamage === false
           ? { ...args, includeDamage: false, damageSummary: undefined, damageMessage: null }
-          : args;
+          : forceIncludeDamage === true
+            ? { ...args, includeDamage: true }
+            : args;
       const built = buildStrikePresentationPayload(buildArgs);
       if (!built.ok) {
         return { emitted: false, reason: built.reason };
@@ -152,15 +227,30 @@ function emitFeedStage({ args, stage, hook, emittedMap, forceIncludeDamage }) {
       payload = built.payload;
     }
 
-    // Optional stage marker — additive, ignored by older consumers.
-    if (payload && typeof payload === "object" && !Object.hasOwn(payload, "stage")) {
+    if (payload && typeof payload === "object") {
       payload = { ...payload, stage };
+      if (stage === "damageRolled") {
+        payload = {
+          ...payload,
+          critical: resolveCriticalFlag(args),
+        };
+        if (typeof args.sceneId === "string" && args.sceneId && !payload.sceneId) {
+          payload = { ...payload, sceneId: args.sceneId };
+        }
+      }
     }
 
     // Attack stage must never invent damage.
     if (stage === "attack" && payload && Object.hasOwn(payload, "damage")) {
       const { damage: _damage, ...rest } = payload;
       payload = rest;
+    }
+
+    // Damage-rolled stage requires a finite rolled total — never invent zero.
+    if (stage === "damageRolled") {
+      if (!Number.isFinite(payload?.damage?.total)) {
+        return { emitted: false, reason: "missing-authoritative-damage" };
+      }
     }
 
     rememberEmission(emittedMap, transactionId, payload);
@@ -243,11 +333,20 @@ function labelFromUuid(uuid) {
 /**
  * @param {object} payload
  * @param {string} transactionId
- * @param {"attack"|"resolved"} stage
+ * @param {"attack"|"damageRolled"|"resolved"} stage
  */
 function notifyWatcher(payload, transactionId, stage) {
   if (typeof feedWatcher !== "function") return;
   try {
+    const now = Date.now();
+    const timing = stageTimingByTransactionId.get(transactionId) ?? {};
+    timing[stage] = now;
+    stageTimingByTransactionId.set(transactionId, timing);
+    while (stageTimingByTransactionId.size > MAX_RECENT) {
+      const oldest = stageTimingByTransactionId.keys().next().value;
+      stageTimingByTransactionId.delete(oldest);
+    }
+
     const attacker =
       labelFromUuid(payload?.attackerTokenUuid) ??
       labelFromUuid(payload?.attackerActorUuid);
@@ -275,6 +374,11 @@ function notifyWatcher(payload, transactionId, stage) {
             ? payload.damage.total
             : null,
       hasDamageField: Object.hasOwn(payload ?? {}, "damage"),
+      critical: payload?.critical === true,
+      msSinceAttack: Number.isFinite(timing.attack) ? now - timing.attack : null,
+      msSinceDamageRolled: Number.isFinite(timing.damageRolled)
+        ? now - timing.damageRolled
+        : null,
     });
   } catch {
     /* watcher failures are non-fatal */
@@ -310,12 +414,34 @@ export function watchStrikePresentationFeed() {
       return;
     }
 
+    if (summary.stage === "damageRolled") {
+      const damageLine = Number.isFinite(summary.damageTotal)
+        ? String(summary.damageTotal)
+        : "damage none";
+      const timing =
+        Number.isFinite(summary.msSinceAttack)
+          ? `attack→damageRolled ${summary.msSinceAttack}ms`
+          : null;
+      console.debug(
+        [`STRIKE DAMAGE ROLLED ${shortId}`, who, damageLine, timing]
+          .filter((line) => line != null && line !== "")
+          .join("\n"),
+      );
+      return;
+    }
+
     const damageLine =
       summary.hasDamageField === false || summary.damageTotal == null
-        ? "damage none"
-        : `damage ${summary.damageTotal}`;
+        ? "application complete"
+        : `application complete · damage ${summary.damageTotal}`;
+    const timing =
+      Number.isFinite(summary.msSinceDamageRolled)
+        ? `damageRolled→resolved ${summary.msSinceDamageRolled}ms`
+        : Number.isFinite(summary.msSinceAttack)
+          ? `attack→resolved ${summary.msSinceAttack}ms`
+          : null;
     console.debug(
-      [`STRIKE RESOLVED ${shortId}`, who, damageLine]
+      [`STRIKE RESOLVED ${shortId}`, who, damageLine, timing]
         .filter((line) => line != null && line !== "")
         .join("\n"),
     );
@@ -333,7 +459,9 @@ export function stopWatchingStrikePresentationFeed() {
 /** Test helper */
 export function clearStrikePresentationFeedEmissions() {
   attackEmittedByTransactionId.clear();
+  damageRolledEmittedByTransactionId.clear();
   resolvedEmittedByTransactionId.clear();
+  stageTimingByTransactionId.clear();
   feedWatcher = null;
 }
 
@@ -341,6 +469,16 @@ export function clearStrikePresentationFeedEmissions() {
 export function seedStrikeAttackPresentationFeedEmission(transactionId) {
   if (!transactionId) return;
   attackEmittedByTransactionId.set(transactionId, {
+    transactionId,
+    emittedAt: Date.now(),
+    degree: null,
+  });
+}
+
+/** Test helper */
+export function seedStrikeDamageRolledPresentationFeedEmission(transactionId) {
+  if (!transactionId) return;
+  damageRolledEmittedByTransactionId.set(transactionId, {
     transactionId,
     emittedAt: Date.now(),
     degree: null,
@@ -366,14 +504,22 @@ export function installStrikePresentationFeedApi() {
   root.integrations = root.integrations ?? {};
   root.dev = root.dev ?? {};
 
+  const stages = Object.freeze({
+    attack: true,
+    damageRolled: true,
+    resolved: true,
+  });
+
   const status = () => ({
     protocol: STRIKE_PRESENTATION_FEED_PROTOCOL,
     hook: STRIKE_PRESENTATION_FEED_HOOK,
     attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
+    damageRolledHook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
     resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
-    stages: { attack: true, damage: true },
+    stages: { ...stages },
     recentAttackEmissions: attackEmittedByTransactionId.size,
+    recentDamageRolledEmissions: damageRolledEmittedByTransactionId.size,
     recentResolvedEmissions: resolvedEmittedByTransactionId.size,
     recentEmissions: resolvedEmittedByTransactionId.size,
   });
@@ -382,9 +528,10 @@ export function installStrikePresentationFeedApi() {
     protocol: STRIKE_PRESENTATION_FEED_PROTOCOL,
     hook: STRIKE_PRESENTATION_FEED_HOOK,
     attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
+    damageRolledHook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
     resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
-    stages: Object.freeze({ attack: true, damage: true }),
+    stages,
     getStatus: status,
   });
 

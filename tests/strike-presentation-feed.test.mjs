@@ -71,12 +71,13 @@ describe("strike presentation feed", () => {
     };
   });
 
-  it("1. neutral hooks exist; protocol 2", () => {
+  it("1. neutral hooks exist; protocol 3", () => {
     assert.equal(STRIKE_PRESENTATION_FEED_HOOK, "nelflow.strikeResolvedPresentation");
     assert.equal(STRIKE_ATTACK_PRESENTATION_FEED_HOOK, "nelflow.strikeAttackResolvedPresentation");
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 2);
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 3);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeAttackResolvedPresentation/);
+    assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
   });
 
   it("2. Strike success emits neutral event", () => {
@@ -331,14 +332,22 @@ describe("strike presentation feed", () => {
     assert.doesNotMatch(feedSrc, /Toolbelt|SaveResolver|healing|defeated|broadcastEffect/i);
   });
 
-  it("public API installs strikePresentation integration protocol 2", () => {
+  it("public API installs strikePresentation integration protocol 3", () => {
     installStrikePresentationFeedApi();
     assert.equal(game.nelflow.integrations.strikePresentation.hook, STRIKE_PRESENTATION_FEED_HOOK);
     assert.equal(game.nelflow.integrations.strikePresentation.resolvedHook, STRIKE_PRESENTATION_FEED_HOOK);
     assert.equal(game.nelflow.integrations.strikePresentation.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
-    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 2);
+    assert.equal(
+      game.nelflow.integrations.strikePresentation.damageRolledHook,
+      "nelflow.strikeDamageRolledPresentation",
+    );
+    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 3);
     assert.equal(game.nelflow.integrations.strikePresentation.available, true);
-    assert.deepEqual(game.nelflow.integrations.strikePresentation.stages, { attack: true, damage: true });
+    assert.deepEqual(game.nelflow.integrations.strikePresentation.stages, {
+      attack: true,
+      damageRolled: true,
+      resolved: true,
+    });
     assert.equal(typeof game.nelflow.dev.watchStrikePresentationFeed, "function");
     assert.equal(typeof game.nelflow.dev.stopWatchingStrikePresentationFeed, "function");
     assert.equal(game.nelflow.integrations.strikePresentation.getStatus().hook, STRIKE_PRESENTATION_FEED_HOOK);
