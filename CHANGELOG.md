@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.5
+
+- Add Stage 1 presentation-neutral attack feed
+  `nelflow.strikeAttackResolvedPresentation` (immediate attack check)
+- Keep Stage 2 `nelflow.strikeResolvedPresentation` for damage/final results
+- Bump `game.nelflow.integrations.strikePresentation` to protocol 2 with
+  `attackHook` / `resolvedHook` / `stages`
+- Share one deterministic `transactionId` across both stages
+- Emit PC attack-stage events before Damage is clicked (including misses)
+- Preserve native PC cards, NelCine paths, NPC stacks, and `nelflow.damageApplied`
+
 ## 0.14.4
 
 - Add presentation-neutral resolved Strike feed `nelflow.strikeResolvedPresentation`

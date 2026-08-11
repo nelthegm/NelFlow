@@ -25,7 +25,10 @@ import {
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
-import { tryEmitStrikePresentationFeed } from "./strike-presentation-feed.js";
+import {
+  tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikePresentationFeed,
+} from "./strike-presentation-feed.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
@@ -512,12 +515,70 @@ async function processDamage(message) {
   });
 }
 
+/**
+ * Stage 1 presentation feed for character Strikes.
+ * Uses the same deterministic transaction id as TransactionStore.claimPlayerStrike
+ * (`nelflow-${attackMessage.id}`) so Stage 2 damage/final events correlate.
+ * Independent of auto-apply mode and of whether damage is ever clicked.
+ */
+function emitPlayerStrikeAttackPresentation(message, normalized) {
+  try {
+    const evidence = normalized?.evidence;
+    if (!evidence || evidence.actorType !== "character") return { emitted: false, reason: "not-character" };
+    const authority = currentAuthority(evidence.authorUserId);
+    if (!authority || game.user?.id !== authority || game.user?.isGM !== true) {
+      return { emitted: false, reason: "not-authority" };
+    }
+    const outcomes = new Set(["criticalFailure", "failure", "success", "criticalSuccess"]);
+    if (!outcomes.has(evidence.outcome)) return { emitted: false, reason: "outcome-missing" };
+    if (!evidence.targetTokenUuid || !evidence.targetActorUuid) {
+      return { emitted: false, reason: "target-missing" };
+    }
+    if (evidence.targetCount !== 1) return { emitted: false, reason: "multi-target-unsupported" };
+    if (
+      !evidence.sourceActorUuid ||
+      !evidence.sourceItemUuid ||
+      evidence.actionType !== "strike"
+    ) {
+      return { emitted: false, reason: "source-unsupported" };
+    }
+
+    return tryEmitStrikeAttackPresentationFeed({
+      transactionId: TransactionStore.deterministicId(message),
+      transactionType: PLAYER_STRIKE_TRANSACTION_TYPE,
+      attackMessage: message,
+      includeDamage: false,
+      outcome: evidence.outcome,
+      attackerTokenUuid: evidence.sourceTokenUuid ?? null,
+      attackerActorUuid: evidence.sourceActorUuid,
+      targetTokenUuid: evidence.targetTokenUuid,
+      targetActorUuid: evidence.targetActorUuid,
+      itemUuid: evidence.sourceItemUuid,
+      actionName: normalized.item?.name ?? null,
+      multiTarget: false,
+      hasAuthoritativeAttack: true,
+    });
+  } catch (error) {
+    logger.error("Player Strike attack presentation feed failed open", {
+      attackMessageId: message?.id ?? null,
+      stage: "player-strike-attack-presentation",
+      reason: "internal-exception",
+    }, error);
+    return { emitted: false, reason: "internal-exception" };
+  }
+}
+
 async function observeAttack(message) {
   const normalized = normalizeAttack(message);
   if (!normalized) return false;
   // This early partition is what keeps Slice 1 NPC transactions completely
   // outside the player observer even though both share the central hook.
   if (normalized.evidence.actorType !== "character") return false;
+
+  // Stage 1: emit immediately when the authoritative attack check resolves —
+  // before any Damage / Critical Damage click, and for misses with no damage.
+  emitPlayerStrikeAttackPresentation(message, normalized);
+
   const mode = getSetting(SETTINGS.PLAYER_STRIKE_AUTO_APPLY);
   if (mode === PLAYER_STRIKE_AUTO_APPLY_MODES.OFF) return false;
   const authority = currentAuthority(normalized.evidence.authorUserId);

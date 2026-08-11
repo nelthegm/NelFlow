@@ -1110,6 +1110,8 @@ for (const path of [
   "tests/presentation-cleanup.test.mjs",
   "docs/NELFLOW_0.14.3_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.3.md",
+  "docs/NELFLOW_0.14.5_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.5.md",
   "docs/NELFLOW_0.14.4_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.4.md",
 ]) {

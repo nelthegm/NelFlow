@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
   STRIKE_PRESENTATION_FEED_HOOK,
   STRIKE_PRESENTATION_FEED_PROTOCOL,
   clearStrikePresentationFeedEmissions,
@@ -14,6 +15,7 @@ import {
   hasStrikePresentationFeedEmission,
   installStrikePresentationFeedApi,
   seedStrikePresentationFeedEmission,
+  tryEmitStrikeAttackPresentationFeed,
   tryEmitStrikePresentationFeed,
 } from "../scripts/strike-presentation-feed.js";
 import {
@@ -69,10 +71,12 @@ describe("strike presentation feed", () => {
     };
   });
 
-  it("1. neutral hook exists", () => {
+  it("1. neutral hooks exist; protocol 2", () => {
     assert.equal(STRIKE_PRESENTATION_FEED_HOOK, "nelflow.strikeResolvedPresentation");
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 1);
+    assert.equal(STRIKE_ATTACK_PRESENTATION_FEED_HOOK, "nelflow.strikeAttackResolvedPresentation");
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 2);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
+    assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeAttackResolvedPresentation/);
   });
 
   it("2. Strike success emits neutral event", () => {
@@ -318,6 +322,7 @@ describe("strike presentation feed", () => {
     const resolver = source("scripts/strike-resolver.js");
     assert.match(resolver, /tryDeliverStrikeImpactSync/);
     assert.match(resolver, /tryEmitStrikePresentationFeed/);
+    assert.match(resolver, /tryEmitStrikeAttackPresentationFeed/);
     assert.match(resolver, /deliverResolvedStrikePresentation/);
   });
 
@@ -326,14 +331,18 @@ describe("strike presentation feed", () => {
     assert.doesNotMatch(feedSrc, /Toolbelt|SaveResolver|healing|defeated|broadcastEffect/i);
   });
 
-  it("public API installs strikePresentation integration", () => {
+  it("public API installs strikePresentation integration protocol 2", () => {
     installStrikePresentationFeedApi();
     assert.equal(game.nelflow.integrations.strikePresentation.hook, STRIKE_PRESENTATION_FEED_HOOK);
-    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 1);
+    assert.equal(game.nelflow.integrations.strikePresentation.resolvedHook, STRIKE_PRESENTATION_FEED_HOOK);
+    assert.equal(game.nelflow.integrations.strikePresentation.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
+    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 2);
     assert.equal(game.nelflow.integrations.strikePresentation.available, true);
+    assert.deepEqual(game.nelflow.integrations.strikePresentation.stages, { attack: true, damage: true });
     assert.equal(typeof game.nelflow.dev.watchStrikePresentationFeed, "function");
     assert.equal(typeof game.nelflow.dev.stopWatchingStrikePresentationFeed, "function");
     assert.equal(game.nelflow.integrations.strikePresentation.getStatus().hook, STRIKE_PRESENTATION_FEED_HOOK);
+    assert.equal(game.nelflow.integrations.strikePresentation.getStatus().attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
   });
 
   it("seed / already-emitted gate", () => {

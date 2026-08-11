@@ -1,8 +1,13 @@
 /**
  * Presentation-neutral Strike feed (NelTactics compatibility).
  *
- * Emits Hooks.callAll("nelflow.strikeResolvedPresentation", payload) exactly
- * once per Strike transaction — independent of NelCine install/active/settings.
+ * Stage 1 — attack check resolved:
+ *   Hooks.callAll("nelflow.strikeAttackResolvedPresentation", payload)
+ *
+ * Stage 2 — damage / final resolved (existing):
+ *   Hooks.callAll("nelflow.strikeResolvedPresentation", payload)
+ *
+ * Exactly-once guards are independent per stage.
  *
  * Does NOT mean "NelCine should play." NelCine continues to use
  * nelflow.strikeResolved / impact-sync only.
@@ -17,14 +22,21 @@ import {
   isSerializableStrikePayload,
 } from "./nelcine-strike-delivery.js";
 
+export const STRIKE_ATTACK_PRESENTATION_FEED_HOOK = "nelflow.strikeAttackResolvedPresentation";
 export const STRIKE_PRESENTATION_FEED_HOOK = "nelflow.strikeResolvedPresentation";
-export const STRIKE_PRESENTATION_FEED_PROTOCOL = 1;
+/** @deprecated Alias for the Stage 2 / resolved hook. */
+export const STRIKE_RESOLVED_PRESENTATION_FEED_HOOK = STRIKE_PRESENTATION_FEED_HOOK;
+
+export const STRIKE_PRESENTATION_FEED_PROTOCOL = 2;
 
 const LOG_PREFIX = "NelFlow | Strike presentation feed |";
 const MAX_RECENT = 64;
 
 /** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
-const emittedByTransactionId = new Map();
+const attackEmittedByTransactionId = new Map();
+
+/** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
+const resolvedEmittedByTransactionId = new Map();
 
 /** @type {((summary: object) => void)|null} */
 let feedWatcher = null;
@@ -33,13 +45,22 @@ let feedWatcher = null;
  * @param {string} transactionId
  * @returns {boolean}
  */
-export function hasStrikePresentationFeedEmission(transactionId) {
+export function hasStrikeAttackPresentationFeedEmission(transactionId) {
   if (!transactionId) return false;
-  return emittedByTransactionId.has(transactionId);
+  return attackEmittedByTransactionId.has(transactionId);
 }
 
 /**
- * Pure eligibility for the neutral feed (no NelCine gates).
+ * @param {string} transactionId
+ * @returns {boolean}
+ */
+export function hasStrikePresentationFeedEmission(transactionId) {
+  if (!transactionId) return false;
+  return resolvedEmittedByTransactionId.has(transactionId);
+}
+
+/**
+ * Pure eligibility for either stage of the neutral feed (no NelCine gates).
  * @param {object} ctx
  * @returns {{ eligible: boolean, reason?: string }}
  */
@@ -55,14 +76,45 @@ export function evaluateStrikePresentationFeedEligibility(ctx = {}) {
 }
 
 /**
- * Emit the presentation-neutral Strike feed once per transaction.
- * Accepts the same args as buildStrikePresentationPayload, or a prebuilt
- * `payload` (e.g. impact-sync raw payload).
- *
+ * Emit Stage 1 — authoritative attack check resolved (no damage required).
+ * @param {object} args
+ * @returns {{ emitted: boolean, reason?: string, hook?: string }}
+ */
+export function tryEmitStrikeAttackPresentationFeed(args = {}) {
+  return emitFeedStage({
+    args,
+    stage: "attack",
+    hook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
+    emittedMap: attackEmittedByTransactionId,
+    forceIncludeDamage: false,
+  });
+}
+
+/**
+ * Emit Stage 2 — existing final / damage presentation feed.
  * @param {object} args
  * @returns {{ emitted: boolean, reason?: string, hook?: string }}
  */
 export function tryEmitStrikePresentationFeed(args = {}) {
+  return emitFeedStage({
+    args,
+    stage: "resolved",
+    hook: STRIKE_PRESENTATION_FEED_HOOK,
+    emittedMap: resolvedEmittedByTransactionId,
+    forceIncludeDamage: null,
+  });
+}
+
+/**
+ * @param {{
+ *   args: object,
+ *   stage: "attack"|"resolved",
+ *   hook: string,
+ *   emittedMap: Map<string, object>,
+ *   forceIncludeDamage: boolean|null
+ * }} opts
+ */
+function emitFeedStage({ args, stage, hook, emittedMap, forceIncludeDamage }) {
   try {
     const transactionId =
       typeof args.transactionId === "string" && args.transactionId.trim()
@@ -75,7 +127,7 @@ export function tryEmitStrikePresentationFeed(args = {}) {
       isGM: game.user?.isGM === true,
       multiTarget: args.multiTarget === true,
       transactionId,
-      alreadyEmitted: hasStrikePresentationFeedEmission(transactionId),
+      alreadyEmitted: emittedMap.has(transactionId),
       hasAuthoritativeAttack: args.hasAuthoritativeAttack !== false,
     });
     if (!gate.eligible) {
@@ -89,15 +141,29 @@ export function tryEmitStrikePresentationFeed(args = {}) {
       }
       payload = cloneSerializable(args.payload);
     } else {
-      const built = buildStrikePresentationPayload(args);
+      const buildArgs =
+        forceIncludeDamage === false
+          ? { ...args, includeDamage: false, damageSummary: undefined, damageMessage: null }
+          : args;
+      const built = buildStrikePresentationPayload(buildArgs);
       if (!built.ok) {
         return { emitted: false, reason: built.reason };
       }
       payload = built.payload;
     }
 
-    // Mark before external listeners so throwing consumers cannot retry.
-    rememberEmission(transactionId, payload);
+    // Optional stage marker — additive, ignored by older consumers.
+    if (payload && typeof payload === "object" && !Object.hasOwn(payload, "stage")) {
+      payload = { ...payload, stage };
+    }
+
+    // Attack stage must never invent damage.
+    if (stage === "attack" && payload && Object.hasOwn(payload, "damage")) {
+      const { damage: _damage, ...rest } = payload;
+      payload = rest;
+    }
+
+    rememberEmission(emittedMap, transactionId, payload);
 
     const callAll =
       args.hooksCallAll ??
@@ -109,23 +175,22 @@ export function tryEmitStrikePresentationFeed(args = {}) {
     }
 
     try {
-      callAll(STRIKE_PRESENTATION_FEED_HOOK, payload);
+      callAll(hook, payload);
     } catch (error) {
       logger.error(`${LOG_PREFIX} Listener failed`, {
-        stage: "strike-presentation-feed",
+        stage: `strike-presentation-feed-${stage}`,
         transactionId,
         reason: error instanceof Error ? error.message : String(error),
       });
-      // Still count as emitted — exactly-once already marked.
-      notifyWatcher(payload, transactionId);
-      return { emitted: true, reason: "listener-failed", hook: STRIKE_PRESENTATION_FEED_HOOK };
+      notifyWatcher(payload, transactionId, stage);
+      return { emitted: true, reason: "listener-failed", hook };
     }
 
-    notifyWatcher(payload, transactionId);
-    return { emitted: true, hook: STRIKE_PRESENTATION_FEED_HOOK };
+    notifyWatcher(payload, transactionId, stage);
+    return { emitted: true, hook };
   } catch (error) {
     logger.error(`${LOG_PREFIX} Unexpected failure`, {
-      stage: "strike-presentation-feed",
+      stage: `strike-presentation-feed-${stage}`,
       reason: error instanceof Error ? error.message : String(error),
     });
     return { emitted: false, reason: "internal-exception" };
@@ -133,18 +198,19 @@ export function tryEmitStrikePresentationFeed(args = {}) {
 }
 
 /**
+ * @param {Map<string, object>} map
  * @param {string} transactionId
  * @param {object} payload
  */
-function rememberEmission(transactionId, payload) {
-  emittedByTransactionId.set(transactionId, {
+function rememberEmission(map, transactionId, payload) {
+  map.set(transactionId, {
     transactionId,
     emittedAt: Date.now(),
     degree: payload?.attack?.degreeOfSuccess ?? null,
   });
-  while (emittedByTransactionId.size > MAX_RECENT) {
-    const oldest = emittedByTransactionId.keys().next().value;
-    emittedByTransactionId.delete(oldest);
+  while (map.size > MAX_RECENT) {
+    const oldest = map.keys().next().value;
+    map.delete(oldest);
   }
 }
 
@@ -177,8 +243,9 @@ function labelFromUuid(uuid) {
 /**
  * @param {object} payload
  * @param {string} transactionId
+ * @param {"attack"|"resolved"} stage
  */
-function notifyWatcher(payload, transactionId) {
+function notifyWatcher(payload, transactionId, stage) {
   if (typeof feedWatcher !== "function") return;
   try {
     const attacker =
@@ -192,6 +259,7 @@ function notifyWatcher(payload, transactionId) {
       DEGREE_LABEL[degreeRaw] ??
       (typeof degreeRaw === "string" ? degreeRaw : null);
     feedWatcher({
+      stage,
       transactionId,
       degree,
       attackerLabel: attacker,
@@ -230,20 +298,24 @@ export function watchStrikePresentationFeed() {
       Number.isFinite(summary.dieResult) &&
       Number.isFinite(summary.modifier) &&
       Number.isFinite(summary.total)
-        ? `${summary.dieResult} + ${summary.modifier} = ${summary.total}`
+        ? `${summary.dieResult} +${summary.modifier} = ${summary.total}`
         : null;
+
+    if (summary.stage === "attack") {
+      console.debug(
+        [`STRIKE ATTACK ${shortId}`, who, math, degree]
+          .filter((line) => line != null && line !== "")
+          .join("\n"),
+      );
+      return;
+    }
+
     const damageLine =
       summary.hasDamageField === false || summary.damageTotal == null
         ? "damage none"
         : `damage ${summary.damageTotal}`;
     console.debug(
-      [
-        `STRIKE FEED ${shortId}`,
-        who,
-        degree,
-        math,
-        damageLine,
-      ]
+      [`STRIKE RESOLVED ${shortId}`, who, damageLine]
         .filter((line) => line != null && line !== "")
         .join("\n"),
     );
@@ -260,14 +332,25 @@ export function stopWatchingStrikePresentationFeed() {
 
 /** Test helper */
 export function clearStrikePresentationFeedEmissions() {
-  emittedByTransactionId.clear();
+  attackEmittedByTransactionId.clear();
+  resolvedEmittedByTransactionId.clear();
   feedWatcher = null;
+}
+
+/** Test helper */
+export function seedStrikeAttackPresentationFeedEmission(transactionId) {
+  if (!transactionId) return;
+  attackEmittedByTransactionId.set(transactionId, {
+    transactionId,
+    emittedAt: Date.now(),
+    degree: null,
+  });
 }
 
 /** Test helper */
 export function seedStrikePresentationFeedEmission(transactionId) {
   if (!transactionId) return;
-  emittedByTransactionId.set(transactionId, {
+  resolvedEmittedByTransactionId.set(transactionId, {
     transactionId,
     emittedAt: Date.now(),
     degree: null,
@@ -283,16 +366,26 @@ export function installStrikePresentationFeedApi() {
   root.integrations = root.integrations ?? {};
   root.dev = root.dev ?? {};
 
+  const status = () => ({
+    protocol: STRIKE_PRESENTATION_FEED_PROTOCOL,
+    hook: STRIKE_PRESENTATION_FEED_HOOK,
+    attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
+    resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
+    available: true,
+    stages: { attack: true, damage: true },
+    recentAttackEmissions: attackEmittedByTransactionId.size,
+    recentResolvedEmissions: resolvedEmittedByTransactionId.size,
+    recentEmissions: resolvedEmittedByTransactionId.size,
+  });
+
   root.integrations.strikePresentation = Object.freeze({
     protocol: STRIKE_PRESENTATION_FEED_PROTOCOL,
     hook: STRIKE_PRESENTATION_FEED_HOOK,
+    attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
+    resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
-    getStatus: () => ({
-      protocol: STRIKE_PRESENTATION_FEED_PROTOCOL,
-      hook: STRIKE_PRESENTATION_FEED_HOOK,
-      available: true,
-      recentEmissions: emittedByTransactionId.size,
-    }),
+    stages: Object.freeze({ attack: true, damage: true }),
+    getStatus: status,
   });
 
   root.dev.watchStrikePresentationFeed = () => watchStrikePresentationFeed();

@@ -15,7 +15,10 @@ import {
   tryDeliverStrikeImpactSync,
   tryDeliverStrikePresentation,
 } from "./nelcine-strike-delivery.js";
-import { tryEmitStrikePresentationFeed } from "./strike-presentation-feed.js";
+import {
+  tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikePresentationFeed,
+} from "./strike-presentation-feed.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
@@ -370,6 +373,17 @@ export class StrikeResolver {
         transactionId: transaction.id,
         snapshot,
       });
+
+      // Stage 1: attack check is authoritative here — before damage roll.
+      tryEmitStrikeAttackPresentationFeed(
+        presentationArgsFromStrike({
+          transaction,
+          strike,
+          message,
+          targetToken,
+          includeDamage: false,
+        }),
+      );
 
       if (["failure", "criticalFailure"].includes(strike.outcome)) {
         transaction = await TransactionStore.update(message, {
