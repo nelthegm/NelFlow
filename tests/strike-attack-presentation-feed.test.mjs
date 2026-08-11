@@ -1,5 +1,5 @@
 /**
- * Attack-stage presentation-neutral Strike feed (protocol 3 / 0.14.6).
+ * Attack-stage presentation-neutral Strike feed (protocol 3 / 0.14.7).
  */
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
@@ -225,6 +225,6 @@ describe("Strike attack presentation feed", () => {
     assert.match(resolver, /nelflow\.strikeResolved|tryDeliverStrikePresentation/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.6");
+    assert.equal(module.version, "0.14.7");
   });
 });

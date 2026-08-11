@@ -19,6 +19,7 @@ import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 import { RollPopoverController } from "./roll-popover-controller.js";
 import { installNelcinePublicApi } from "./nelcine-strike-delivery.js";
 import { installStrikePresentationFeedApi } from "./strike-presentation-feed.js";
+import { installBasicSavePresentationFeedApi } from "./basic-save-presentation-feed.js";
 import {
   installEffectPublicApi,
   registerNelcineEffectHooks,
@@ -89,6 +90,7 @@ async function initializeReady() {
     task: () => {
       installNelcinePublicApi();
       installStrikePresentationFeedApi();
+      installBasicSavePresentationFeedApi();
       installEffectPublicApi();
       registerNelcineEffectHooks();
       installActionPublicApi();
@@ -148,5 +150,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.14.6 ready");
+  logger.debug("Nelflow 0.14.7 ready");
 }

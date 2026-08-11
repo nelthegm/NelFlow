@@ -445,6 +445,24 @@ export class ToolbeltTargetHelperAdapter {
       if (!token?.id || !actor?.uuid) continue;
       const result = save.saves?.[token.id];
       const outcome = OUTCOMES.has(result?.success) ? result.success : null;
+      const dieResult = Number.isFinite(result?.die) ? Number(result.die) : null;
+      const total = Number.isFinite(result?.value) ? Number(result.value) : null;
+      const modifiers = Array.isArray(result?.modifiers)
+        ? result.modifiers
+            .filter((entry) => entry && typeof entry === "object")
+            .map((entry) => ({
+              excluded: entry.excluded === true,
+              label: typeof entry.label === "string" ? entry.label : null,
+              modifier: Number.isFinite(entry.modifier) ? Number(entry.modifier) : null,
+              slug: typeof entry.slug === "string" ? entry.slug : null,
+            }))
+        : null;
+      const modifierTotal = Array.isArray(modifiers)
+        ? modifiers.reduce((sum, entry) => {
+            if (entry.excluded || !Number.isFinite(entry.modifier)) return sum;
+            return sum + entry.modifier;
+          }, 0)
+        : null;
       targets.push({
         toolbeltTargetKey: token.id,
         actorUuid: actor.uuid,
@@ -457,6 +475,11 @@ export class ToolbeltTargetHelperAdapter {
         isBasicSave: true,
         saveState: outcome ? "resolved" : "pending",
         degreeOfSuccess: outcome,
+        dieResult,
+        total,
+        modifier: Number.isFinite(modifierTotal) ? modifierTotal : null,
+        modifiers,
+        rerolled: typeof result?.rerolled === "string" ? result.rerolled : null,
         canApply: Boolean(outcome),
         toolbeltAppliedState: data.applied?.[token.id]?.[rollIndex] === true,
         saveFingerprint: result

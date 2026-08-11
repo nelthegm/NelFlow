@@ -1114,6 +1114,9 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.5.md",
   "docs/NELFLOW_0.14.6_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.6.md",
+  "docs/NELFLOW_0.14.7_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.7.md",
+  "docs/BASIC_SAVE_PRESENTATION_CONTRACT.md",
   "docs/NELFLOW_0.14.4_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.4.md",
 ]) {

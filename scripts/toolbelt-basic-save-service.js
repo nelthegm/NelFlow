@@ -53,6 +53,7 @@ import {
   registerSaveBatchImpactHook,
   SAVE_BATCH_COMMIT_TRIGGERS,
 } from "./nelcine-save-batch-impact.js";
+import { emitBasicSaveTargetPresentationFromReady } from "./basic-save-presentation-feed.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -236,8 +237,17 @@ function createTransaction(message, normalized, processingUserId) {
     userRole: "gm",
   });
   for (const target of normalized.targets) {
-    base.targets[target.toolbeltTargetKey] = createTargetRecord(base, target);
+    const record = createTargetRecord(base, target);
+    base.targets[target.toolbeltTargetKey] = record;
     diagnostic("toolbelt-target-normalized", { integrationId: id, targetKey: target.toolbeltTargetKey });
+    if (record.state === TOOLBELT_TARGET_STATES.READY) {
+      emitBasicSaveTargetPresentationFromReady({
+        draft: base,
+        record,
+        target,
+        normalized,
+      });
+    }
     if (normalized.isNpcAbility && target.saveState === "resolved") {
       diagnostic("npc-ability-target-ready", {
         integrationId: id,
@@ -304,6 +314,12 @@ function updateProjection(draft, normalized) {
         integrationId: draft.integrationId,
         targetKey: record.toolbeltTargetKey,
       });
+      emitBasicSaveTargetPresentationFromReady({
+        draft,
+        record,
+        target,
+        normalized,
+      });
       if (draft.sourceKind === "npc-ability") {
         diagnostic("npc-ability-target-ready", {
           integrationId: draft.integrationId,
@@ -314,10 +330,20 @@ function updateProjection(draft, normalized) {
         });
       }
     } else if (record.state === TOOLBELT_TARGET_STATES.READY && target.saveState === "resolved") {
+      const fingerprintChanged = targetResultChanged(record, target);
       record.nativeOutcome = target.degreeOfSuccess;
       record.effectiveOutcome = target.degreeOfSuccess;
       record.multiplier = outcomeMultiplier(target.degreeOfSuccess);
       record.toolbeltStateFingerprint = target.saveFingerprint;
+      // Hero Point / Toolbelt reroll replaces durable save instance → new fingerprint → new presentation.
+      if (fingerprintChanged) {
+        emitBasicSaveTargetPresentationFromReady({
+          draft,
+          record,
+          target,
+          normalized,
+        });
+      }
     }
   }
 }

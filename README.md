@@ -1,10 +1,14 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.6** adds Stage 2 of the presentation-neutral Strike feed:
+Nelflow **0.14.7** adds a presentation-neutral basic-save target result feed:
+`nelflow.basicSaveTargetResolvedPresentation` as soon as Toolbelt records an
+authoritative per-target save (before HP / NelCine / batch completion). Protocol 1
+via `game.nelflow.integrations.basicSavePresentation`. NelTactics is optional.
+Nelflow **0.14.6** added Stage 2 of the presentation-neutral Strike feed:
 `nelflow.strikeDamageRolledPresentation` when an exact native DamageRoll exists
 (before HP application; rolled total, not post-IWR HP loss), protocol 3 via
-`game.nelflow.integrations.strikePresentation`. NelTactics is optional.
+`game.nelflow.integrations.strikePresentation`.
 Nelflow **0.14.5** added Stage 1 `nelflow.strikeAttackResolvedPresentation`.
 Nelflow **0.14.4** introduced the resolved-stage feed.
 Nelflow **0.14.3** keeps ordinary player-character Strike attack and damage
@@ -68,14 +72,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.6/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.7/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.6"
+game.modules.get("nelflow")?.version // "0.14.7"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -93,6 +97,38 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.7 presentation-neutral basic-save result feed
+
+Toolbelt still owns save execution. When an authoritative per-target Toolbelt
+basic-save result becomes READY, NelFlow emits:
+
+```text
+nelflow.basicSaveTargetResolvedPresentation
+```
+
+```js
+game.nelflow.integrations.basicSavePresentation.getStatus()
+// {
+//   protocol: 1,
+//   targetResolvedHook: "nelflow.basicSaveTargetResolvedPresentation",
+//   available: true,
+//   stages: { targetResolved: true }
+// }
+
+game.nelflow.dev.watchBasicSavePresentationFeed()
+```
+
+Each target emits independently in Toolbelt observation order. Natural die and
+modifier are included only when Toolbelt’s durable save instance provides them —
+never reverse-calculated. Secret/`private` Toolbelt saves do not emit.
+
+NelCine `nelflow.basicSaveBatchResolved` remains a separate, NelCine-gated batch
+hook and is not advertised on this integration.
+
+See [BASIC_SAVE_PRESENTATION_CONTRACT.md](docs/BASIC_SAVE_PRESENTATION_CONTRACT.md),
+[0.14.7 release notes](docs/RELEASE_NOTES_0.14.7.md), and
+[runtime plan](docs/NELFLOW_0.14.7_TEST_PLAN.md).
 
 ## Nelflow 0.14.6 three-stage presentation-neutral Strike feed
 
@@ -975,6 +1011,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.7 basic-save presentation feed](docs/RELEASE_NOTES_0.14.7.md)
 - [Nelflow 0.14.6 immediate Strike damage-rolled feed](docs/RELEASE_NOTES_0.14.6.md)
 - [Nelflow 0.14.5 two-stage Strike presentation feed](docs/RELEASE_NOTES_0.14.5.md)
 - [Nelflow 0.14.4 presentation-neutral Strike feed](docs/RELEASE_NOTES_0.14.4.md)

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.7
+
+- Add presentation-neutral basic-save target result feed
+  `nelflow.basicSaveTargetResolvedPresentation` (protocol 1)
+- Emit once per Toolbelt target as soon as the save result is READY — before HP
+  application, NelCine, or batch completion
+- Lift authoritative Toolbelt fields only (`die`, `value`, `modifiers`,
+  `success`, `dc`); never fabricate natural/modifier/degree
+- Expose `game.nelflow.integrations.basicSavePresentation` and feed watchers
+- Do not advertise NelCine `nelflow.basicSaveBatchResolved` as presentation-neutral
+- Preserve Toolbelt save execution, HP timing, Undo, NelCine, and Strike feeds
+
 ## 0.14.6
 
 - Add Stage 2 presentation-neutral feed `nelflow.strikeDamageRolledPresentation`

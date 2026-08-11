@@ -276,6 +276,6 @@ describe("0.14.6 three-stage Strike presentation feed", () => {
     assert.match(source("scripts/main.js"), /installStrikePresentationFeedApi/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.6");
+    assert.equal(module.version, "0.14.7");
   });
 });
