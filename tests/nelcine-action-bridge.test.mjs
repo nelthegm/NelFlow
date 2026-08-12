@@ -429,7 +429,7 @@ test("46-52. Authority and failure", async () => {
   assert.match(source("scripts/settings.js"), /NELCINE_ACTION_CINEMATICS[\s\S]*default:\s*true/);
 });
 
-test("53-66. Regression wiring + version 0.14.9", () => {
+test("53-66. Regression wiring + version 0.14.10", () => {
   const main = source("scripts/main.js");
   const action = source("scripts/nelcine-action-bridge.js");
   const effect = source("scripts/nelcine-effect-bridge.js");
@@ -447,11 +447,11 @@ test("53-66. Regression wiring + version 0.14.9", () => {
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.14.9");
-  assert.equal(pkg.version, "0.14.9");
+  assert.equal(module.version, "0.14.10");
+  assert.equal(pkg.version, "0.14.10");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.9/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.10/nelflow.zip",
   );
 
   installMinimalGame();

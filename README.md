@@ -1,18 +1,19 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.9** extends the presentation-neutral basic-save integration to
-protocol 2 with `nelflow.basicSaveTargetDamageAppliedPresentation`. The new
-GM-local Stage 2 reports actual per-target normal plus temporary HP loss after
-PF2e applies the authoritative save degree and IWR. It does not recreate IWR,
-change mechanics, suppress native floating text, or add UI. Nelflow **0.14.8**
+Nelflow **0.14.10** extends basic-save presentation to protocol 3 with
+`nelflow.basicSaveTargetDamageApplyingPresentation` — a GM-local ownership
+reservation emitted immediately before PF2e `applyDamage` for real applications.
+Nelflow **0.14.9** added protocol 2
+`nelflow.basicSaveTargetDamageAppliedPresentation` for actual per-target
+normal plus temporary HP loss after PF2e save/IWR handling. Nelflow **0.14.8**
 added official PF2e Toolbelt **3.54.0** Target Helper
 compatibility and registers presentation-neutral Strike / basic-save integration
 APIs at Foundry `init` so Toolbelt version gates cannot race or suppress them.
 Nelflow **0.14.7** added a presentation-neutral basic-save target result feed:
 `nelflow.basicSaveTargetResolvedPresentation` as soon as Toolbelt records an
-authoritative per-target save (before HP / NelCine / batch completion). Protocol 1
-via `game.nelflow.integrations.basicSavePresentation`. NelTactics is optional.
+authoritative per-target save (before HP / NelCine / batch completion).
+NelTactics is optional.
 Nelflow **0.14.6** added Stage 2 of the presentation-neutral Strike feed:
 `nelflow.strikeDamageRolledPresentation` when an exact native DamageRoll exists
 (before HP application; rolled total, not post-IWR HP loss), protocol 3 via
@@ -80,14 +81,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.9/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.10/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.9"
+game.modules.get("nelflow")?.version // "0.14.10"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -105,6 +106,42 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.10 basic-save damage ownership reservation
+
+Protocol 3 preserves prior stages and adds a pre-application ownership hook:
+
+```text
+nelflow.basicSaveTargetResolvedPresentation
+nelflow.basicSaveTargetDamageApplyingPresentation
+nelflow.basicSaveTargetDamageAppliedPresentation
+```
+
+```js
+game.nelflow.integrations.basicSavePresentation
+// {
+//   protocol: 3,
+//   targetResolvedHook: "nelflow.basicSaveTargetResolvedPresentation",
+//   targetDamageApplyingHook: "nelflow.basicSaveTargetDamageApplyingPresentation",
+//   targetDamageAppliedHook: "nelflow.basicSaveTargetDamageAppliedPresentation",
+//   stages: {
+//     targetResolved: true,
+//     targetDamageApplying: true,
+//     targetDamageApplied: true
+//   }
+// }
+
+game.nelflow.dev.watchBasicSaveDamagePresentationFeed()
+```
+
+`targetDamageApplying` fires only after final validation and immediately before
+PF2e `applyDamage`. It carries correlation IDs but not `damage.applied`. Critical
+success / conclusive no-damage paths that skip `applyDamage` do not emit
+applying. Impact-synced NelCine batches wait until delayed commit.
+
+See [the protocol contract](docs/BASIC_SAVE_PRESENTATION_CONTRACT.md),
+[0.14.10 release notes](docs/RELEASE_NOTES_0.14.10.md), and
+[runtime plan](docs/NELFLOW_0.14.10_TEST_PLAN.md).
 
 ## Nelflow 0.14.9 basic-save target damage feed
 
@@ -1086,6 +1123,8 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.10 basic-save damage ownership reservation](docs/RELEASE_NOTES_0.14.10.md)
+- [Nelflow 0.14.9 basic-save target damage feed](docs/RELEASE_NOTES_0.14.9.md)
 - [Nelflow 0.14.8 Toolbelt 3.54.0 compatibility](docs/RELEASE_NOTES_0.14.8.md)
 - [Nelflow 0.14.7 basic-save presentation feed](docs/RELEASE_NOTES_0.14.7.md)
 - [Nelflow 0.14.6 immediate Strike damage-rolled feed](docs/RELEASE_NOTES_0.14.6.md)

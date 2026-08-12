@@ -724,6 +724,7 @@ export class PF2eAdapter {
     applicationId,
     attackMessageId = null,
     nativeMarker = null,
+    beforeApplyDamage = null,
   }) {
     const targetActor = targetToken?.actor;
     const originActor = damageMessage?.actor;
@@ -789,6 +790,27 @@ export class PF2eAdapter {
     });
 
     try {
+      if (typeof beforeApplyDamage === "function") {
+        try {
+          beforeApplyDamage({
+            transformedRoll,
+            targetToken,
+            applicationId,
+            outcome,
+            multiplier,
+          });
+        } catch (error) {
+          logger.error(
+            "beforeApplyDamage presentation callback failed",
+            {
+              stage: "before-apply-damage-callback",
+              reason: error instanceof Error ? error.message : String(error),
+              applicationId,
+            },
+            error,
+          );
+        }
+      }
       await contextClone.applyDamage({
         damage: transformedRoll,
         token: targetToken,

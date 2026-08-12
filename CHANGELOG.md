@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.10
+
+- Add presentation-neutral basic-save ownership reservation hook
+  `nelflow.basicSaveTargetDamageApplyingPresentation`
+- Bump `basicSavePresentation` protocol 2 → 3
+- Emit immediately before PF2e `applyDamage` after validation; preserve applied
+  stage semantics
+- Preserve Toolbelt/Strike/NelCine/Undo/damageApplied
+
 ## 0.14.9
 
 - Extend `game.nelflow.integrations.basicSavePresentation` to protocol 2 while

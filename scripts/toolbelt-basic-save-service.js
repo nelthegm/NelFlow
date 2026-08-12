@@ -54,7 +54,10 @@ import {
   SAVE_BATCH_COMMIT_TRIGGERS,
 } from "./nelcine-save-batch-impact.js";
 import { emitBasicSaveTargetPresentationFromReady } from "./basic-save-presentation-feed.js";
-import { emitBasicSaveTargetDamagePresentationFromApplication } from "./basic-save-damage-presentation-feed.js";
+import {
+  emitBasicSaveTargetDamageApplyingPresentationFromApplication,
+  emitBasicSaveTargetDamagePresentationFromApplication,
+} from "./basic-save-damage-presentation-feed.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -563,6 +566,16 @@ async function applyOne(message, draft, targetKey) {
         damageMessageId: message.id,
         targetKey,
         role: "toolbelt-application",
+      },
+      // Ownership reservation fires only after adapter validation succeeds and
+      // immediately before PF2e applyDamage — not when the target is merely READY.
+      beforeApplyDamage: () => {
+        emitBasicSaveTargetDamageApplyingPresentationFromApplication({
+          draft,
+          record,
+          target,
+          normalized,
+        });
       },
     });
     const after = result ? PF2eAdapter.healthSnapshot(targetToken.actor) : null;

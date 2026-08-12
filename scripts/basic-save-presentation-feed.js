@@ -14,6 +14,7 @@ import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js
 import { buildBasicSaveTargetResultId } from "./basic-save-presentation-identity.js";
 import {
   BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK,
+  BASIC_SAVE_TARGET_DAMAGE_APPLYING_PRESENTATION_HOOK,
   getBasicSaveDamagePresentationStatus,
   stopWatchingBasicSaveDamagePresentationFeed,
   watchBasicSaveDamagePresentationFeed,
@@ -23,7 +24,7 @@ export { buildBasicSaveTargetResultId } from "./basic-save-presentation-identity
 
 export const BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK =
   "nelflow.basicSaveTargetResolvedPresentation";
-export const BASIC_SAVE_PRESENTATION_PROTOCOL = 2;
+export const BASIC_SAVE_PRESENTATION_PROTOCOL = 3;
 
 const LOG_PREFIX = "NelFlow | Basic save presentation feed |";
 const MAX_RECENT = 128;
@@ -356,6 +357,8 @@ export function getBasicSavePresentationStatus() {
     available: true,
     protocol: BASIC_SAVE_PRESENTATION_PROTOCOL,
     targetResolvedHook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
+    targetDamageApplyingHook: BASIC_SAVE_TARGET_DAMAGE_APPLYING_PRESENTATION_HOOK,
+    targetDamageAppliedHook: BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK,
     hook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
     toolbeltVersion,
     toolbeltSupported,
@@ -375,11 +378,16 @@ export function installBasicSavePresentationFeedApi() {
   root.integrations = root.integrations ?? {};
   root.dev = root.dev ?? {};
 
-  const stages = Object.freeze({ targetResolved: true, targetDamageApplied: true });
+  const stages = Object.freeze({
+    targetResolved: true,
+    targetDamageApplying: true,
+    targetDamageApplied: true,
+  });
 
   root.integrations.basicSavePresentation = Object.freeze({
     protocol: BASIC_SAVE_PRESENTATION_PROTOCOL,
     targetResolvedHook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
+    targetDamageApplyingHook: BASIC_SAVE_TARGET_DAMAGE_APPLYING_PRESENTATION_HOOK,
     targetDamageAppliedHook: BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK,
     available: true,
     stages,

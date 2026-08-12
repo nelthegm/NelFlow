@@ -148,11 +148,11 @@ describe("0.14.7 basic save presentation feed", () => {
     );
   });
 
-  it("14. integration protocol 2 preserves protocol-1 targetResolved semantics", () => {
+  it("14. integration protocol 3 preserves protocol-1 targetResolved semantics", () => {
     installBasicSavePresentationFeedApi();
     const api = game.nelflow.integrations.basicSavePresentation;
-    assert.equal(BASIC_SAVE_PRESENTATION_PROTOCOL, 2);
-    assert.equal(api.protocol, 2);
+    assert.equal(BASIC_SAVE_PRESENTATION_PROTOCOL, 3);
+    assert.equal(api.protocol, 3);
     assert.equal(api.targetResolvedHook, BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK);
     assert.equal(api.stages.targetResolved, true);
     assert.equal(api.stages.targetDamageApplied, true);
@@ -282,7 +282,7 @@ describe("0.14.7 basic save presentation feed", () => {
     installBasicSavePresentationFeedApi();
     const status = game.nelflow.dev.getBasicSavePresentationStatus();
     assert.equal(status.available, true);
-    assert.equal(status.protocol, 2);
+    assert.equal(status.protocol, 3);
     assert.deepEqual(status.rollFieldsAvailable, { ...BASIC_SAVE_ROLL_FIELDS_AVAILABLE });
     assert.equal(Object.hasOwn(game.nelflow.integrations.basicSavePresentation, "batchResolvedHook"), false);
   });
@@ -518,8 +518,8 @@ describe("0.14.7 basic save presentation feed", () => {
     assert.notEqual(a, b);
   });
 
-  it("version metadata is 0.14.9", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.9");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.9");
+  it("version metadata is 0.14.10", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.10");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.10");
   });
 });

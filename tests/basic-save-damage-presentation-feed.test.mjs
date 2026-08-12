@@ -1,4 +1,4 @@
-/** Presentation-neutral basic-save target damage feed (0.14.9 / protocol 2). */
+/** Presentation-neutral basic-save target damage feed (0.14.10 / protocol 3). */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { readFileSync } from "node:fs";
@@ -126,7 +126,7 @@ function applicationProjection(overrides = {}) {
   };
 }
 
-describe("0.14.9 basic-save target damage presentation feed", () => {
+describe("0.14.10 basic-save target damage presentation feed", () => {
   beforeEach(() => {
     clearBasicSavePresentationEmissions();
     clearBasicSaveDamagePresentationEmissions();
@@ -143,10 +143,10 @@ describe("0.14.9 basic-save target damage presentation feed", () => {
     };
   });
 
-  it("1. basicSavePresentation protocol becomes 2", () => {
+  it("1. basicSavePresentation protocol becomes 3", () => {
     installBasicSavePresentationFeedApi();
-    assert.equal(BASIC_SAVE_PRESENTATION_PROTOCOL, 2);
-    assert.equal(game.nelflow.integrations.basicSavePresentation.protocol, 2);
+    assert.equal(BASIC_SAVE_PRESENTATION_PROTOCOL, 3);
+    assert.equal(game.nelflow.integrations.basicSavePresentation.protocol, 3);
   });
   it("2. targetResolvedHook is unchanged", () => {
     installBasicSavePresentationFeedApi();
