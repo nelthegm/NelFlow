@@ -321,14 +321,14 @@ test("Localization and setting keys exist", () => {
   assert.equal(lang["Nelflow.Toolbelt.State.awaiting-impact"], "Waiting for cinematic impact");
 });
 
-test("0.14.8 metadata prepares download URL", () => {
+test("0.14.9 metadata prepares download URL", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.8");
-  assert.equal(packageMetadata.version, "0.14.8");
+  assert.equal(module.version, "0.14.9");
+  assert.equal(packageMetadata.version, "0.14.9");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.8/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.9/nelflow.zip",
   );
 });

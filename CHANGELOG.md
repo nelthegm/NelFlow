@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.9
+
+- Extend `game.nelflow.integrations.basicSavePresentation` to protocol 2 while
+  preserving protocol-1 `targetResolvedHook` semantics
+- Add GM-local `nelflow.basicSaveTargetDamageAppliedPresentation` after each
+  exact supported Toolbelt target application
+- Report actual target normal plus temporary HP loss from durable before/after
+  snapshots after PF2e save/IWR handling; never substitute the shared base roll
+- Emit conclusive zero for existing critical-success/no-damage and IWR-to-zero
+  results without creating a mechanics application path
+- Add deterministic per-target damage identities and a dedicated exactly-once
+  registry independent from save results, HP, Undo, NelCine, and Strike feeds
+- Preserve Toolbelt, NelCine, NelZones, `nelflow.damageApplied`, native PF2e
+  floating text, Undo, and Strike protocol 3 behavior
+
 ## 0.14.8
 
 - Officially support PF2e Toolbelt **3.54.0** Target Helper (inclusive ceiling

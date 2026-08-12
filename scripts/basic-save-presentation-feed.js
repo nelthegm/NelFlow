@@ -10,12 +10,20 @@
  */
 
 import { logger } from "./logger.js";
-import { applicationId } from "./toolbelt-basic-save-model.js";
 import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
+import { buildBasicSaveTargetResultId } from "./basic-save-presentation-identity.js";
+import {
+  BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK,
+  getBasicSaveDamagePresentationStatus,
+  stopWatchingBasicSaveDamagePresentationFeed,
+  watchBasicSaveDamagePresentationFeed,
+} from "./basic-save-damage-presentation-feed.js";
+
+export { buildBasicSaveTargetResultId } from "./basic-save-presentation-identity.js";
 
 export const BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK =
   "nelflow.basicSaveTargetResolvedPresentation";
-export const BASIC_SAVE_PRESENTATION_PROTOCOL = 1;
+export const BASIC_SAVE_PRESENTATION_PROTOCOL = 2;
 
 const LOG_PREFIX = "NelFlow | Basic save presentation feed |";
 const MAX_RECENT = 128;
@@ -44,27 +52,6 @@ export const BASIC_SAVE_ROLL_FIELDS_AVAILABLE = Object.freeze({
 export function hasBasicSaveTargetPresentationEmission(targetResultId) {
   if (!targetResultId) return false;
   return emittedByTargetResultId.has(targetResultId);
-}
-
-/**
- * Stable identity for one authoritative Toolbelt save instance.
- * Includes saveFingerprint so Hero Point / rerolls publish as a new result.
- * @param {{ integrationId?: string, applicationId?: string, toolbeltTargetKey?: string, saveFingerprint?: string|null }} args
- * @returns {string|null}
- */
-export function buildBasicSaveTargetResultId(args = {}) {
-  const appId =
-    typeof args.applicationId === "string" && args.applicationId.trim()
-      ? args.applicationId.trim()
-      : typeof args.integrationId === "string" && typeof args.toolbeltTargetKey === "string"
-        ? applicationId(args.integrationId, args.toolbeltTargetKey)
-        : null;
-  if (!appId) return null;
-  const fingerprint =
-    typeof args.saveFingerprint === "string" && args.saveFingerprint.trim()
-      ? args.saveFingerprint.trim()
-      : "unknown";
-  return `${appId}:fp:${fingerprint}`;
 }
 
 /**
@@ -376,6 +363,7 @@ export function getBasicSavePresentationStatus() {
     observedTargets: emittedByTargetResultId.size,
     emittedResults: emittedByTargetResultId.size,
     rollFieldsAvailable: { ...BASIC_SAVE_ROLL_FIELDS_AVAILABLE },
+    ...getBasicSaveDamagePresentationStatus(),
   };
 }
 
@@ -387,11 +375,12 @@ export function installBasicSavePresentationFeedApi() {
   root.integrations = root.integrations ?? {};
   root.dev = root.dev ?? {};
 
-  const stages = Object.freeze({ targetResolved: true });
+  const stages = Object.freeze({ targetResolved: true, targetDamageApplied: true });
 
   root.integrations.basicSavePresentation = Object.freeze({
     protocol: BASIC_SAVE_PRESENTATION_PROTOCOL,
     targetResolvedHook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
+    targetDamageAppliedHook: BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK,
     available: true,
     stages,
     getStatus: () => getBasicSavePresentationStatus(),
@@ -399,5 +388,8 @@ export function installBasicSavePresentationFeedApi() {
 
   root.dev.watchBasicSavePresentationFeed = () => watchBasicSavePresentationFeed();
   root.dev.stopWatchingBasicSavePresentationFeed = () => stopWatchingBasicSavePresentationFeed();
+  root.dev.watchBasicSaveDamagePresentationFeed = () => watchBasicSaveDamagePresentationFeed();
+  root.dev.stopWatchingBasicSaveDamagePresentationFeed = () =>
+    stopWatchingBasicSaveDamagePresentationFeed();
   root.dev.getBasicSavePresentationStatus = () => getBasicSavePresentationStatus();
 }

@@ -241,12 +241,12 @@ test("player and NPC presentation omit transaction identifiers from status DOM",
   assert.doesNotMatch(source("scripts/chat-ui.js"), /textContent\s*=\s*row\.presentationError/);
 });
 
-test("0.14.8 metadata preserves GitHub distribution structure", () => {
+test("0.14.9 metadata preserves GitHub distribution structure", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.8");
-  assert.equal(packageMetadata.version, "0.14.8");
+  assert.equal(module.version, "0.14.9");
+  assert.equal(packageMetadata.version, "0.14.9");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.8/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.9/nelflow.zip");
 });

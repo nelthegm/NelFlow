@@ -225,6 +225,6 @@ describe("Strike attack presentation feed", () => {
     assert.match(resolver, /nelflow\.strikeResolved|tryDeliverStrikePresentation/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.8");
+    assert.equal(module.version, "0.14.9");
   });
 });

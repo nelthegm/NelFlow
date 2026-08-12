@@ -1,7 +1,12 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.8** adds official PF2e Toolbelt **3.54.0** Target Helper
+Nelflow **0.14.9** extends the presentation-neutral basic-save integration to
+protocol 2 with `nelflow.basicSaveTargetDamageAppliedPresentation`. The new
+GM-local Stage 2 reports actual per-target normal plus temporary HP loss after
+PF2e applies the authoritative save degree and IWR. It does not recreate IWR,
+change mechanics, suppress native floating text, or add UI. Nelflow **0.14.8**
+added official PF2e Toolbelt **3.54.0** Target Helper
 compatibility and registers presentation-neutral Strike / basic-save integration
 APIs at Foundry `init` so Toolbelt version gates cannot race or suppress them.
 Nelflow **0.14.7** added a presentation-neutral basic-save target result feed:
@@ -75,14 +80,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.8/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.9/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.8"
+game.modules.get("nelflow")?.version // "0.14.9"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -101,6 +106,48 @@ npm run check
 npm run package
 ```
 
+## Nelflow 0.14.9 basic-save target damage feed
+
+Protocol 2 preserves the existing target-result hook and adds a second stage:
+
+```text
+nelflow.basicSaveTargetResolvedPresentation
+nelflow.basicSaveTargetDamageAppliedPresentation
+```
+
+```js
+game.nelflow.integrations.basicSavePresentation
+// {
+//   protocol: 2,
+//   targetResolvedHook: "nelflow.basicSaveTargetResolvedPresentation",
+//   targetDamageAppliedHook: "nelflow.basicSaveTargetDamageAppliedPresentation",
+//   stages: { targetResolved: true, targetDamageApplied: true }
+// }
+
+game.nelflow.dev.watchBasicSaveDamagePresentationFeed()
+game.nelflow.dev.getBasicSavePresentationStatus()
+// {
+//   appliedDamageSource: "transaction-before-after",
+//   tempHpAware: true,
+//   damageProducerAvailable: true,
+//   ...
+// }
+```
+
+`damage.applied` is a positive magnitude of actual target normal plus temporary
+HP loss. It is observed after PF2e's exact application, so targets sharing one
+Fireball roll may correctly report different values after save degree and IWR.
+Conclusive critical-success/no-damage and IWR-to-zero results report `0`.
+
+This differs intentionally from Strike Stage 2, which reports the authoritative
+rolled damage total before target IWR. Toolbelt, NelCine, NelZones,
+`nelflow.damageApplied`, Undo, native PF2e presentation, and Strike protocol 3
+remain unchanged.
+
+See [the protocol contract](docs/BASIC_SAVE_PRESENTATION_CONTRACT.md),
+[0.14.9 release notes](docs/RELEASE_NOTES_0.14.9.md), and
+[runtime plan](docs/NELFLOW_0.14.9_TEST_PLAN.md).
+
 ## Nelflow 0.14.8 Toolbelt 3.54.0 compatibility
 
 Supported Target Helper range is **3.52.0–3.54.0**. Toolbelt 3.54.0 retains the
@@ -111,7 +158,7 @@ Presentation APIs register at Foundry `init`:
 
 ```js
 game.nelflow.integrations.strikePresentation // protocol 3
-game.nelflow.integrations.basicSavePresentation // protocol 1
+game.nelflow.integrations.basicSavePresentation // protocol 2 (protocol-1 fields preserved)
 ```
 
 Unsupported Toolbelt versions still fail open for Toolbelt automation, but they
@@ -119,7 +166,7 @@ cannot remove Strike protocol 3. Basic-save status reports producer health:
 
 ```js
 game.nelflow.dev.getBasicSavePresentationStatus()
-// { protocol: 1, toolbeltVersion, toolbeltSupported, producerAvailable, ... }
+// { protocol: 2, toolbeltVersion, toolbeltSupported, producerAvailable, ... }
 ```
 
 See [0.14.8 release notes](docs/RELEASE_NOTES_0.14.8.md) and
@@ -137,10 +184,11 @@ nelflow.basicSaveTargetResolvedPresentation
 ```js
 game.nelflow.integrations.basicSavePresentation.getStatus()
 // {
-//   protocol: 1,
+//   protocol: 2,
 //   targetResolvedHook: "nelflow.basicSaveTargetResolvedPresentation",
+//   targetDamageAppliedHook: "nelflow.basicSaveTargetDamageAppliedPresentation",
 //   available: true,
-//   stages: { targetResolved: true }
+//   stages: { targetResolved: true, targetDamageApplied: true }
 // }
 
 game.nelflow.dev.watchBasicSavePresentationFeed()

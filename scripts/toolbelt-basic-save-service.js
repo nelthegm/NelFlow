@@ -54,6 +54,7 @@ import {
   SAVE_BATCH_COMMIT_TRIGGERS,
 } from "./nelcine-save-batch-impact.js";
 import { emitBasicSaveTargetPresentationFromReady } from "./basic-save-presentation-feed.js";
+import { emitBasicSaveTargetDamagePresentationFromApplication } from "./basic-save-damage-presentation-feed.js";
 
 const FLAG = "toolbeltBasicSave";
 const mutationQueues = new Map();
@@ -505,6 +506,14 @@ async function applyOne(message, draft, targetKey) {
   if (record.multiplier === 0) {
     record.state = TOOLBELT_TARGET_STATES.NO_DAMAGE;
     await persist(message, draft);
+    emitBasicSaveTargetDamagePresentationFromApplication({
+      draft,
+      record,
+      target,
+      normalized,
+      damageRoll: message.rolls?.at(draft.rollIndex) ?? null,
+      conclusiveZero: true,
+    });
     return;
   }
 
@@ -581,6 +590,14 @@ async function applyOne(message, draft, targetKey) {
     record.state = TOOLBELT_TARGET_STATES.APPLIED;
     record.undoState = "available";
     await persist(message, draft);
+    emitBasicSaveTargetDamagePresentationFromApplication({
+      draft,
+      record,
+      target,
+      normalized,
+      damageRoll,
+      transformedRoll: result.transformedRoll,
+    });
     diagnostic("toolbelt-application-complete", { integrationId: draft.integrationId, targetKey });
     if (draft.sourceKind === "npc-ability") {
       diagnostic("npc-ability-application-complete", {

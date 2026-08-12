@@ -1118,11 +1118,46 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.7.md",
   "docs/NELFLOW_0.14.8_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.8.md",
+  "docs/NELFLOW_0.14.9_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.9.md",
+  "scripts/basic-save-presentation-identity.js",
+  "scripts/basic-save-damage-presentation-feed.js",
+  "tests/basic-save-damage-presentation-feed.test.mjs",
   "docs/BASIC_SAVE_PRESENTATION_CONTRACT.md",
   "docs/NELFLOW_0.14.4_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.4.md",
 ]) {
-  if (!existsSync(join(root, path))) fail(`Nelflow 0.6.5 presentation cleanup file is missing: ${path}`);
+  if (!existsSync(join(root, path))) fail(`Required Nelflow source or documentation file is missing: ${path}`);
+}
+const basicSaveDamageFeed = read("scripts/basic-save-damage-presentation-feed.js");
+const basicSavePresentationFeed = read("scripts/basic-save-presentation-feed.js");
+for (const required of [
+  "BASIC_SAVE_PRESENTATION_PROTOCOL = 2",
+  "targetDamageApplied: true",
+  "targetDamageAppliedHook: BASIC_SAVE_TARGET_DAMAGE_APPLIED_PRESENTATION_HOOK",
+]) {
+  if (!basicSavePresentationFeed.includes(required)) {
+    fail(`basic-save presentation protocol 2 contract is missing: ${required}`);
+  }
+}
+for (const required of [
+  "nelflow.basicSaveTargetDamageAppliedPresentation",
+  "damagePresentationEmittedByDamageResultId",
+  "transaction-before-after",
+  "beforeTempHp",
+  "afterTempHp",
+  "Hooks.callAll",
+]) {
+  if (!basicSaveDamageFeed.includes(required)) {
+    fail(`basic-save target damage feed is missing: ${required}`);
+  }
+}
+if (/innerHTML|querySelector|new\s+(?:Damage)?Roll|Roll\.create|actor\.update|game\.socket/.test(basicSaveDamageFeed)) {
+  fail("basic-save target damage presentation must not parse HTML, roll, update actors, or broadcast");
+}
+const basicSaveDamageTests = read("tests/basic-save-damage-presentation-feed.test.mjs");
+if ((basicSaveDamageTests.match(/\bit\s*\(/g) ?? []).length < 69) {
+  fail("Nelflow 0.14.9 requires at least 69 focused target-damage scenarios");
 }
 const presentationTests = read("tests/presentation-cleanup.test.mjs");
 if ((presentationTests.match(/\btest\s*\(/g) ?? []).length < 24) {
