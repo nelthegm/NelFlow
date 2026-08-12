@@ -641,7 +641,7 @@ const toolbeltUi = read("scripts/toolbelt-basic-save-ui.js");
 const toolbeltModel = read("scripts/toolbelt-basic-save-model.js");
 for (const required of [
   'TOOLBELT_MIN_VERSION = "3.52.0"',
-  'TOOLBELT_MAX_VERSION = "3.53.1"',
+  'TOOLBELT_MAX_VERSION = "3.54.0"',
   "evaluateToolbeltCompatibility",
   'game.settings.get(TOOLBELT_ID, "targetHelper.enabled")',
   'message?.flags?.[TOOLBELT_ID]?.targetHelper',
@@ -1116,6 +1116,8 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.6.md",
   "docs/NELFLOW_0.14.7_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.7.md",
+  "docs/NELFLOW_0.14.8_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.8.md",
   "docs/BASIC_SAVE_PRESENTATION_CONTRACT.md",
   "docs/NELFLOW_0.14.4_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.4.md",

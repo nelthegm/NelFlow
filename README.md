@@ -1,7 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.7** adds a presentation-neutral basic-save target result feed:
+Nelflow **0.14.8** adds official PF2e Toolbelt **3.54.0** Target Helper
+compatibility and registers presentation-neutral Strike / basic-save integration
+APIs at Foundry `init` so Toolbelt version gates cannot race or suppress them.
+Nelflow **0.14.7** added a presentation-neutral basic-save target result feed:
 `nelflow.basicSaveTargetResolvedPresentation` as soon as Toolbelt records an
 authoritative per-target save (before HP / NelCine / batch completion). Protocol 1
 via `game.nelflow.integrations.basicSavePresentation`. NelTactics is optional.
@@ -55,7 +58,7 @@ uncertain linkage or presentation failure leaves the native card visible.
 - A supported NPC Strike or active player-/GM-owned character Strike with one
   target for the established flow, or two or more explicit targets for the
   shared-roll multi-target flow, or
-- PF2e Toolbelt **3.52.0–3.53.1** with Target Helper enabled for the recommended
+- PF2e Toolbelt **3.52.0–3.54.0** with Target Helper enabled for the recommended
   basic-save spell/ability workflow (capability-validated; unverified versions
   fail open to manual Toolbelt controls)
 
@@ -72,14 +75,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.7/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.8/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.7"
+game.modules.get("nelflow")?.version // "0.14.8"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -97,6 +100,30 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.8 Toolbelt 3.54.0 compatibility
+
+Supported Target Helper range is **3.52.0–3.54.0**. Toolbelt 3.54.0 retains the
+same durable `flags.pf2e-toolbelt.targetHelper` save/result contract used by
+0.14.7; NelFlow only extends the verified ceiling after schema audit.
+
+Presentation APIs register at Foundry `init`:
+
+```js
+game.nelflow.integrations.strikePresentation // protocol 3
+game.nelflow.integrations.basicSavePresentation // protocol 1
+```
+
+Unsupported Toolbelt versions still fail open for Toolbelt automation, but they
+cannot remove Strike protocol 3. Basic-save status reports producer health:
+
+```js
+game.nelflow.dev.getBasicSavePresentationStatus()
+// { protocol: 1, toolbeltVersion, toolbeltSupported, producerAvailable, ... }
+```
+
+See [0.14.8 release notes](docs/RELEASE_NOTES_0.14.8.md) and
+[runtime plan](docs/NELFLOW_0.14.8_TEST_PLAN.md).
 
 ## Nelflow 0.14.7 presentation-neutral basic-save result feed
 
@@ -1002,7 +1029,7 @@ Undo Blocked.
   protocol exists yet.
 - Shared-roll multi-target Strikes do not emit ordinary NelCine Strike
   cinematics in 0.9.1 (no dedicated multi-target Strike presentation contract).
-- Toolbelt versions outside 3.52.0–3.53.1 remain unverified and fail open to
+- Toolbelt versions outside 3.52.0–3.54.0 remain unverified and fail open to
   manual Target Helper controls without disabling NPC Strike cinematics.
 
 ## Testing and design documentation
@@ -1011,6 +1038,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.8 Toolbelt 3.54.0 compatibility](docs/RELEASE_NOTES_0.14.8.md)
 - [Nelflow 0.14.7 basic-save presentation feed](docs/RELEASE_NOTES_0.14.7.md)
 - [Nelflow 0.14.6 immediate Strike damage-rolled feed](docs/RELEASE_NOTES_0.14.6.md)
 - [Nelflow 0.14.5 two-stage Strike presentation feed](docs/RELEASE_NOTES_0.14.5.md)

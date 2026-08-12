@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.8
+
+- Officially support PF2e Toolbelt **3.54.0** Target Helper (inclusive ceiling
+  `3.52.0–3.54.0`) after confirming durable save/result schema compatibility
+- Register presentation-neutral Strike and basic-save integration APIs at
+  Foundry `init` so Toolbelt unsupported status / async ready cannot race
+  NelTactics capability probes
+- Enrich `getBasicSavePresentationStatus()` with `toolbeltVersion`,
+  `toolbeltSupported`, and `producerAvailable`
+- Preserve fail-open Toolbelt automation when versions remain unverified
+
 ## 0.14.7
 
 - Add presentation-neutral basic-save target result feed

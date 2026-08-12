@@ -93,7 +93,7 @@ them — never fabricated.
 }
 ```
 
-### Authoritative Toolbelt sources (3.52.0–3.53.1)
+### Authoritative Toolbelt sources (3.52.0–3.54.0)
 
 | Payload field | Toolbelt source |
 | --- | --- |

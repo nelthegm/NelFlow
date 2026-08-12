@@ -38,6 +38,17 @@ import { installDamageAppliedPublicApi } from "./damage-applied-bridge.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
+  // Presentation-neutral integration contracts must exist before any module's
+  // ready handler queries them. Register synchronously at init so Toolbelt
+  // compatibility and async ready work cannot race or suppress these APIs.
+  runNelflowSyncBoundary({
+    subsystem: "presentation-integrations",
+    operation: "init-install",
+    task: () => {
+      installStrikePresentationFeedApi();
+      installBasicSavePresentationFeedApi();
+    },
+  });
 });
 
 Hooks.once("setup", () => {
@@ -89,6 +100,7 @@ async function initializeReady() {
     operation: "initialize",
     task: () => {
       installNelcinePublicApi();
+      // Idempotent reinstall — contracts already registered at init.
       installStrikePresentationFeedApi();
       installBasicSavePresentationFeedApi();
       installEffectPublicApi();
@@ -150,5 +162,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.14.7 ready");
+  logger.debug("Nelflow 0.14.8 ready");
 }

@@ -5,9 +5,11 @@ const TOOLBELT_ID = "pf2e-toolbelt";
 export const TOOLBELT_MIN_VERSION = "3.52.0";
 /**
  * Inclusive ceiling for versions whose Target Helper flag contract has been
- * structurally verified against NelFlow's adapter (includes 3.53.1).
+ * structurally verified against NelFlow's adapter (includes 3.54.0).
+ * 3.54.0 Target Helper durable save/result schema matches 3.53.1; only decode
+ * dedupe and dice audio changed in Toolbelt itself.
  */
-export const TOOLBELT_MAX_VERSION = "3.53.1";
+export const TOOLBELT_MAX_VERSION = "3.54.0";
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const OUTCOMES = new Set(["criticalSuccess", "success", "failure", "criticalFailure"]);
 

@@ -497,7 +497,8 @@ export function seedStrikePresentationFeedEmission(transactionId) {
 
 /**
  * Install game.nelflow.integrations.strikePresentation (+ optional getStatus).
- * Safe to call once from ready.
+ * Safe to call from init and again from ready (idempotent). Independent of
+ * Target Helper version compatibility gates.
  */
 export function installStrikePresentationFeedApi() {
   const root = (game.nelflow ??= {});
@@ -517,6 +518,7 @@ export function installStrikePresentationFeedApi() {
     damageRolledHook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
     resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
+    independentOfTargetHelper: true,
     stages: { ...stages },
     recentAttackEmissions: attackEmittedByTransactionId.size,
     recentDamageRolledEmissions: damageRolledEmittedByTransactionId.size,

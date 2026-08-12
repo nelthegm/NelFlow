@@ -11,6 +11,7 @@
 
 import { logger } from "./logger.js";
 import { applicationId } from "./toolbelt-basic-save-model.js";
+import { ToolbeltTargetHelperAdapter } from "./toolbelt-target-helper-adapter.js";
 
 export const BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK =
   "nelflow.basicSaveTargetResolvedPresentation";
@@ -350,10 +351,28 @@ export function seedBasicSaveTargetPresentationEmission(targetResultId) {
 }
 
 export function getBasicSavePresentationStatus() {
+  let toolbeltVersion = null;
+  let toolbeltSupported = false;
+  let toolbeltActive = false;
+  let toolbeltEnabled = false;
+  try {
+    const status = ToolbeltTargetHelperAdapter.status();
+    toolbeltVersion = status?.version ?? null;
+    toolbeltSupported = status?.supported === true;
+    toolbeltActive = status?.active === true;
+    toolbeltEnabled = status?.enabled === true;
+  } catch {
+    /* status probe must never break the contract */
+  }
+  const producerAvailable = toolbeltActive && toolbeltEnabled && toolbeltSupported;
   return {
     available: true,
     protocol: BASIC_SAVE_PRESENTATION_PROTOCOL,
     targetResolvedHook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
+    hook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
+    toolbeltVersion,
+    toolbeltSupported,
+    producerAvailable,
     observedTargets: emittedByTargetResultId.size,
     emittedResults: emittedByTargetResultId.size,
     rollFieldsAvailable: { ...BASIC_SAVE_ROLL_FIELDS_AVAILABLE },
