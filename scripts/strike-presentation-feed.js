@@ -6,8 +6,13 @@
  *
  * Stage 2 — authoritative native damage roll exists (pre-application):
  *   Hooks.callAll("nelflow.strikeDamageRolledPresentation", payload)
+ *   damage.total = rolled DamageRoll total BEFORE IWR
  *
- * Stage 3 — final / resolved (existing):
+ * Stage 3 — actual target damage after PF2e application:
+ *   Hooks.callAll("nelflow.strikeDamageAppliedPresentation", payload)
+ *   damage.applied = actual normal+temp HP loss AFTER IWR
+ *
+ * Stage 4 — final / resolved (existing):
  *   Hooks.callAll("nelflow.strikeResolvedPresentation", payload)
  *
  * Exactly-once guards are independent per stage.
@@ -16,7 +21,6 @@
  * nelflow.strikeResolved / impact-sync only.
  *
  * Presentation only: never mutates HP, conditions, Undo, or rolls.
- * Stage 2 damage.total is the rolled DamageRoll total — not post-IWR HP loss.
  */
 
 import { logger } from "./logger.js";
@@ -28,11 +32,15 @@ import {
 
 export const STRIKE_ATTACK_PRESENTATION_FEED_HOOK = "nelflow.strikeAttackResolvedPresentation";
 export const STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK = "nelflow.strikeDamageRolledPresentation";
+export const STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK =
+  "nelflow.strikeDamageAppliedPresentation";
 export const STRIKE_PRESENTATION_FEED_HOOK = "nelflow.strikeResolvedPresentation";
-/** @deprecated Alias for the Stage 3 / resolved hook. */
+/** @deprecated Alias for the resolved hook. */
 export const STRIKE_RESOLVED_PRESENTATION_FEED_HOOK = STRIKE_PRESENTATION_FEED_HOOK;
 
-export const STRIKE_PRESENTATION_FEED_PROTOCOL = 3;
+export const STRIKE_PRESENTATION_FEED_PROTOCOL = 4;
+export const STRIKE_DAMAGE_APPLIED_SOURCE = "hp-temp-snapshots";
+export const STRIKE_DAMAGE_TEMP_HP_AWARE = true;
 
 const LOG_PREFIX = "NelFlow | Strike presentation feed |";
 const MAX_RECENT = 64;
@@ -43,10 +51,13 @@ const attackEmittedByTransactionId = new Map();
 /** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
 const damageRolledEmittedByTransactionId = new Map();
 
+/** Dedicated Stage 3 registry — never shared with rolled / resolved / damageApplied mechanics. */
+const damageAppliedEmittedByTransactionId = new Map();
+
 /** @type {Map<string, { transactionId: string, emittedAt: number, degree: * }>} */
 const resolvedEmittedByTransactionId = new Map();
 
-/** @type {Map<string, { attack?: number, damageRolled?: number, resolved?: number }>} */
+/** @type {Map<string, { attack?: number, damageRolled?: number, damageApplied?: number, resolved?: number }>} */
 const stageTimingByTransactionId = new Map();
 
 /** @type {((summary: object) => void)|null} */
@@ -68,6 +79,15 @@ export function hasStrikeAttackPresentationFeedEmission(transactionId) {
 export function hasStrikeDamageRolledPresentationFeedEmission(transactionId) {
   if (!transactionId) return false;
   return damageRolledEmittedByTransactionId.has(transactionId);
+}
+
+/**
+ * @param {string} transactionId
+ * @returns {boolean}
+ */
+export function hasStrikeDamageAppliedPresentationFeedEmission(transactionId) {
+  if (!transactionId) return false;
+  return damageAppliedEmittedByTransactionId.has(transactionId);
 }
 
 /**
@@ -131,7 +151,199 @@ export function tryEmitStrikeDamageRolledPresentationFeed(args = {}) {
 }
 
 /**
- * Emit Stage 3 — existing final / resolved presentation feed.
+ * Observe actual target resource loss after PF2e's authoritative Strike application.
+ * Temporary HP is included so temp-only absorption is not reported as 0.
+ */
+export function deriveActualStrikeHpLoss(args = {}) {
+  const beforeHp = Number(args.beforeHp ?? args.preApplication?.hp);
+  const beforeTempHp = Number(args.beforeTempHp ?? args.preApplication?.tempHp);
+  const afterHp = Number(args.afterHp ?? args.postApplication?.hp);
+  const afterTempHp = Number(args.afterTempHp ?? args.postApplication?.tempHp);
+  if (![beforeHp, beforeTempHp, afterHp, afterTempHp].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  return Math.max(0, beforeHp + beforeTempHp - afterHp - afterTempHp);
+}
+
+export function buildStrikeDamageAppliedResultId(transactionId) {
+  if (typeof transactionId !== "string" || !transactionId.trim()) return null;
+  return `${transactionId.trim()}:damage-applied`;
+}
+
+/**
+ * Build plain JSON Stage 3 payload. damage.applied is authoritative actual loss.
+ */
+export function buildStrikeDamageAppliedPresentationPayload(args = {}) {
+  const transactionId =
+    typeof args.transactionId === "string" && args.transactionId.trim()
+      ? args.transactionId.trim()
+      : null;
+  const targetTokenUuid =
+    typeof args.targetTokenUuid === "string" && args.targetTokenUuid.trim()
+      ? args.targetTokenUuid.trim()
+      : null;
+  const applied = Number.isFinite(args.applied) ? Number(args.applied) : null;
+  if (!transactionId) return { ok: false, reason: "missing-transaction-id" };
+  if (!targetTokenUuid) return { ok: false, reason: "missing-target-token" };
+  if (applied == null || applied < 0) {
+    return { ok: false, reason: "missing-authoritative-applied-damage" };
+  }
+
+  const damageResultId =
+    typeof args.damageResultId === "string" && args.damageResultId.trim()
+      ? args.damageResultId.trim()
+      : buildStrikeDamageAppliedResultId(transactionId);
+
+  const damage = { applied };
+  const rolledTotal = Number.isFinite(args.rolledTotal)
+    ? Number(args.rolledTotal)
+    : Number.isFinite(args.damageSummary?.total)
+      ? Number(args.damageSummary.total)
+      : null;
+  if (rolledTotal != null) damage.rolledTotal = rolledTotal;
+
+  /** @type {Record<string, unknown>} */
+  const payload = {
+    schemaVersion: 1,
+    stage: "damageApplied",
+    transactionId,
+    damageResultId,
+    targetTokenUuid,
+    damage,
+    createdAt: Number.isFinite(args.createdAt) ? Number(args.createdAt) : Date.now(),
+  };
+
+  const optional = [
+    ["sceneId", args.sceneId],
+    ["sourceTokenUuid", args.sourceTokenUuid ?? args.attackerTokenUuid],
+    ["sourceActorUuid", args.sourceActorUuid ?? args.attackerActorUuid],
+    ["attackerTokenUuid", args.attackerTokenUuid],
+    ["attackerActorUuid", args.attackerActorUuid],
+    ["targetActorUuid", args.targetActorUuid],
+    ["actionName", args.actionName],
+    ["itemUuid", args.itemUuid],
+  ];
+  for (const [key, value] of optional) {
+    if (typeof value === "string" && value.trim()) payload[key] = value.trim();
+  }
+
+  const attack = {};
+  if (typeof args.outcome === "string" && args.outcome) {
+    attack.degreeOfSuccess = args.outcome;
+  } else if (typeof args.attack?.degreeOfSuccess === "string") {
+    attack.degreeOfSuccess = args.attack.degreeOfSuccess;
+  }
+  if (args.critical === true || args.critical === false) {
+    attack.critical = args.critical;
+  } else if (args.damageVariant === "critical" || args.outcome === "criticalSuccess") {
+    attack.critical = true;
+  }
+  if (Object.keys(attack).length) payload.attack = attack;
+
+  try {
+    JSON.parse(JSON.stringify(payload));
+  } catch {
+    return { ok: false, reason: "serialization-failure" };
+  }
+  return { ok: true, payload };
+}
+
+export function evaluateStrikeDamageAppliedPresentationEligibility(ctx = {}) {
+  if (ctx.isGM !== true) return { eligible: false, reason: "not-gm" };
+  if (ctx.multiTarget === true) return { eligible: false, reason: "multi-target-unsupported" };
+  if (!ctx.transactionId) return { eligible: false, reason: "missing-transaction-id" };
+  if (ctx.alreadyEmitted === true) return { eligible: false, reason: "already-emitted" };
+  if (!ctx.targetTokenUuid) return { eligible: false, reason: "missing-target-token" };
+  if (!Number.isFinite(ctx.applied) || ctx.applied < 0) {
+    return { eligible: false, reason: "missing-authoritative-applied-damage" };
+  }
+  return { eligible: true };
+}
+
+/**
+ * Emit Stage 3 — authoritative actual damage taken after PF2e application.
+ * @param {object} args
+ * @returns {{ emitted: boolean, reason?: string, hook?: string, damageResultId?: string }}
+ */
+export function tryEmitStrikeDamageAppliedPresentationFeed(args = {}) {
+  try {
+    const transactionId =
+      typeof args.transactionId === "string" && args.transactionId.trim()
+        ? args.transactionId.trim()
+        : null;
+    const applied =
+      Number.isFinite(args.applied)
+        ? Number(args.applied)
+        : deriveActualStrikeHpLoss(args);
+    const targetTokenUuid =
+      typeof args.targetTokenUuid === "string" && args.targetTokenUuid.trim()
+        ? args.targetTokenUuid.trim()
+        : null;
+    const damageResultId = buildStrikeDamageAppliedResultId(transactionId);
+    const gate = evaluateStrikeDamageAppliedPresentationEligibility({
+      isGM: game.user?.isGM === true,
+      multiTarget: args.multiTarget === true,
+      transactionId,
+      alreadyEmitted: hasStrikeDamageAppliedPresentationFeedEmission(transactionId),
+      targetTokenUuid,
+      applied,
+    });
+    if (!gate.eligible) {
+      return { emitted: false, reason: gate.reason, damageResultId: damageResultId ?? undefined };
+    }
+
+    const built = buildStrikeDamageAppliedPresentationPayload({
+      ...args,
+      transactionId,
+      targetTokenUuid,
+      applied,
+      damageResultId,
+    });
+    if (!built.ok) return { emitted: false, reason: built.reason, damageResultId };
+
+    const callAll =
+      args.hooksCallAll ??
+      (typeof Hooks !== "undefined" && typeof Hooks.callAll === "function"
+        ? Hooks.callAll.bind(Hooks)
+        : null);
+    if (typeof callAll !== "function") {
+      return { emitted: false, reason: "hooks-unavailable", damageResultId };
+    }
+
+    rememberEmission(damageAppliedEmittedByTransactionId, transactionId, built.payload);
+    try {
+      callAll(STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK, built.payload);
+    } catch (error) {
+      logger.error(`${LOG_PREFIX} Listener failed`, {
+        stage: "strike-presentation-feed-damageApplied",
+        transactionId,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      notifyWatcher(built.payload, transactionId, "damageApplied");
+      return {
+        emitted: true,
+        reason: "listener-failed",
+        hook: STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK,
+        damageResultId,
+      };
+    }
+    notifyWatcher(built.payload, transactionId, "damageApplied");
+    return {
+      emitted: true,
+      hook: STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK,
+      damageResultId,
+    };
+  } catch (error) {
+    logger.error(`${LOG_PREFIX} Unexpected failure`, {
+      stage: "strike-presentation-feed-damageApplied",
+      reason: error instanceof Error ? error.message : String(error),
+    });
+    return { emitted: false, reason: "internal-exception" };
+  }
+}
+
+/**
+ * Emit Stage 4 — existing final / resolved presentation feed.
  * @param {object} args
  * @returns {{ emitted: boolean, reason?: string, hook?: string }}
  */
@@ -333,7 +545,7 @@ function labelFromUuid(uuid) {
 /**
  * @param {object} payload
  * @param {string} transactionId
- * @param {"attack"|"damageRolled"|"resolved"} stage
+ * @param {"attack"|"damageRolled"|"damageApplied"|"resolved"} stage
  */
 function notifyWatcher(payload, transactionId, stage) {
   if (typeof feedWatcher !== "function") return;
@@ -349,7 +561,9 @@ function notifyWatcher(payload, transactionId, stage) {
 
     const attacker =
       labelFromUuid(payload?.attackerTokenUuid) ??
-      labelFromUuid(payload?.attackerActorUuid);
+      labelFromUuid(payload?.sourceTokenUuid) ??
+      labelFromUuid(payload?.attackerActorUuid) ??
+      labelFromUuid(payload?.sourceActorUuid);
     const target =
       labelFromUuid(payload?.targetTokenUuid) ??
       labelFromUuid(payload?.targetActorUuid);
@@ -372,12 +586,18 @@ function notifyWatcher(payload, transactionId, stage) {
           ? null
           : Number.isFinite(payload.damage?.total)
             ? payload.damage.total
-            : null,
+            : Number.isFinite(payload.damage?.rolledTotal)
+              ? payload.damage.rolledTotal
+              : null,
+      damageApplied: Number.isFinite(payload?.damage?.applied) ? payload.damage.applied : null,
       hasDamageField: Object.hasOwn(payload ?? {}, "damage"),
-      critical: payload?.critical === true,
+      critical: payload?.critical === true || payload?.attack?.critical === true,
       msSinceAttack: Number.isFinite(timing.attack) ? now - timing.attack : null,
       msSinceDamageRolled: Number.isFinite(timing.damageRolled)
         ? now - timing.damageRolled
+        : null,
+      msSinceDamageApplied: Number.isFinite(timing.damageApplied)
+        ? now - timing.damageApplied
         : null,
     });
   } catch {
@@ -416,7 +636,7 @@ export function watchStrikePresentationFeed() {
 
     if (summary.stage === "damageRolled") {
       const damageLine = Number.isFinite(summary.damageTotal)
-        ? String(summary.damageTotal)
+        ? `rolled: ${summary.damageTotal}`
         : "damage none";
       const timing =
         Number.isFinite(summary.msSinceAttack)
@@ -424,6 +644,21 @@ export function watchStrikePresentationFeed() {
           : null;
       console.debug(
         [`STRIKE DAMAGE ROLLED ${shortId}`, who, damageLine, timing]
+          .filter((line) => line != null && line !== "")
+          .join("\n"),
+      );
+      return;
+    }
+
+    if (summary.stage === "damageApplied") {
+      const rolled = Number.isFinite(summary.damageTotal)
+        ? `rolled: ${summary.damageTotal}`
+        : "rolled: unavailable";
+      const applied = Number.isFinite(summary.damageApplied)
+        ? `applied: ${summary.damageApplied}`
+        : "applied: unavailable";
+      console.debug(
+        [`STRIKE DAMAGE APPLIED ${shortId}`, who, rolled, applied]
           .filter((line) => line != null && line !== "")
           .join("\n"),
       );
@@ -460,6 +695,7 @@ export function stopWatchingStrikePresentationFeed() {
 export function clearStrikePresentationFeedEmissions() {
   attackEmittedByTransactionId.clear();
   damageRolledEmittedByTransactionId.clear();
+  damageAppliedEmittedByTransactionId.clear();
   resolvedEmittedByTransactionId.clear();
   stageTimingByTransactionId.clear();
   feedWatcher = null;
@@ -479,6 +715,16 @@ export function seedStrikeAttackPresentationFeedEmission(transactionId) {
 export function seedStrikeDamageRolledPresentationFeedEmission(transactionId) {
   if (!transactionId) return;
   damageRolledEmittedByTransactionId.set(transactionId, {
+    transactionId,
+    emittedAt: Date.now(),
+    degree: null,
+  });
+}
+
+/** Test helper */
+export function seedStrikeDamageAppliedPresentationFeedEmission(transactionId) {
+  if (!transactionId) return;
+  damageAppliedEmittedByTransactionId.set(transactionId, {
     transactionId,
     emittedAt: Date.now(),
     degree: null,
@@ -508,6 +754,7 @@ export function installStrikePresentationFeedApi() {
   const stages = Object.freeze({
     attack: true,
     damageRolled: true,
+    damageApplied: true,
     resolved: true,
   });
 
@@ -516,12 +763,16 @@ export function installStrikePresentationFeedApi() {
     hook: STRIKE_PRESENTATION_FEED_HOOK,
     attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
     damageRolledHook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
+    damageAppliedHook: STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK,
     resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
     independentOfTargetHelper: true,
+    actualDamageSource: STRIKE_DAMAGE_APPLIED_SOURCE,
+    tempHpAware: STRIKE_DAMAGE_TEMP_HP_AWARE,
     stages: { ...stages },
     recentAttackEmissions: attackEmittedByTransactionId.size,
     recentDamageRolledEmissions: damageRolledEmittedByTransactionId.size,
+    recentDamageAppliedEmissions: damageAppliedEmittedByTransactionId.size,
     recentResolvedEmissions: resolvedEmittedByTransactionId.size,
     recentEmissions: resolvedEmittedByTransactionId.size,
   });
@@ -531,6 +782,7 @@ export function installStrikePresentationFeedApi() {
     hook: STRIKE_PRESENTATION_FEED_HOOK,
     attackHook: STRIKE_ATTACK_PRESENTATION_FEED_HOOK,
     damageRolledHook: STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK,
+    damageAppliedHook: STRIKE_DAMAGE_APPLIED_PRESENTATION_FEED_HOOK,
     resolvedHook: STRIKE_PRESENTATION_FEED_HOOK,
     available: true,
     stages,

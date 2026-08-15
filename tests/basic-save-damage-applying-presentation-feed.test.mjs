@@ -1,5 +1,5 @@
 /**
- * Basic-save damage ownership reservation (0.14.10 / protocol 3).
+ * Basic-save damage ownership reservation (0.14.11 / protocol 3).
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -55,7 +55,7 @@ function args(overrides = {}) {
   };
 }
 
-describe("0.14.10 basic-save damage applying ownership reservation", () => {
+describe("0.14.11 basic-save damage applying ownership reservation", () => {
   beforeEach(() => {
     clearBasicSavePresentationEmissions();
     clearBasicSaveDamagePresentationEmissions();
@@ -225,7 +225,7 @@ describe("0.14.10 basic-save damage applying ownership reservation", () => {
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /Actor\.update|setFlag\(/);
     assert.doesNotMatch(source("scripts/toolbelt-basic-save-service.js"), /rollSaveForTarget|rollSaves\(/);
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 3);
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 4);
     assert.equal(getBasicSaveDamagePresentationStatus().damageProducerAvailable, true);
     assert.equal(
       getBasicSaveDamagePresentationStatus().targetDamageApplyingHook,
@@ -233,14 +233,14 @@ describe("0.14.10 basic-save damage applying ownership reservation", () => {
     );
   });
 
-  it("44-55. Strike protocol 3 unchanged; safety + version 0.14.10", () => {
-    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 3/);
+  it("44-55. Strike protocol 4; safety + version 0.14.11", () => {
+    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 4/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeAttackResolvedPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /floating|suppressNative|cssText/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.10");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.10");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.11");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.11");
     const id = buildBasicSaveTargetDamageResultId(args());
     assert.match(id, /:damage:/);
     emitBasicSaveTargetDamageApplyingPresentationFromApplication({

@@ -302,11 +302,11 @@ describe("0.14.7 basic save presentation feed", () => {
     assert.match(main, /installStrikePresentationFeedApi/);
     assert.match(source("scripts/nelcine-save-batch-bridge.js"), /nelflow\.basicSaveBatchResolved/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
-    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 3/);
+    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 4/);
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
   });
 
-  it("49-52. strike protocol 3 + damageApplied + no NelTactics gate", () => {
+  it("49-52. strike protocol 4 + damageApplied + no NelTactics gate", () => {
     const feed = source("scripts/basic-save-presentation-feed.js");
     assert.doesNotMatch(feed, /neltactics|game\.modules\.get\(["']neltactics/);
     assert.match(source("scripts/strike-presentation-feed.js"), /protocol:\s*STRIKE_PRESENTATION_FEED_PROTOCOL/);
@@ -518,8 +518,8 @@ describe("0.14.7 basic save presentation feed", () => {
     assert.notEqual(a, b);
   });
 
-  it("version metadata is 0.14.10", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.10");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.10");
+  it("version metadata is 0.14.11", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.11");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.11");
   });
 });

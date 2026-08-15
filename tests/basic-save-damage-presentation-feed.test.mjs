@@ -1,4 +1,4 @@
-/** Presentation-neutral basic-save target damage feed (0.14.10 / protocol 3). */
+/** Presentation-neutral basic-save target damage feed (0.14.11 / protocol 3). */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { readFileSync } from "node:fs";
@@ -126,7 +126,7 @@ function applicationProjection(overrides = {}) {
   };
 }
 
-describe("0.14.10 basic-save target damage presentation feed", () => {
+describe("0.14.11 basic-save target damage presentation feed", () => {
   beforeEach(() => {
     clearBasicSavePresentationEmissions();
     clearBasicSaveDamagePresentationEmissions();
@@ -372,8 +372,8 @@ describe("0.14.10 basic-save target damage presentation feed", () => {
   it("55. NelZones mechanics contract remains the existing damageApplied feed", () => {
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /NelZones|damageApplied/);
   });
-  it("56. Strike protocol 3 is unchanged", () => {
-    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 3/);
+  it("56. Strike protocol is 4", () => {
+    assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 4/);
   });
   it("57. Strike attack feed is unchanged", () => {
     assert.match(source("scripts/strike-presentation-feed.js"), /strikeAttackResolvedPresentation/);

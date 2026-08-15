@@ -246,11 +246,11 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
     assert.doesNotMatch(source("scripts/basic-save-presentation-feed.js"), /setFlag\(|Actor\.update/);
   });
 
-  it("32-39. Strike protocol 3 registers with supported and unsupported Toolbelt", () => {
+  it("32-39. Strike protocol 4 registers with supported and unsupported Toolbelt", () => {
     mockToolbelt("3.54.0");
     installStrikePresentationFeedApi();
     assert.equal(game.nelflow.integrations.strikePresentation.protocol, STRIKE_PRESENTATION_FEED_PROTOCOL);
-    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 3);
+    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 4);
     assert.equal(game.nelflow.integrations.strikePresentation.getStatus().independentOfTargetHelper, true);
     assert.equal(game.nelflow.integrations.strikePresentation.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
     assert.equal(
@@ -261,7 +261,7 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
 
     mockToolbelt("3.55.0");
     installStrikePresentationFeedApi();
-    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 3);
+    assert.equal(game.nelflow.integrations.strikePresentation.protocol, 4);
     assert.equal(game.nelflow.integrations.strikePresentation.available, true);
     assert.equal(ToolbeltTargetHelperAdapter.status().supported, false);
   });
@@ -289,11 +289,11 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
     assert.equal(status.toolbeltVersion, "3.55.0");
   });
 
-  it("44-48. damageApplied / no Toolbelt private API / version 0.14.10", () => {
+  it("44-48. damageApplied / no Toolbelt private API / version 0.14.11", () => {
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
     assert.doesNotMatch(source("scripts/toolbelt-basic-save-service.js"), /rollSaveForTarget/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.10");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.10");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.11");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.11");
     assert.equal(TOOLBELT_MAX_VERSION, "3.54.0");
   });
 });

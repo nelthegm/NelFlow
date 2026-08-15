@@ -17,6 +17,7 @@ import {
 } from "./nelcine-strike-delivery.js";
 import {
   tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikeDamageAppliedPresentationFeed,
   tryEmitStrikeDamageRolledPresentationFeed,
   tryEmitStrikePresentationFeed,
 } from "./strike-presentation-feed.js";
@@ -191,11 +192,12 @@ async function commitStrikeApplication({
   if (applied.applicationMessage) {
     next = await TransactionStore.linkMessage(message, applied.applicationMessage, "application");
   }
+  const appliedHpLoss = appliedAmount(preApplication, postApplication);
   next = await TransactionStore.update(message, {
     state: TRANSACTION_STATES.APPLIED,
     preApplication,
     postApplication,
-    appliedAmount: appliedAmount(preApplication, postApplication),
+    appliedAmount: appliedHpLoss,
     targetName: targetToken.name,
     impactCommit: {
       triggerSource,
@@ -209,6 +211,22 @@ async function commitStrikeApplication({
     postApplication,
     appliedAmount: next.appliedAmount,
     triggerSource,
+  });
+  // Stage 3: authoritative actual HP+temp loss after PF2e application.
+  // Emits for both immediate and delayed (impact-sync) commits.
+  tryEmitStrikeDamageAppliedPresentationFeed({
+    ...presentationArgsFromStrike({
+      transaction: next,
+      strike,
+      message,
+      targetToken,
+      damageMessage,
+      damageSummary: next.damageSummary ?? null,
+      includeDamage: true,
+    }),
+    applied: appliedHpLoss,
+    preApplication,
+    postApplication,
   });
   return next;
 }

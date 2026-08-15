@@ -62,13 +62,13 @@ describe("Strike attack presentation feed", () => {
     };
   });
 
-  it("1-4. attack hook + protocol 3 + preserves resolved hook", () => {
+  it("1-4. attack hook + protocol 4 + preserves resolved hook", () => {
     assert.equal(STRIKE_ATTACK_PRESENTATION_FEED_HOOK, "nelflow.strikeAttackResolvedPresentation");
     assert.equal(STRIKE_PRESENTATION_FEED_HOOK, "nelflow.strikeResolvedPresentation");
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 3);
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 4);
     installStrikePresentationFeedApi();
     const api = game.nelflow.integrations.strikePresentation;
-    assert.equal(api.protocol, 3);
+    assert.equal(api.protocol, 4);
     assert.equal(api.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
     assert.equal(api.damageRolledHook, "nelflow.strikeDamageRolledPresentation");
     assert.equal(api.resolvedHook, STRIKE_PRESENTATION_FEED_HOOK);
@@ -76,6 +76,7 @@ describe("Strike attack presentation feed", () => {
     assert.deepEqual(api.stages, {
       attack: true,
       damageRolled: true,
+      damageApplied: true,
       resolved: true,
     });
   });
@@ -225,6 +226,6 @@ describe("Strike attack presentation feed", () => {
     assert.match(resolver, /nelflow\.strikeResolved|tryDeliverStrikePresentation/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.10");
+    assert.equal(module.version, "0.14.11");
   });
 });

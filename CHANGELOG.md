@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.11
+
+- Add presentation-neutral Strike post-application hook
+  `nelflow.strikeDamageAppliedPresentation`
+- Bump `strikePresentation` protocol 3 → 4
+- Report actual target normal plus temporary HP loss from pre/post application
+  snapshots after PF2e IWR handling; keep Stage 2 rolled totals unchanged
+- Preserve basic-save protocol 3, `nelflow.damageApplied`, Undo, NelZones, and
+  native floating text
+
 ## 0.14.10
 
 - Add presentation-neutral basic-save ownership reservation hook

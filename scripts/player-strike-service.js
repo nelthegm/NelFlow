@@ -27,6 +27,7 @@ import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
 import {
   tryEmitStrikeAttackPresentationFeed,
+  tryEmitStrikeDamageAppliedPresentationFeed,
   tryEmitStrikeDamageRolledPresentationFeed,
   tryEmitStrikePresentationFeed,
 } from "./strike-presentation-feed.js";
@@ -477,11 +478,12 @@ async function processDamage(message) {
       if (applied.applicationMessage) {
         transaction = await TransactionStore.linkMessage(attackMessage, applied.applicationMessage, "application");
       }
+      const appliedHpLoss = appliedAmount(preApplication, postApplication);
       await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.APPLIED,
         preApplication,
         postApplication,
-        appliedAmount: appliedAmount(preApplication, postApplication),
+        appliedAmount: appliedHpLoss,
         applicationState: "applied",
         authorityClaimState: "completed",
         appliedAt: Date.now(),
@@ -497,6 +499,13 @@ async function processDamage(message) {
         transactionId: transaction.id,
         stage: "player-strike-application",
         reason: null,
+      });
+      // Stage 3: authoritative actual HP+temp loss after PF2e application.
+      tryEmitStrikeDamageAppliedPresentationFeed({
+        ...presentationArgs,
+        applied: appliedHpLoss,
+        preApplication,
+        postApplication,
       });
       tryEmitStrikePresentationFeed(presentationArgs);
       tryDeliverStrikePresentation(presentationArgs);

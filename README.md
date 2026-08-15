@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.11** extends Strike presentation to protocol 4 with
+`nelflow.strikeDamageAppliedPresentation` — actual target normal plus temporary
+HP loss after PF2e application (weakness/resistance/immunity/temp HP), while
+Stage 2 `damageRolled` remains the pre-IWR rolled DamageRoll total.
 Nelflow **0.14.10** extends basic-save presentation to protocol 3 with
 `nelflow.basicSaveTargetDamageApplyingPresentation` — a GM-local ownership
 reservation emitted immediately before PF2e `applyDamage` for real applications.
@@ -81,14 +85,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.10/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.11/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.10"
+game.modules.get("nelflow")?.version // "0.14.11"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -106,6 +110,46 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.11 authoritative Strike damage applied presentation
+
+Strike presentation protocol 4 adds post-application actual damage:
+
+```text
+nelflow.strikeDamageAppliedPresentation
+```
+
+```js
+game.nelflow.integrations.strikePresentation.getStatus()
+// {
+//   protocol: 4,
+//   attackHook: "nelflow.strikeAttackResolvedPresentation",
+//   damageRolledHook: "nelflow.strikeDamageRolledPresentation",
+//   damageAppliedHook: "nelflow.strikeDamageAppliedPresentation",
+//   resolvedHook: "nelflow.strikeResolvedPresentation",
+//   hook: "nelflow.strikeResolvedPresentation",
+//   actualDamageSource: "hp-temp-snapshots",
+//   tempHpAware: true,
+//   stages: {
+//     attack: true,
+//     damageRolled: true,
+//     damageApplied: true,
+//     resolved: true,
+//   }
+// }
+
+game.nelflow.dev.watchStrikePresentationFeed()
+// STRIKE DAMAGE ROLLED … rolled: 20
+// STRIKE DAMAGE APPLIED … rolled: 20 / applied: 30
+```
+
+Stage 2 `damage.total` remains the pre-IWR rolled DamageRoll total. Stage 3
+`damage.applied` is actual normal + temporary HP loss after PF2e application.
+NelFlow does not reimplement IWR.
+
+See [Strike presentation contract](docs/STRIKE_PRESENTATION_CONTRACT.md),
+[0.14.11 release notes](docs/RELEASE_NOTES_0.14.11.md), and
+[runtime plan](docs/NELFLOW_0.14.11_TEST_PLAN.md).
 
 ## Nelflow 0.14.10 basic-save damage ownership reservation
 
@@ -194,12 +238,12 @@ same durable `flags.pf2e-toolbelt.targetHelper` save/result contract used by
 Presentation APIs register at Foundry `init`:
 
 ```js
-game.nelflow.integrations.strikePresentation // protocol 3
-game.nelflow.integrations.basicSavePresentation // protocol 2 (protocol-1 fields preserved)
+game.nelflow.integrations.strikePresentation // protocol 4
+game.nelflow.integrations.basicSavePresentation // protocol 3 (prior fields preserved)
 ```
 
 Unsupported Toolbelt versions still fail open for Toolbelt automation, but they
-cannot remove Strike protocol 3. Basic-save status reports producer health:
+cannot remove Strike protocol 4. Basic-save status reports producer health:
 
 ```js
 game.nelflow.dev.getBasicSavePresentationStatus()
@@ -259,7 +303,13 @@ nelflow.strikeDamageRolledPresentation
 Stage 2 `damage.total` is the **rolled** Strike damage result, not post-IWR HP
 loss. Later `nelflow.damageApplied` remains the application event.
 
-Stage 3 — existing final resolved feed:
+Stage 3 (0.14.11) — actual applied target damage after PF2e application:
+
+```text
+nelflow.strikeDamageAppliedPresentation
+```
+
+Stage 4 — existing final resolved feed:
 
 ```text
 nelflow.strikeResolvedPresentation
@@ -268,20 +318,26 @@ nelflow.strikeResolvedPresentation
 ```js
 game.nelflow.integrations.strikePresentation.getStatus()
 // {
-//   protocol: 3,
+//   protocol: 4,
 //   attackHook: "nelflow.strikeAttackResolvedPresentation",
 //   damageRolledHook: "nelflow.strikeDamageRolledPresentation",
+//   damageAppliedHook: "nelflow.strikeDamageAppliedPresentation",
 //   resolvedHook: "nelflow.strikeResolvedPresentation",
 //   hook: "nelflow.strikeResolvedPresentation",
 //   available: true,
-//   stages: { attack: true, damageRolled: true, resolved: true }
+//   stages: {
+//     attack: true,
+//     damageRolled: true,
+//     damageApplied: true,
+//     resolved: true,
+//   }
 // }
 
 game.nelflow.dev.watchStrikePresentationFeed()
 ```
 
-All three stages share the same `transactionId`. Misses emit Stage 1 (and may
-emit Stage 3 on NPC paths) but never Stage 2. Clicking Damage without a created
+All stages share the same `transactionId`. Misses emit Stage 1 (and may
+emit resolved on NPC paths) but never Stage 2 or Stage 3. Clicking Damage without a created
 roll does not emit Stage 2.
 
 `nelflow.strikeResolved` remains the NelCine-specific delivery hook. The neutral
@@ -1123,6 +1179,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.11 Strike damage applied presentation](docs/RELEASE_NOTES_0.14.11.md)
 - [Nelflow 0.14.10 basic-save damage ownership reservation](docs/RELEASE_NOTES_0.14.10.md)
 - [Nelflow 0.14.9 basic-save target damage feed](docs/RELEASE_NOTES_0.14.9.md)
 - [Nelflow 0.14.8 Toolbelt 3.54.0 compatibility](docs/RELEASE_NOTES_0.14.8.md)

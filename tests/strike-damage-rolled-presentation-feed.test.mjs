@@ -69,14 +69,14 @@ describe("0.14.6 three-stage Strike presentation feed", () => {
     };
   });
 
-  it("1-6. protocol 3 exposes attack, damageRolled, and resolved hooks", () => {
-    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 3);
+  it("1-6. protocol 4 exposes attack, damageRolled, and resolved hooks", () => {
+    assert.equal(STRIKE_PRESENTATION_FEED_PROTOCOL, 4);
     assert.equal(STRIKE_ATTACK_PRESENTATION_FEED_HOOK, "nelflow.strikeAttackResolvedPresentation");
     assert.equal(STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK, "nelflow.strikeDamageRolledPresentation");
     assert.equal(STRIKE_PRESENTATION_FEED_HOOK, "nelflow.strikeResolvedPresentation");
     installStrikePresentationFeedApi();
     const api = game.nelflow.integrations.strikePresentation;
-    assert.equal(api.protocol, 3);
+    assert.equal(api.protocol, 4);
     assert.equal(api.attackHook, STRIKE_ATTACK_PRESENTATION_FEED_HOOK);
     assert.equal(api.damageRolledHook, STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK);
     assert.equal(api.resolvedHook, STRIKE_PRESENTATION_FEED_HOOK);
@@ -84,6 +84,7 @@ describe("0.14.6 three-stage Strike presentation feed", () => {
     assert.deepEqual(api.stages, {
       attack: true,
       damageRolled: true,
+      damageApplied: true,
       resolved: true,
     });
     assert.equal(api.getStatus().damageRolledHook, STRIKE_DAMAGE_ROLLED_PRESENTATION_FEED_HOOK);
@@ -175,14 +176,16 @@ describe("0.14.6 three-stage Strike presentation feed", () => {
     assert.equal(missing.reason, "missing-authoritative-damage");
   });
 
-  it("29-32. Stage 2 uses rolled total; independent of damageApplied / HP delta", () => {
+  it("29-32. Stage 2 uses rolled total; independent of mechanics damageApplied / HP delta", () => {
     tryEmitStrikeDamageRolledPresentationFeed(
       damageArgs({ damageSummary: { total: 30 } }),
     );
     assert.equal(Hooks.calls[0].payload.damage.total, 30);
 
     const feed = source("scripts/strike-presentation-feed.js");
-    assert.doesNotMatch(feed, /applyDamage|healthSnapshot|appliedAmount|damageApplied/);
+    // Stage 2 path must not call PF2e applyDamage / mutate HP.
+    assert.doesNotMatch(feed, /applyDamageToRecordedTarget|Actor\.update|healthSnapshot\(/);
+    assert.match(feed, /nelflow\.strikeDamageAppliedPresentation/);
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
     assert.match(source("scripts/player-strike-service.js"), /emitDamageAppliedFromApplication|applyDamageRollToRecordedTarget/);
   });
@@ -276,6 +279,6 @@ describe("0.14.6 three-stage Strike presentation feed", () => {
     assert.match(source("scripts/main.js"), /installStrikePresentationFeedApi/);
 
     const module = JSON.parse(source("module.json"));
-    assert.equal(module.version, "0.14.10");
+    assert.equal(module.version, "0.14.11");
   });
 });
