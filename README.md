@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.12** adds presentation-neutral
+`nelflow.healingAppliedPresentation` — actual normal HP restored from PF2e
+`damage-taken` AppliedDamageFlag healing applications (overheal capped;
+applied-only protocol; no pre-application ownership claim).
 Nelflow **0.14.11** extends Strike presentation to protocol 4 with
 `nelflow.strikeDamageAppliedPresentation` — actual target normal plus temporary
 HP loss after PF2e application (weakness/resistance/immunity/temp HP), while
@@ -85,14 +89,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.11/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.12/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.11"
+game.modules.get("nelflow")?.version // "0.14.12"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -110,6 +114,34 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.12 authoritative healing presentation
+
+After PF2e applies healing through `Actor#applyDamage` and creates a
+`damage-taken` ChatMessage with `flags.pf2e.appliedDamage.isHealing === true`,
+Nelflow emits GM-local:
+
+`nelflow.healingAppliedPresentation`
+
+Primary semantic:
+
+```js
+healing.applied // actual normal HP restored (overheal capped by missing HP)
+```
+
+Temp-HP grants are not counted. Manual sheet HP edits, Undo, and rest/reset do
+not emit. Pre-application ownership is **not** advertised (native PF2e owns the
+chat apply path).
+
+```js
+game.nelflow.integrations.healingPresentation
+// { protocol: 1, appliedHook, stages: { applying: false, applied: true } }
+game.nelflow.dev.watchHealingPresentationFeed()
+```
+
+See [healing contract](docs/HEALING_PRESENTATION_CONTRACT.md),
+[0.14.12 release notes](docs/RELEASE_NOTES_0.14.12.md), and
+[runtime plan](docs/NELFLOW_0.14.12_TEST_PLAN.md).
 
 ## Nelflow 0.14.11 authoritative Strike damage applied presentation
 

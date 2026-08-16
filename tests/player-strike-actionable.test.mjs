@@ -250,14 +250,14 @@ test("44. recovery remains separate and fail-open", () => {
   assert.match(chat, /NativeRecordsController\.failOpen/);
 });
 
-test("45. 0.14.11 metadata targets the published package", () => {
+test("45. 0.14.12 metadata targets the published package", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.11");
-  assert.equal(packageMetadata.version, "0.14.11");
+  assert.equal(module.version, "0.14.12");
+  assert.equal(packageMetadata.version, "0.14.12");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.11/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.12/nelflow.zip");
 });
 
 test("46. NelCine strike delivery remains after PC actionable presentation", () => {

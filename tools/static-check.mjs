@@ -1124,6 +1124,11 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.10.md",
   "docs/NELFLOW_0.14.11_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.11.md",
+  "docs/NELFLOW_0.14.12_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.12.md",
+  "docs/HEALING_PRESENTATION_CONTRACT.md",
+  "scripts/healing-presentation-feed.js",
+  "tests/healing-presentation-feed.test.mjs",
   "docs/STRIKE_PRESENTATION_CONTRACT.md",
   "scripts/basic-save-presentation-identity.js",
   "scripts/basic-save-damage-presentation-feed.js",
@@ -1133,6 +1138,28 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.4.md",
 ]) {
   if (!existsSync(join(root, path))) fail(`Required Nelflow source or documentation file is missing: ${path}`);
+}
+const healingPresentationFeed = read("scripts/healing-presentation-feed.js");
+for (const required of [
+  "HEALING_PRESENTATION_PROTOCOL = 1",
+  "nelflow.healingAppliedPresentation",
+  "applying: false",
+  "actualHealingFromAppliedDamage",
+  "Hooks.callAll",
+]) {
+  if (!healingPresentationFeed.includes(required)) {
+    fail(`healing presentation feed contract is missing: ${required}`);
+  }
+}
+if (/innerHTML|querySelector|new\s+(?:Damage)?Roll|Actor\.update|game\.socket/.test(healingPresentationFeed)) {
+  fail("healing presentation must not parse HTML, roll, update actors, or socket-broadcast");
+}
+if (/applyingHook:\s*HEALING_|applyingHook:\s*["']nelflow\.healingApplying/.test(healingPresentationFeed)) {
+  fail("healing presentation must not advertise an applyingHook");
+}
+const healingPresentationTests = read("tests/healing-presentation-feed.test.mjs");
+if ((healingPresentationTests.match(/\bit\s*\(/g) ?? []).length < 10) {
+  fail("Nelflow 0.14.12 requires focused healing presentation scenarios");
 }
 const basicSaveDamageFeed = read("scripts/basic-save-damage-presentation-feed.js");
 const basicSavePresentationFeed = read("scripts/basic-save-presentation-feed.js");

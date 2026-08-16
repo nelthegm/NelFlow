@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.12
+
+- Add presentation-neutral healing feed `nelflow.healingAppliedPresentation`
+- Expose `game.nelflow.integrations.healingPresentation` protocol **1** (applied-only)
+- Report actual normal HP restored from PF2e `damage-taken` AppliedDamageFlag
+  (`isHealing` + `system.attributes.hp.value` deltas); overheal naturally capped
+- Do **not** advertise pre-application ownership (native PF2e owns chat healing apply)
+- Exclude temp-HP grants, manual HP edits, Undo, and arbitrary Actor updates
+- Preserve Strike protocol 4, basic-save protocol 3, and `nelflow.damageApplied`
+
 ## 0.14.11
 
 - Add presentation-neutral Strike post-application hook

@@ -35,6 +35,10 @@ import {
 import { installStrikeRidersPublicApi } from "./strike-riders.js";
 import { installActionResultPresentationApi } from "./action-result-presentation.js";
 import { installDamageAppliedPublicApi } from "./damage-applied-bridge.js";
+import {
+  installHealingPresentationFeedApi,
+  registerHealingPresentationHooks,
+} from "./healing-presentation-feed.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -47,6 +51,7 @@ Hooks.once("init", () => {
     task: () => {
       installStrikePresentationFeedApi();
       installBasicSavePresentationFeedApi();
+      installHealingPresentationFeedApi();
     },
   });
 });
@@ -112,6 +117,8 @@ async function initializeReady() {
       installStrikeRidersPublicApi();
       installActionResultPresentationApi();
       installDamageAppliedPublicApi();
+      installHealingPresentationFeedApi();
+      registerHealingPresentationHooks();
     },
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
@@ -162,5 +169,5 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.14.11 ready");
+  logger.debug("Nelflow 0.14.12 ready");
 }
