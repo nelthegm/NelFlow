@@ -293,17 +293,16 @@ describe("0.14.13 spell-attack runtime repair", () => {
       },
     });
 
-    const boundaryWarns = warns.filter((args) => args[1] === "hook-boundary-failed");
+    const boundaryWarns = warns.filter((args) => String(args[0] ?? "").includes("hook-boundary-failed"));
     assert.equal(boundaryWarns.length, 1);
-    const serialized = String(boundaryWarns[0][2]);
+    const serialized = String(boundaryWarns[0][0]);
     assert.match(serialized, /"errorName":"Error"/);
     assert.match(serialized, /damage-observed -> claimed/);
     assert.match(serialized, /"stack":/);
     assert.match(serialized, /"operation":"create-chat-message"/);
     assert.match(serialized, /"hook":"spell-attack"/);
-    assert.equal(serialized.includes("{"), true);
-    // Exported log is a string, not a live Object that collapses to "Object".
-    assert.equal(typeof boundaryWarns[0][2], "string");
+    assert.equal(typeof boundaryWarns[0][0], "string");
+    assert.equal(boundaryWarns[0].length, 1);
   });
 
   it("12-15. strike / basic-save / healing / protocol unchanged by repair surface", () => {

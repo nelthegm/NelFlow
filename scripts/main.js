@@ -1,4 +1,5 @@
 import { renderNelflowChat } from "./chat-ui.js";
+import { MODULE_ID } from "./constants.js";
 import { logger } from "./logger.js";
 import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
@@ -183,6 +184,11 @@ async function initializeReady() {
   const root = (globalThis.game.nelflow ??= {});
   root.dev = root.dev ?? {};
   root.dev.getSpellAttackStatus = () => SpellAttackService.getStatus();
+  root.dev.getStatus = () => ({
+    moduleId: MODULE_ID,
+    version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.13",
+    spellAttack: SpellAttackService.getStatus(),
+  });
   root.dev.watchSpellAttackFlow = () => {
     SpellAttackService.watchFlow((event) => {
       try {

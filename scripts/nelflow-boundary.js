@@ -4,13 +4,26 @@ import { createFailureRecord, shortId } from "./transaction-failure.js";
 const notified = new Set();
 const reported = new Set();
 
+function readErrorContext(error) {
+  const ctx = error?.nelflowContext;
+  if (!ctx || typeof ctx !== "object") return {};
+  return {
+    transactionId: ctx.transactionId ?? null,
+    messageId: ctx.messageId ?? null,
+    messageType: ctx.messageType ?? null,
+    state: ctx.state ?? null,
+  };
+}
+
 function failureIdentity(options, failure, error) {
   const errorName = error instanceof Error ? error.name : "unknown-error";
   const errorMessage = error instanceof Error ? error.message : String(error ?? failure.code);
+  const enriched = readErrorContext(error);
   return [
     failure.subsystem,
     failure.operation,
-    failure.safeContext?.messageIdShort ?? shortId(options.messageId),
+    failure.safeContext?.messageIdShort ?? shortId(options.messageId ?? enriched.messageId),
+    shortId(options.transactionId ?? enriched.transactionId),
     errorName,
     errorMessage,
   ].join(":");
@@ -24,32 +37,34 @@ function notifyOnce(failure, identity) {
   ui.notifications?.warn?.("Nelflow.Notification.TransactionNeedsReview", { localize: true });
 }
 
-function boundaryFailure(options, reason = "internal-exception") {
+function boundaryFailure(options, reason = "internal-exception", error = null) {
+  const enriched = readErrorContext(error);
   return createFailureRecord({
     code: "internal-exception",
     reason,
     subsystem: options.subsystem,
     operation: options.operation,
-    state: options.state,
+    state: options.state ?? enriched.state,
     recoverable: true,
     context: {
-      messageId: options.messageId,
-      transactionId: options.transactionId,
-      sourceKind: options.transactionType,
+      messageId: options.messageId ?? enriched.messageId,
+      transactionId: options.transactionId ?? enriched.transactionId,
+      sourceKind: options.transactionType ?? enriched.messageType,
       userRole: game.user?.isGM ? "gm" : "player",
     },
   });
 }
 
 function report(options, failure, error) {
+  const enriched = readErrorContext(error);
   const identity = failureIdentity(options, failure, error);
   const diagnostic = {
     hook: options.hook ?? options.subsystem ?? null,
     operation: options.operation ?? null,
-    messageId: options.messageId ?? null,
-    messageType: options.messageType ?? options.transactionType ?? null,
-    transactionId: options.transactionId ?? null,
-    attackMessageId: options.messageId ?? null,
+    messageId: options.messageId ?? enriched.messageId ?? null,
+    messageType: options.messageType ?? options.transactionType ?? enriched.messageType ?? null,
+    transactionId: options.transactionId ?? enriched.transactionId ?? null,
+    attackMessageId: options.messageId ?? enriched.messageId ?? null,
     stage: `${failure.subsystem}:${failure.operation}`,
     reason: failure.code,
     errorName: error instanceof Error ? error.name : error == null ? null : "unknown-error",
@@ -68,7 +83,7 @@ export async function runNelflowBoundary(options) {
   try {
     return { ok: true, value: await options.task(), failure: null };
   } catch (error) {
-    const failure = boundaryFailure(options, error instanceof Error ? error.name : "unknown-error");
+    const failure = boundaryFailure(options, error instanceof Error ? error.name : "unknown-error", error);
     try {
       await options.onFailure?.(failure);
     } catch {
@@ -83,7 +98,7 @@ export function runNelflowSyncBoundary(options) {
   try {
     return { ok: true, value: options.task(), failure: null };
   } catch (error) {
-    const failure = boundaryFailure(options, error instanceof Error ? error.name : "unknown-error");
+    const failure = boundaryFailure(options, error instanceof Error ? error.name : "unknown-error", error);
     try {
       options.onFailure?.(failure);
     } catch {

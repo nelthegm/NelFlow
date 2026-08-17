@@ -172,6 +172,17 @@ function onCreateChatMessage(message) {
   }
 }
 
+/** Accept Token placeable or TokenDocument — never assume `.document` exists. */
+function applicationTargetRefs(targetToken) {
+  if (!targetToken) return null;
+  const document = targetToken.document ?? (targetToken.actor && targetToken.uuid ? targetToken : null);
+  const actor = targetToken.actor ?? document?.actor ?? null;
+  const tokenUuid = document?.uuid ?? targetToken.uuid ?? null;
+  const tokenId = document?.id ?? targetToken.id ?? null;
+  if (!tokenUuid || !actor?.uuid) return null;
+  return { document, actor, tokenUuid, tokenId };
+}
+
 function createApplicationCapture({
   transactionId,
   attackMessageId,
@@ -180,20 +191,27 @@ function createApplicationCapture({
   targetToken,
   nativeMarker = null,
 }) {
+  const refs = applicationTargetRefs(targetToken);
+  if (!refs) return null;
   const capture = {
     transactionId,
     attackMessageId,
     role: "application",
     sourceActorUuid,
     itemUuid,
-    targetTokenUuid: targetToken.document.uuid,
-    targetTokenId: targetToken.document.id,
-    targetActorUuid: targetToken.actor.uuid,
+    targetTokenUuid: refs.tokenUuid,
+    targetTokenId: refs.tokenId,
+    targetActorUuid: refs.actor.uuid,
     candidates: [],
     nativeMarker,
   };
   pendingApplicationCaptures.set(transactionId, capture);
   return capture;
+}
+
+function optionStringList(options) {
+  if (!Array.isArray(options)) return [];
+  return options.filter((option) => typeof option === "string");
 }
 
 function finishApplicationCapture(capture) {
@@ -726,10 +744,32 @@ export class PF2eAdapter {
     nativeMarker = null,
     beforeApplyDamage = null,
   }) {
-    const targetActor = targetToken?.actor;
-    const originActor = damageMessage?.actor;
-    const item = damageMessage?.item;
+    const targetRefs = applicationTargetRefs(targetToken);
+    const targetActor = targetRefs?.actor ?? targetToken?.actor ?? null;
     const context = messageFlags(damageMessage).context;
+    const originUuid = messageFlags(damageMessage).origin?.uuid ?? null;
+    // Spell DamageRoll cards may omit hydrated message.item while origin.uuid matches.
+    let item = null;
+    try {
+      item = damageMessage?.item ?? null;
+    } catch {
+      item = null;
+    }
+    if (!item && sourceItem && originUuid && originUuid === sourceItem.uuid) {
+      item = sourceItem;
+    }
+    let originActor = null;
+    try {
+      originActor = damageMessage?.actor ?? null;
+    } catch {
+      originActor = null;
+    }
+    if (!originActor && sourceActor) {
+      const stampedOriginActor = messageFlags(damageMessage).origin?.actor ?? null;
+      if (!stampedOriginActor || stampedOriginActor === sourceActor.uuid) {
+        originActor = sourceActor;
+      }
+    }
     if (
       !damageMessage?.isDamageRoll ||
       !damageRoll?.instances ||
@@ -747,7 +787,7 @@ export class PF2eAdapter {
 
     const transformedRoll = multiplier === 1 ? damageRoll : damageRoll.alter(multiplier, 0);
 
-    const messageRollOptions = [...(context.options ?? [])];
+    const messageRollOptions = optionStringList(context.options);
     const originRollOptions = messageRollOptions
       .filter((option) => option.startsWith("self:"))
       .map((option) => option.replace(/^self\b/, "origin"));
@@ -760,7 +800,7 @@ export class PF2eAdapter {
       messageRollOptions.push(`origin:${disposition}`);
     }
     if (!messageRollOptions.some((option) => option.startsWith("target"))) {
-      messageRollOptions.push(...targetActor.getSelfRollOptions("target"));
+      messageRollOptions.push(...optionStringList(targetActor.getSelfRollOptions?.("target")));
     }
 
     const domains = ["damage-received"];
@@ -778,7 +818,7 @@ export class PF2eAdapter {
       ...messageRollOptions.filter((option) => !/^(?:self|target)(?::|$)/.test(option)),
       ...effectRollOptions,
       ...originRollOptions,
-      ...contextClone.getSelfRollOptions(),
+      ...optionStringList(contextClone.getSelfRollOptions?.()),
     ]);
     const capture = createApplicationCapture({
       transactionId: applicationId,
@@ -788,13 +828,17 @@ export class PF2eAdapter {
       targetToken,
       nativeMarker,
     });
+    if (!capture) return null;
+
+    // Prefer canvas Token placeable when available; TokenDocument is accepted by newer PF2e.
+    const applyToken = targetToken?.document ? targetToken : targetToken?.object ?? targetToken;
 
     try {
       if (typeof beforeApplyDamage === "function") {
         try {
           beforeApplyDamage({
             transformedRoll,
-            targetToken,
+            targetToken: applyToken,
             applicationId,
             outcome,
             multiplier,
@@ -813,7 +857,7 @@ export class PF2eAdapter {
       }
       await contextClone.applyDamage({
         damage: transformedRoll,
-        token: targetToken,
+        token: applyToken,
         item,
         skipIWR: false,
         rollOptions,
@@ -831,7 +875,7 @@ export class PF2eAdapter {
             transformedRoll,
             damageMessage,
             targetActorUuid: targetActor.uuid,
-            targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid ?? null,
+            targetTokenUuid: targetRefs?.tokenUuid ?? targetToken.document?.uuid ?? targetToken.uuid ?? null,
             sourceActor,
             sourceItem,
           });
