@@ -363,6 +363,8 @@ test("no health notification when no review is needed", () => assert.equal(healt
 test("hook boundary exception becomes safe failure", async () => {
   installGame();
   globalThis.ui = { notifications: { warn: () => undefined } };
+  const { resetNelflowBoundaryDiagnosticsForTests } = await import("../scripts/nelflow-boundary.js");
+  resetNelflowBoundaryDiagnosticsForTests();
   const result = await runNelflowBoundary({ subsystem: "test-hook", operation: "create-message", messageId: "message-1", task: async () => { throw new Error("Secret actor formula 20d6"); } });
   assert.equal(result.ok, false);
   assert.equal(result.failure.code, "internal-exception");
@@ -371,11 +373,15 @@ test("hook boundary exception becomes safe failure", async () => {
 test("hook boundary does not reject", async () => {
   installGame();
   globalThis.ui = { notifications: { warn: () => undefined } };
+  const { resetNelflowBoundaryDiagnosticsForTests } = await import("../scripts/nelflow-boundary.js");
+  resetNelflowBoundaryDiagnosticsForTests();
   await assert.doesNotReject(() => runNelflowBoundary({ subsystem: "test", operation: "update", task: async () => { throw new Error("boom"); } }));
 });
 test("hook boundary records through callback", async () => {
   installGame();
   globalThis.ui = { notifications: { warn: () => undefined } };
+  const { resetNelflowBoundaryDiagnosticsForTests } = await import("../scripts/nelflow-boundary.js");
+  resetNelflowBoundaryDiagnosticsForTests();
   let recorded = null;
   await runNelflowBoundary({ subsystem: "test", operation: "update", task: async () => { throw new Error("boom"); }, onFailure: async (failure) => { recorded = failure; } });
   assert.equal(recorded.code, "internal-exception");

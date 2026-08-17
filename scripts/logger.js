@@ -11,10 +11,17 @@ function debugEnabled() {
 
 function withContext(context = {}) {
   return {
-    attackMessageId: short(context.attackMessageId),
+    hook: context.hook == null ? null : safeScalar(context.hook),
+    operation: context.operation == null ? null : safeScalar(context.operation),
+    messageId: short(context.messageId ?? context.attackMessageId),
+    messageType: context.messageType == null ? null : safeScalar(context.messageType),
+    attackMessageId: short(context.attackMessageId ?? context.messageId),
     transactionId: short(context.transactionId),
     stage: context.stage ?? "unknown",
     reason: safeScalar(context.reason),
+    errorName: context.errorName == null ? null : safeScalar(context.errorName),
+    errorMessage: context.errorMessage == null ? null : safeScalar(context.errorMessage),
+    stack: serializeStack(context.stack),
   };
 }
 
@@ -28,43 +35,65 @@ function safeScalar(value) {
   return String(value).replace(/[^A-Za-z0-9._:-]+/g, "-").slice(0, 100);
 }
 
-function sanitize(value, key = "", depth = 0) {
-  if (depth > 4) return "[depth-capped]";
-  if (value == null || typeof value === "boolean" || typeof value === "number") return value;
-  if (typeof value === "string") {
-    if (/uuid|messageid|transactionid|integrationid|applicationid|resolverid|userid/i.test(key)) return short(value);
-    return safeScalar(value);
+function serializeStack(stack) {
+  if (typeof stack !== "string" || !stack.trim()) return null;
+  return stack
+    .split("\n")
+    .slice(0, 16)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join(" | ")
+    .slice(0, 1200);
+}
+
+function errorFields(error) {
+  if (error == null) return {};
+  if (error instanceof Error) {
+    return {
+      errorName: safeScalar(error.name),
+      errorMessage: safeScalar(error.message),
+      stack: serializeStack(error.stack),
+    };
   }
-  if (Array.isArray(value)) {
-    if (/target|option|flag|roll/i.test(key)) return `[${value.length} entries redacted]`;
-    return value.slice(0, 12).map((entry) => sanitize(entry, key, depth + 1));
+  return {
+    errorName: "unknown-error",
+    errorMessage: safeScalar(error),
+    stack: null,
+  };
+}
+
+/** Flat JSON string so exported browser logs include fields without expanding Objects. */
+function formatDiagnostic(context = {}, error) {
+  const payload = {
+    ...withContext(context),
+    ...errorFields(error),
+  };
+  if (context.errorName != null && payload.errorName == null) payload.errorName = safeScalar(context.errorName);
+  if (context.errorMessage != null && payload.errorMessage == null) {
+    payload.errorMessage = safeScalar(context.errorMessage);
   }
-  if (typeof value !== "object") return safeScalar(value);
-  const result = {};
-  for (const [entryKey, entryValue] of Object.entries(value)) {
-    if (/name|formula|total|snapshot|flags?|rolloptions?|content|flavor|cookie|url|socket|credential/i.test(entryKey)) {
-      result[entryKey] = "[redacted]";
-      continue;
-    }
-    if (/uuid/i.test(entryKey)) {
-      result[entryKey] = short(entryValue);
-      continue;
-    }
-    result[entryKey] = sanitize(entryValue, entryKey, depth + 1);
+  if (context.stack != null && payload.stack == null) payload.stack = serializeStack(context.stack);
+  try {
+    return JSON.stringify(payload);
+  } catch {
+    return JSON.stringify({
+      stage: safeScalar(context.stage) ?? "unknown",
+      reason: safeScalar(context.reason),
+      errorName: "serialization-failure",
+    });
   }
-  return result;
 }
 
 export const logger = Object.freeze({
-  debug(message, data) {
-    if (debugEnabled()) console.debug(LOG_PREFIX, message, sanitize(data ?? ""));
+  debug(message, data, error) {
+    if (debugEnabled()) console.debug(LOG_PREFIX, message, formatDiagnostic(data ?? {}, error));
   },
 
   warn(message, context, error) {
-    console.warn(LOG_PREFIX, message, withContext(context));
+    console.warn(LOG_PREFIX, message, formatDiagnostic(context ?? {}, error));
   },
 
   error(message, context, error) {
-    console.error(LOG_PREFIX, message, withContext(context));
+    console.error(LOG_PREFIX, message, formatDiagnostic(context ?? {}, error));
   },
 });

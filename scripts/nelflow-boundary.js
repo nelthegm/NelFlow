@@ -2,10 +2,23 @@ import { logger } from "./logger.js";
 import { createFailureRecord, shortId } from "./transaction-failure.js";
 
 const notified = new Set();
+const reported = new Set();
 
-function notifyOnce(failure) {
+function failureIdentity(options, failure, error) {
+  const errorName = error instanceof Error ? error.name : "unknown-error";
+  const errorMessage = error instanceof Error ? error.message : String(error ?? failure.code);
+  return [
+    failure.subsystem,
+    failure.operation,
+    failure.safeContext?.messageIdShort ?? shortId(options.messageId),
+    errorName,
+    errorMessage,
+  ].join(":");
+}
+
+function notifyOnce(failure, identity) {
   if (!game.user?.isGM) return;
-  const key = `${failure.subsystem}:${failure.operation}:${failure.safeContext.messageIdShort}`;
+  const key = identity ?? `${failure.subsystem}:${failure.operation}:${failure.safeContext.messageIdShort}`;
   if (notified.has(key)) return;
   notified.add(key);
   ui.notifications?.warn?.("Nelflow.Notification.TransactionNeedsReview", { localize: true });
@@ -28,20 +41,27 @@ function boundaryFailure(options, reason = "internal-exception") {
   });
 }
 
-function report(options, failure) {
-  logger.debug("transaction-failure-recorded", {
-    transactionId: shortId(options.transactionId),
-    attackMessageId: shortId(options.messageId),
+function report(options, failure, error) {
+  const identity = failureIdentity(options, failure, error);
+  const diagnostic = {
+    hook: options.hook ?? options.subsystem ?? null,
+    operation: options.operation ?? null,
+    messageId: options.messageId ?? null,
+    messageType: options.messageType ?? options.transactionType ?? null,
+    transactionId: options.transactionId ?? null,
+    attackMessageId: options.messageId ?? null,
     stage: `${failure.subsystem}:${failure.operation}`,
     reason: failure.code,
-  });
-  logger.warn("hook-boundary-failed", {
-    transactionId: shortId(options.transactionId),
-    attackMessageId: shortId(options.messageId),
-    stage: `${failure.subsystem}:${failure.operation}`,
-    reason: failure.code,
-  });
-  notifyOnce(failure);
+    errorName: error instanceof Error ? error.name : error == null ? null : "unknown-error",
+    errorMessage: error instanceof Error ? error.message : error == null ? failure.code : String(error),
+    stack: error instanceof Error && typeof error.stack === "string" ? error.stack : null,
+  };
+  logger.debug("transaction-failure-recorded", diagnostic, error);
+  if (!reported.has(identity)) {
+    reported.add(identity);
+    logger.warn("hook-boundary-failed", diagnostic, error);
+  }
+  notifyOnce(failure, identity);
 }
 
 export async function runNelflowBoundary(options) {
@@ -54,7 +74,7 @@ export async function runNelflowBoundary(options) {
     } catch {
       // Boundary reporting must never replace the original safe failure.
     }
-    report(options, failure);
+    report(options, failure, error);
     return { ok: false, value: null, failure };
   }
 }
@@ -69,7 +89,13 @@ export function runNelflowSyncBoundary(options) {
     } catch {
       // Rendering and hook registration still fail open.
     }
-    report(options, failure);
+    report(options, failure, error);
     return { ok: false, value: null, failure };
   }
+}
+
+/** Test-only: clear once-per-identity boundary report/notification caches. */
+export function resetNelflowBoundaryDiagnosticsForTests() {
+  notified.clear();
+  reported.clear();
 }

@@ -282,18 +282,26 @@ async function processDamage(message) {
       claimedAt: Date.now(),
     });
     transaction = await TransactionStore.linkMessage(attackMessage, damageMessage, "damage");
+    // Match player-strike: DAMAGE_OBSERVED → VALIDATING → CLAIMED (never skip VALIDATING).
     transaction = await TransactionStore.update(attackMessage, {
-      state: TRANSACTION_STATES.CLAIMED,
+      state: TRANSACTION_STATES.VALIDATING,
+      activeOperation: {
+        ownerUserId: game.user.id,
+        sessionId: getRuntimeSessionId(),
+        enteredRevision: Number(transaction.revision ?? 0) + 1,
+      },
     });
 
-    const sourceActor = await fromUuid(transaction.snapshot.sourceActorUuid);
-    const sourceItem = await fromUuid(transaction.snapshot.sourceItemUuid);
-    const targetDocument = await fromUuid(transaction.snapshot.targetTokenUuid);
+    const sourceActor = await fromUuid(transaction.snapshot.sourceActorUuid).catch(() => null);
+    const sourceItem = await fromUuid(transaction.snapshot.sourceItemUuid).catch(() => null);
+    const targetDocument = await fromUuid(transaction.snapshot.targetTokenUuid).catch(() => null);
     const targetToken = targetDocument?.object ?? null;
 
+    if (!sourceActor || !sourceItem) {
+      await markManual(attackMessage, transaction, SPELL_ATTACK_FAILURES.SOURCE_INVALID);
+      return false;
+    }
     if (
-      !sourceActor ||
-      !sourceItem ||
       !targetToken?.actor ||
       targetToken.actor.uuid !== transaction.snapshot.targetActorUuid ||
       (transaction.snapshot.sceneId && targetDocument?.parent?.id !== transaction.snapshot.sceneId)
@@ -301,6 +309,13 @@ async function processDamage(message) {
       await markManual(attackMessage, transaction, SPELL_ATTACK_FAILURES.TARGET_INVALID);
       return false;
     }
+
+    transaction = await TransactionStore.update(attackMessage, {
+      state: TRANSACTION_STATES.CLAIMED,
+      processingUserId: game.user.id,
+      authorityClaimState: "claimed-by-this-gm",
+      claimedAt: transaction.claimedAt ?? Date.now(),
+    });
 
     const presentationArgs = {
       transactionId: transaction.id,
