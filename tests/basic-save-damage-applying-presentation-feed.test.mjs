@@ -1,5 +1,5 @@
 /**
- * Basic-save damage ownership reservation (0.14.12 / protocol 3).
+ * Basic-save damage ownership reservation (0.14.13 / protocol 3).
  */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -55,7 +55,7 @@ function args(overrides = {}) {
   };
 }
 
-describe("0.14.12 basic-save damage applying ownership reservation", () => {
+describe("0.14.13 basic-save damage applying ownership reservation", () => {
   beforeEach(() => {
     clearBasicSavePresentationEmissions();
     clearBasicSaveDamagePresentationEmissions();
@@ -233,14 +233,14 @@ describe("0.14.12 basic-save damage applying ownership reservation", () => {
     );
   });
 
-  it("44-55. Strike protocol 4; safety + version 0.14.12", () => {
+  it("44-55. Strike protocol 4; safety + version 0.14.13", () => {
     assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 4/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeAttackResolvedPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /floating|suppressNative|cssText/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.12");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.12");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.13");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.13");
     const id = buildBasicSaveTargetDamageResultId(args());
     assert.match(id, /:damage:/);
     emitBasicSaveTargetDamageApplyingPresentationFromApplication({

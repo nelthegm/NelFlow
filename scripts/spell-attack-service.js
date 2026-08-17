@@ -1,0 +1,512 @@
+/**
+ * Single-target spell-attack damage auto-apply (0.14.13).
+ * Reuses PF2eAdapter.applyDamageRollToRecordedTarget + TransactionStore.
+ * Correlation: unique open transaction by actor+item+author (fail open if ambiguous).
+ * Application target: attack-time snapshot only (never live user targets at damage time).
+ * No DOM / HTML interception.
+ */
+
+import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
+import { logger } from "./logger.js";
+import { PF2eAdapter } from "./pf2e-adapter.js";
+import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
+import { getRuntimeSessionId } from "./runtime-session.js";
+import { getSetting } from "./settings.js";
+import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
+import { TransactionStore } from "./transaction-store.js";
+import { deriveActualStrikeHpLoss } from "./strike-presentation-feed.js";
+import {
+  buildSpellAttackDamageAppliedResultId,
+  buildSpellAttackDamageRolledResultId,
+  buildSpellAttackSnapshot,
+  buildSpellAttackTransactionId,
+  correlateSpellAttackDamage,
+  SPELL_ATTACK_FAILURES,
+  SPELL_ATTACK_SOCKET_ACTION,
+  SPELL_ATTACK_TRANSACTION_TYPE,
+  validateSpellAttack,
+  validateSpellAttackDamage,
+} from "./spell-attack-model.js";
+import {
+  captureSpellAttackObservation,
+  isSpellAttackCandidate,
+  normalizeSpellAttack,
+  normalizeSpellAttackDamage,
+} from "./spell-attack-adapter.js";
+import {
+  tryEmitSpellAttackDamageAppliedPresentation,
+  tryEmitSpellAttackDamageRolledPresentation,
+} from "./spell-attack-presentation-feed.js";
+
+const SOCKET_NAMESPACE = `module.${MODULE_ID}`;
+const queues = new Map();
+const observedDamage = new Set();
+let initialized = false;
+
+const stats = {
+  attacksObserved: 0,
+  eligibleTransactions: 0,
+  damageCorrelated: 0,
+  damageApplied: 0,
+  ambiguousDamage: 0,
+  noTarget: 0,
+  multiTarget: 0,
+  failedValidation: 0,
+  skippedMiss: 0,
+};
+
+/** @type {((event: object) => void)|null} */
+let flowWatcher = null;
+
+function emitWatch(event) {
+  if (typeof flowWatcher !== "function") return;
+  try {
+    flowWatcher(event);
+  } catch {
+    /* ignore */
+  }
+}
+
+function currentAuthority(sourceUserId) {
+  return electProcessingGm(game.users ?? [], sourceUserId);
+}
+
+function currentUserIsAuthority(sourceUserId) {
+  return game.user?.isGM === true && currentAuthority(sourceUserId) === game.user.id;
+}
+
+function enqueue(id, operation) {
+  const prior = queues.get(id) ?? Promise.resolve();
+  const current = prior.catch(() => undefined).then(operation);
+  queues.set(id, current);
+  return current.finally(() => {
+    if (queues.get(id) === current) queues.delete(id);
+  });
+}
+
+function authorId(message) {
+  return message?.author?.id ?? message?.user?.id ?? message?._source?.user ?? null;
+}
+
+function spellAttackTransactions() {
+  const results = [];
+  for (const message of game.messages ?? []) {
+    const transaction = TransactionStore.get(message);
+    if (
+      transaction?.transactionType === SPELL_ATTACK_TRANSACTION_TYPE &&
+      transaction.role === "attack"
+    ) {
+      results.push({ message, transaction });
+    }
+  }
+  return results;
+}
+
+async function markManual(attackMessage, transaction, failureCode, state = TRANSACTION_STATES.MANUAL, details = {}) {
+  const reason = failureCode ?? "manual-review-required";
+  return TransactionStore.update(attackMessage, {
+    ...details,
+    state,
+    failureCode: reason,
+    errorStage: reason,
+    manualReason: reason,
+    eligibilityResult: "manual-review",
+    manualApplicationRequired: true,
+    activeOperation: null,
+  });
+}
+
+async function observeAttack(message) {
+  const normalized = normalizeSpellAttack(message);
+  if (!normalized) return false;
+  stats.attacksObserved += 1;
+
+  if (!getSetting(SETTINGS.ENABLED)) return false;
+  if (!getSetting(SETTINGS.SPELL_ATTACK_AUTO_APPLY)) return false;
+
+  const authority = currentAuthority(normalized.evidence.authorUserId);
+  if (!authority || game.user.id !== authority || !game.user.isGM) return false;
+
+  const existing = TransactionStore.get(message);
+  if (
+    existing &&
+    !(existing.transactionType === SPELL_ATTACK_TRANSACTION_TYPE && existing.role === "observation")
+  ) {
+    return false;
+  }
+
+  const validation = validateSpellAttack(normalized.evidence);
+  let failureCode = validation.reason;
+  let state = TRANSACTION_STATES.WAITING_FOR_DAMAGE;
+
+  if (!validation.ok) {
+    stats.failedValidation += 1;
+    if (failureCode === SPELL_ATTACK_FAILURES.TARGET_MISSING) stats.noTarget += 1;
+    if (failureCode === SPELL_ATTACK_FAILURES.MULTIPLE_TARGETS) stats.multiTarget += 1;
+    if (failureCode === SPELL_ATTACK_FAILURES.NOT_A_HIT) {
+      stats.skippedMiss += 1;
+      state = TRANSACTION_STATES.SKIPPED;
+    } else {
+      state = TRANSACTION_STATES.SKIPPED;
+    }
+  }
+
+  const snapshot = buildSpellAttackSnapshot(normalized.evidence, {
+    processingUserId: game.user.id,
+    sessionId: getRuntimeSessionId(),
+  });
+
+  emitWatch({
+    event: "spell-attack-observed",
+    spell: normalized.evidence.actionName,
+    attackMessage: message.id,
+    transaction: buildSpellAttackTransactionId(message.id),
+    target: normalized.evidence.targetTokenUuid,
+    degree: normalized.evidence.outcome,
+    eligible: validation.ok,
+    reason: failureCode,
+  });
+
+  await TransactionStore.claimSpellAttack(message, snapshot, {
+    state,
+    failureCode: validation.ok ? null : failureCode,
+  });
+
+  if (validation.ok) stats.eligibleTransactions += 1;
+  return true;
+}
+
+async function processDamage(message) {
+  const normalized = normalizeSpellAttackDamage(message);
+  if (!normalized) return false;
+  if (!getSetting(SETTINGS.ENABLED) || !getSetting(SETTINGS.SPELL_ATTACK_AUTO_APPLY)) return false;
+
+  const waiting = spellAttackTransactions().filter(
+    (entry) => entry.transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+  );
+  const correlated = correlateSpellAttackDamage(
+    waiting.map((entry) => entry.transaction),
+    normalized.evidence,
+  );
+
+  if (!correlated.ok) {
+    if (correlated.reason === SPELL_ATTACK_FAILURES.DAMAGE_AMBIGUOUS) {
+      stats.ambiguousDamage += 1;
+      emitWatch({
+        event: "spell-attack-damage-skipped",
+        reason: "ambiguous-correlation",
+        damageMessage: message.id,
+        candidateCount: correlated.candidates?.length ?? 0,
+      });
+      for (const candidate of correlated.candidates ?? []) {
+        const owner = waiting.find((entry) => entry.transaction.id === candidate.id);
+        if (owner && currentUserIsAuthority(candidate.sourceUserId ?? candidate.snapshot?.authoringUserId)) {
+          await enqueue(owner.message.id, () =>
+            markManual(
+              owner.message,
+              TransactionStore.get(owner.message),
+              SPELL_ATTACK_FAILURES.DAMAGE_AMBIGUOUS,
+              TRANSACTION_STATES.AMBIGUOUS,
+              {
+                observedDamageMessageId: message.id,
+                correlationMethod: "ambiguous",
+                structuredFallbackCandidateCount: correlated.candidates.length,
+              },
+            ),
+          );
+        }
+      }
+    }
+    return false;
+  }
+
+  const owner = waiting.find((entry) => entry.transaction.id === correlated.transaction.id);
+  if (!owner || !currentUserIsAuthority(owner.transaction.sourceUserId ?? owner.transaction.snapshot?.authoringUserId)) {
+    return false;
+  }
+
+  return enqueue(owner.message.id, async () => {
+    const attackMessage = game.messages.get(owner.message.id);
+    const damageMessage = game.messages.get(message.id);
+    let transaction = TransactionStore.get(attackMessage);
+    if (!attackMessage || !damageMessage || transaction?.state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE) {
+      return false;
+    }
+
+    const attack = normalizeSpellAttack(attackMessage);
+    const damage = normalizeSpellAttackDamage(damageMessage);
+    if (!attack || !damage || !currentUserIsAuthority(transaction.sourceUserId)) {
+      await markManual(attackMessage, transaction, SPELL_ATTACK_FAILURES.AUTHORITY_MISSING);
+      return false;
+    }
+
+    const attackValidation = validateSpellAttack(attack.evidence);
+    const damageValidation = validateSpellAttackDamage(transaction.snapshot, damage.evidence);
+    if (!attackValidation.ok || !damageValidation.ok) {
+      await markManual(
+        attackMessage,
+        transaction,
+        damageValidation.reason ?? attackValidation.reason,
+      );
+      return false;
+    }
+
+    const damageClaim = PF2eAdapter.claimDamageMessage(damageMessage.id, transaction.id);
+    if (!damageClaim.ok) {
+      await markManual(
+        attackMessage,
+        transaction,
+        SPELL_ATTACK_FAILURES.DAMAGE_AMBIGUOUS,
+        TRANSACTION_STATES.AMBIGUOUS,
+        { observedDamageMessageId: damageMessage.id, authorityClaimState: "claimed-by-other-gm" },
+      );
+      return false;
+    }
+
+    stats.damageCorrelated += 1;
+    emitWatch({
+      event: "spell-attack-damage-correlated",
+      damageMessage: damageMessage.id,
+      rolled: damage.evidence.rolledTotal,
+      transaction: transaction.id,
+    });
+
+    transaction = await TransactionStore.update(attackMessage, {
+      state: TRANSACTION_STATES.DAMAGE_OBSERVED,
+      damageMessageId: damageMessage.id,
+      observedDamageMessageId: damageMessage.id,
+      correlationMethod: correlated.method,
+      damageCorrelation: { state: "unique", candidateCount: 1 },
+      authorityClaimState: "claimed-by-this-gm",
+      applicationState: "pending",
+      claimedAt: Date.now(),
+    });
+    transaction = await TransactionStore.linkMessage(attackMessage, damageMessage, "damage");
+    transaction = await TransactionStore.update(attackMessage, {
+      state: TRANSACTION_STATES.CLAIMED,
+    });
+
+    const sourceActor = await fromUuid(transaction.snapshot.sourceActorUuid);
+    const sourceItem = await fromUuid(transaction.snapshot.sourceItemUuid);
+    const targetDocument = await fromUuid(transaction.snapshot.targetTokenUuid);
+    const targetToken = targetDocument?.object ?? null;
+
+    if (
+      !sourceActor ||
+      !sourceItem ||
+      !targetToken?.actor ||
+      targetToken.actor.uuid !== transaction.snapshot.targetActorUuid ||
+      (transaction.snapshot.sceneId && targetDocument?.parent?.id !== transaction.snapshot.sceneId)
+    ) {
+      await markManual(attackMessage, transaction, SPELL_ATTACK_FAILURES.TARGET_INVALID);
+      return false;
+    }
+
+    const presentationArgs = {
+      transactionId: transaction.id,
+      sceneId: transaction.snapshot.sceneId ?? null,
+      sourceTokenUuid: transaction.snapshot.sourceTokenUuid ?? null,
+      sourceActorUuid: transaction.snapshot.sourceActorUuid ?? null,
+      targetTokenUuid: transaction.snapshot.targetTokenUuid ?? null,
+      targetActorUuid: transaction.snapshot.targetActorUuid ?? null,
+      itemUuid: transaction.snapshot.sourceItemUuid ?? null,
+      actionName: transaction.snapshot.actionName ?? null,
+      outcome: transaction.snapshot.outcome ?? null,
+      critical: transaction.snapshot.outcome === "criticalSuccess",
+      rolledTotal: damage.evidence.rolledTotal,
+      formula: damage.evidence.formula,
+    };
+
+    tryEmitSpellAttackDamageRolledPresentation({
+      ...presentationArgs,
+      damageResultId: buildSpellAttackDamageRolledResultId(transaction.id),
+    });
+
+    emitWatch({
+      event: "spell-attack-applying",
+      target: transaction.snapshot.targetTokenUuid,
+      transaction: transaction.id,
+    });
+
+    const preApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
+    if (!preApplication) {
+      await markManual(attackMessage, transaction, SPELL_ATTACK_FAILURES.APPLICATION_FAILED);
+      return false;
+    }
+
+    transaction = await TransactionStore.update(attackMessage, {
+      state: TRANSACTION_STATES.APPLYING,
+      preApplication,
+      applicationState: "applying",
+      applicationAttemptCount: Number(transaction.applicationAttemptCount ?? 0) + 1,
+    });
+
+    try {
+      const applied = await PF2eAdapter.applyDamageRollToRecordedTarget({
+        damageMessage,
+        damageRoll: damage.roll,
+        sourceActor,
+        sourceItem,
+        targetToken,
+        expectedTargetActorUuid: transaction.snapshot.targetActorUuid,
+        multiplier: 1,
+        outcome: damage.evidence.outcome ?? transaction.snapshot.outcome,
+        applicationId: transaction.id,
+        attackMessageId: attackMessage.id,
+      });
+      if (!applied) throw new Error(SPELL_ATTACK_FAILURES.APPLICATION_FAILED);
+
+      const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
+      if (!postApplication) throw new Error(SPELL_ATTACK_FAILURES.APPLICATION_FAILED);
+
+      noteLethalApplicationIfZeroHp({
+        actor: targetToken.actor,
+        token: targetToken.document ?? targetToken,
+        transactionId: transaction.id,
+        causeType: "spell-attack",
+        postApplication,
+        sourceActor,
+        sourceToken: attackMessage.token ?? null,
+      });
+
+      if (applied.applicationMessage) {
+        transaction = await TransactionStore.linkMessage(attackMessage, applied.applicationMessage, "application");
+      }
+
+      const appliedHpLoss =
+        deriveActualStrikeHpLoss({ preApplication, postApplication }) ??
+        Math.max(0, preApplication.hp + preApplication.tempHp - postApplication.hp - postApplication.tempHp);
+
+      await TransactionStore.update(attackMessage, {
+        state: TRANSACTION_STATES.APPLIED,
+        preApplication,
+        postApplication,
+        appliedAmount: appliedHpLoss,
+        applicationState: "applied",
+        authorityClaimState: "completed",
+        appliedAt: Date.now(),
+        eligibilityResult: "applied",
+        failureCode: null,
+        manualReason: null,
+        manualApplicationRequired: false,
+        activeOperation: null,
+      });
+
+      stats.damageApplied += 1;
+      tryEmitSpellAttackDamageAppliedPresentation({
+        ...presentationArgs,
+        damageResultId: buildSpellAttackDamageAppliedResultId(transaction.id),
+        applied: appliedHpLoss,
+        preApplication,
+        postApplication,
+      });
+
+      emitWatch({
+        event: "spell-attack-damage-applied",
+        rolled: damage.evidence.rolledTotal,
+        applied: appliedHpLoss,
+        transaction: transaction.id,
+      });
+      emitWatch({
+        event: "spell-attack-resolved",
+        transaction: transaction.id,
+      });
+      return true;
+    } catch (error) {
+      await TransactionStore.update(attackMessage, {
+        state: TRANSACTION_STATES.INTERRUPTED,
+        applicationState: "failed",
+        failureCode: SPELL_ATTACK_FAILURES.APPLICATION_FAILED,
+        errorStage: SPELL_ATTACK_FAILURES.APPLICATION_FAILED,
+        manualReason: SPELL_ATTACK_FAILURES.APPLICATION_FAILED,
+        eligibilityResult: "manual-review",
+        manualApplicationRequired: true,
+        activeOperation: null,
+      });
+      logger.error("Spell attack application failed", {
+        attackMessageId: attackMessage.id,
+        transactionId: transaction.id,
+        stage: "spell-attack-application",
+        reason: SPELL_ATTACK_FAILURES.APPLICATION_FAILED,
+      }, error);
+      return false;
+    }
+  });
+}
+
+export class SpellAttackService {
+  static async initialize() {
+    if (initialized) return;
+    initialized = true;
+    Hooks.on("preCreateChatMessage", (document, _data, _options, userId) => {
+      try {
+        captureSpellAttackObservation(document, userId);
+      } catch (error) {
+        logger.error("Spell attack pre-create capture failed open", {
+          stage: "spell-attack-pre-create",
+          reason: "internal-exception",
+        }, error);
+      }
+    });
+    game.socket?.on?.(SOCKET_NAMESPACE, (raw) => {
+      if (raw?.action !== SPELL_ATTACK_SOCKET_ACTION || !game.user?.isGM) return;
+      const damageMessage = game.messages?.get(raw.damageMessageId);
+      if (damageMessage) {
+        void processDamage(damageMessage).catch((error) => {
+          logger.error("Spell attack socket processing failed open", {
+            stage: "spell-attack-socket",
+            reason: "internal-exception",
+          }, error);
+        });
+      }
+    });
+  }
+
+  static async handleCreatedMessage(message) {
+    if (!getSetting(SETTINGS.ENABLED)) return false;
+    if (isSpellAttackCandidate(message)) return observeAttack(message);
+    const damage = normalizeSpellAttackDamage(message);
+    if (!damage || observedDamage.has(message.id)) return false;
+    observedDamage.add(message.id);
+    if (authorId(message) === game.user?.id && !game.user?.isGM) {
+      await game.socket?.emit?.(SOCKET_NAMESPACE, {
+        action: SPELL_ATTACK_SOCKET_ACTION,
+        damageMessageId: message.id,
+      });
+    }
+    return processDamage(message);
+  }
+
+  static getStatus() {
+    return {
+      enabled: getSetting(SETTINGS.ENABLED) === true && getSetting(SETTINGS.SPELL_ATTACK_AUTO_APPLY) === true,
+      producerAvailable: true,
+      supportedTargetCount: 1,
+      correlationMethod: "pf2e-structured-spell-attack-unique",
+      autoApply: getSetting(SETTINGS.SPELL_ATTACK_AUTO_APPLY) === true,
+      presentation: {
+        protocol: 1,
+        damageRolledHook: "nelflow.spellAttackDamageRolledPresentation",
+        damageAppliedHook: "nelflow.spellAttackDamageAppliedPresentation",
+      },
+      counters: { ...stats },
+    };
+  }
+
+  static watchFlow(fn) {
+    flowWatcher = typeof fn === "function" ? fn : null;
+    return { watching: typeof flowWatcher === "function" };
+  }
+
+  static stopWatchingFlow() {
+    flowWatcher = null;
+    return { watching: false };
+  }
+
+  static resetStatsForTests() {
+    for (const key of Object.keys(stats)) stats[key] = 0;
+    observedDamage.clear();
+    flowWatcher = null;
+    initialized = false;
+  }
+}

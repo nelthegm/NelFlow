@@ -159,6 +159,13 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.SPELL_ATTACK_AUTO_APPLY,
+    name: "Nelflow.Settings.SpellAttackAutoApply.Name",
+    hint: "Nelflow.Settings.SpellAttackAutoApply.Hint",
+    default: true,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.SHARED_ROLL_MULTI_TARGET_STRIKES,
     name: "Nelflow.Settings.MultiTargetStrikes.Name",
     hint: "Nelflow.Settings.MultiTargetStrikes.Hint",

@@ -21,6 +21,7 @@ import {
   renderTransactionRecovery,
 } from "./transaction-diagnostics-ui.js";
 import { renderPlayerStrike } from "./player-strike-ui.js";
+import { renderSpellAttack } from "./spell-attack-ui.js";
 import { renderMultiTargetStrike } from "./multi-target-strike-ui.js";
 import { canUndoBatchChild } from "./multi-target-strike-model.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
@@ -615,7 +616,7 @@ function renderLegacyStatus(message, html) {
   const resolved = TransactionStore.resolveCanonical(message);
   // Character Strikes have one dedicated canonical presentation host. The
   // legacy NPC fallback would otherwise duplicate both status and guarded Undo.
-  if (["player-strike", "multi-target-strike"].includes(resolved?.transaction?.transactionType)) return;
+  if (["player-strike", "multi-target-strike", "spell-attack"].includes(resolved?.transaction?.transactionType)) return;
   if (!resolved || !shouldRenderLegacy(localMarker, resolved.transaction)) return;
 
   const row = document.createElement("div");
@@ -673,7 +674,9 @@ export function renderNelflowChat(message, html) {
       return;
     }
     if (!message.visible || !message.isContentVisible) return;
-    if (!renderMultiTargetStrike(message, html)) renderPlayerStrike(message, html);
+    if (!renderMultiTargetStrike(message, html)) {
+      if (!renderPlayerStrike(message, html)) renderSpellAttack(message, html);
+    }
     renderLegacyStatus(message, html);
     renderActionResultPresentation(message, html);
     NativeCardCompactor.render(message, html);

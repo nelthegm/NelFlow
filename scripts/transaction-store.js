@@ -226,6 +226,75 @@ export class TransactionStore {
     return this.get(attackMessage);
   }
 
+  /**
+   * Persist a single-target spell-attack transaction (0.14.13).
+   * Uses deterministic id `nelflow-spell-attack-<attackMessageId>`.
+   */
+  static async claimSpellAttack(attackMessage, snapshot, { state, failureCode = null } = {}) {
+    const existing = this.get(attackMessage);
+    if (existing?.transactionType === "spell-attack" && existing.role === "attack") return existing;
+    if (existing && !(existing.transactionType === "spell-attack" && existing.role === "observation")) {
+      return null;
+    }
+    const timestamp = now();
+    const transactionId = `${MODULE_ID}-spell-attack-${attackMessage.id}`;
+    const transaction = {
+      id: transactionId,
+      role: "attack",
+      transactionType: "spell-attack",
+      sourceKind: "spell-attack",
+      schemaVersion: snapshot.schemaVersion,
+      state,
+      attackMessageId: attackMessage.id,
+      damageMessageId: null,
+      applicationMessageId: null,
+      stackRef: null,
+      snapshot,
+      sourceUserId: snapshot.authoringUserId,
+      processingUserId: snapshot.processingUserId,
+      preApplication: null,
+      postApplication: null,
+      appliedAmount: null,
+      damageCorrelation: { state: "waiting", candidateCount: 0 },
+      correlationMethod: null,
+      observedDamageMessageId: null,
+      authorityClaimState: "unclaimed",
+      applicationState: "pending",
+      claimedAt: null,
+      appliedAt: null,
+      eligibilityResult:
+        state === TRANSACTION_STATES.WAITING_FOR_DAMAGE
+          ? "eligible"
+          : state === TRANSACTION_STATES.SKIPPED
+            ? "ineligible"
+            : "manual-review",
+      applicationAttemptCount: 0,
+      finalState: state,
+      failureCode,
+      manualReason: failureCode,
+      manualApplicationRequired: state !== TRANSACTION_STATES.WAITING_FOR_DAMAGE,
+      undoBlocked: false,
+      presentationError: null,
+      reasonKey: null,
+      errorStage: failureCode,
+      failure: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      revision: 1,
+      activeOperation: null,
+    };
+    appendAudit(transaction, {
+      event: state === TRANSACTION_STATES.WAITING_FOR_DAMAGE ? "waiting-for-damage" : "classified",
+      state,
+      subsystem: "spell-attack",
+      userRole: "gm",
+      safeReason: failureCode,
+      revision: 1,
+    });
+    await attackMessage.setFlag(MODULE_ID, "transaction", transaction);
+    return this.get(attackMessage);
+  }
+
   /** Persist the authoritative projection of a character-authored native Strike. */
   static async claimPlayerStrike(attackMessage, snapshot, { state, failureCode = null } = {}) {
     const existing = this.get(attackMessage);
@@ -350,7 +419,12 @@ export class TransactionStore {
       appendAudit(transaction, {
         event: transitionEvent(nextState),
         state: nextState,
-        subsystem: current.transactionType === "player-strike" ? "player-strike" : "strike",
+        subsystem:
+          current.transactionType === "player-strike"
+            ? "player-strike"
+            : current.transactionType === "spell-attack"
+              ? "spell-attack"
+              : "strike",
         userRole: game.user?.isGM ? "gm" : "player",
         safeReason: changes.errorStage ?? changes.reasonKey ?? null,
         revision: transaction.revision,
@@ -358,7 +432,7 @@ export class TransactionStore {
     }
     if (
       nextState === TRANSACTION_STATES.FAILED ||
-      (current.transactionType === "player-strike" &&
+      ((current.transactionType === "player-strike" || current.transactionType === "spell-attack") &&
         [TRANSACTION_STATES.MANUAL, TRANSACTION_STATES.AMBIGUOUS].includes(nextState) &&
         changes.failureCode) ||
       changes.undoBlocked ||
@@ -369,7 +443,11 @@ export class TransactionStore {
         reason: changes.undoBlocked ? "health-changed" : changes.undoOperation?.reason ?? changes.failureCode ?? changes.errorStage ?? "internal-exception",
         subsystem: changes.undoBlocked || changes.undoOperation?.state === "failed"
           ? "undo"
-          : current.transactionType === "player-strike" ? "player-strike" : "strike",
+          : current.transactionType === "player-strike"
+            ? "player-strike"
+            : current.transactionType === "spell-attack"
+              ? "spell-attack"
+              : "strike",
         operation: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "guarded-undo" : changes.errorStage ?? "processing",
         event: changes.undoBlocked || changes.undoOperation?.state === "failed" ? "undo-failed" : "application-failed",
         userRole: "gm",

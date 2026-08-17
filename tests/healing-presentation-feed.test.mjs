@@ -1,5 +1,5 @@
 /**
- * 0.14.12 — authoritative healing presentation feed (protocol 1, applied-only).
+ * 0.14.13 — authoritative healing presentation feed (protocol 1, applied-only).
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -64,7 +64,7 @@ function healingMessage(overrides = {}) {
   };
 }
 
-describe("0.14.12 healing presentation feed", () => {
+describe("0.14.13 healing presentation feed", () => {
   /** @type {object[]} */
   let emitted;
 
@@ -351,9 +351,9 @@ describe("0.14.12 healing presentation feed", () => {
     assert.equal(typeof game.nelflow.dev.watchHealingPresentationFeed, "function");
   });
 
-  it("metadata version 0.14.12", () => {
+  it("metadata version 0.14.13", () => {
     const manifest = JSON.parse(source("module.json"));
-    assert.equal(manifest.version, "0.14.12");
-    assert.match(manifest.download, /v0\.14\.12\/nelflow\.zip/);
+    assert.equal(manifest.version, "0.14.13");
+    assert.match(manifest.download, /v0\.14\.13\/nelflow\.zip/);
   });
 });

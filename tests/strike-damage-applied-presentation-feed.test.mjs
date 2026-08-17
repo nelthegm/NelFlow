@@ -1,5 +1,5 @@
 /**
- * Strike damageApplied presentation feed (0.14.12 / protocol 4).
+ * Strike damageApplied presentation feed (0.14.13 / protocol 4).
  * Actual target damage after PF2e application (HP+temp snapshots). Stage 2
  * rolled semantics remain unchanged.
  */
@@ -57,7 +57,7 @@ function appliedArgs(overrides = {}) {
   };
 }
 
-describe("0.14.12 Strike damageApplied presentation feed", () => {
+describe("0.14.13 Strike damageApplied presentation feed", () => {
   beforeEach(() => {
     clearStrikePresentationFeedEmissions();
     globalThis.game = {
@@ -346,12 +346,12 @@ describe("0.14.12 Strike damageApplied presentation feed", () => {
     );
   });
 
-  it("version metadata is 0.14.12", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.12");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.12");
+  it("version metadata is 0.14.13", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.13");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.13");
     assert.match(
       source("module.json"),
-      /releases\/download\/v0\.14\.12\/nelflow\.zip/,
+      /releases\/download\/v0\.14\.13\/nelflow\.zip/,
     );
   });
 

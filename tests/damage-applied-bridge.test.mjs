@@ -16,9 +16,9 @@ const {
   emitDamageApplied,
 } = await import("../scripts/damage-applied-bridge.js");
 
-test("version is 0.14.12", () => {
-  assert.match(source("module.json"), /"version": "0.14.12"/);
-  assert.match(source("package.json"), /"version": "0.14.12"/);
+test("version is 0.14.13", () => {
+  assert.match(source("module.json"), /"version": "0.14.13"/);
+  assert.match(source("package.json"), /"version": "0.14.13"/);
 });
 
 test("protocol and hook naming", () => {

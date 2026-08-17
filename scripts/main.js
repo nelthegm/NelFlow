@@ -39,6 +39,8 @@ import {
   installHealingPresentationFeedApi,
   registerHealingPresentationHooks,
 } from "./healing-presentation-feed.js";
+import { installSpellAttackPresentationFeedApi } from "./spell-attack-presentation-feed.js";
+import { SpellAttackService } from "./spell-attack-service.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -52,6 +54,7 @@ Hooks.once("init", () => {
       installStrikePresentationFeedApi();
       installBasicSavePresentationFeedApi();
       installHealingPresentationFeedApi();
+      installSpellAttackPresentationFeedApi();
     },
   });
 });
@@ -119,10 +122,12 @@ async function initializeReady() {
       installDamageAppliedPublicApi();
       installHealingPresentationFeedApi();
       registerHealingPresentationHooks();
+      installSpellAttackPresentationFeedApi();
     },
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
   await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });
+  await runNelflowBoundary({ subsystem: "spell-attack", operation: "initialize", task: () => SpellAttackService.initialize() });
   Hooks.on("createChatMessage", (message) => {
     void runNelflowBoundary({
       subsystem: "multi-target-strike", operation: "create-chat-message", messageId: message.id,
@@ -132,6 +137,11 @@ async function initializeReady() {
     void runNelflowBoundary({
       subsystem: "player-strike", operation: "create-chat-message", messageId: message.id,
       transactionType: "player-strike", task: () => PlayerStrikeService.handleCreatedMessage(message),
+      onFailure: (failure) => TransactionStore.recordBoundaryFailure(message, failure),
+    });
+    void runNelflowBoundary({
+      subsystem: "spell-attack", operation: "create-chat-message", messageId: message.id,
+      transactionType: "spell-attack", task: () => SpellAttackService.handleCreatedMessage(message),
       onFailure: (failure) => TransactionStore.recordBoundaryFailure(message, failure),
     });
     void runNelflowBoundary({
@@ -169,5 +179,39 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
-  logger.debug("Nelflow 0.14.12 ready");
+
+  const root = (globalThis.game.nelflow ??= {});
+  root.dev = root.dev ?? {};
+  root.dev.getSpellAttackStatus = () => SpellAttackService.getStatus();
+  root.dev.watchSpellAttackFlow = () => {
+    SpellAttackService.watchFlow((event) => {
+      try {
+        if (event.event === "spell-attack-observed") {
+          console.log(
+            `NelFlow | SPELL ATTACK OBSERVED spell=${event.spell ?? "-"} attackMessage=${event.attackMessage} transaction=${event.transaction} target=${event.target ?? "-"} degree=${event.degree ?? "-"}`,
+          );
+        } else if (event.event === "spell-attack-damage-correlated") {
+          console.log(
+            `NelFlow | SPELL ATTACK DAMAGE CORRELATED damageMessage=${event.damageMessage} rolled=${event.rolled ?? "-"}`,
+          );
+        } else if (event.event === "spell-attack-applying") {
+          console.log(`NelFlow | SPELL ATTACK APPLYING target=${event.target ?? "-"}`);
+        } else if (event.event === "spell-attack-damage-applied") {
+          console.log(
+            `NelFlow | SPELL ATTACK DAMAGE APPLIED rolled=${event.rolled ?? "-"} applied=${event.applied}`,
+          );
+        } else if (event.event === "spell-attack-resolved") {
+          console.log(`NelFlow | SPELL ATTACK RESOLVED`);
+        } else if (event.event === "spell-attack-damage-skipped") {
+          console.log(`NelFlow | SPELL ATTACK DAMAGE SKIPPED reason=${event.reason}`);
+        }
+      } catch {
+        /* ignore */
+      }
+    });
+    return { watching: true };
+  };
+  root.dev.stopWatchingSpellAttackFlow = () => SpellAttackService.stopWatchingFlow();
+
+  logger.debug("Nelflow 0.14.13 ready");
 }

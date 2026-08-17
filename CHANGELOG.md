@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.13
+
+- Auto-apply exact native DamageRolls for interactive single-target PF2e spell
+  attacks (for example Ray of Frost) to the attack-time target token
+- Fail open on zero/multi targets, misses, and ambiguous overlapping casts
+- Reuse PF2e IWR application, HP/temp snapshots, `nelflow.damageApplied`, and
+  guarded Undo
+- Add presentation-neutral `spellAttackPresentation` protocol **1**
+  (`damageRolled` + `damageApplied`); no NelTactics changes in this release
+- Preserve Strike protocol 4, basic-save protocol 3, and healing protocol 1
+
 ## 0.14.12
 
 - Add presentation-neutral healing feed `nelflow.healingAppliedPresentation`

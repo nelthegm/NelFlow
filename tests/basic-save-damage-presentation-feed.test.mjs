@@ -1,4 +1,4 @@
-/** Presentation-neutral basic-save target damage feed (0.14.12 / protocol 3). */
+/** Presentation-neutral basic-save target damage feed (0.14.13 / protocol 3). */
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import { readFileSync } from "node:fs";
@@ -126,7 +126,7 @@ function applicationProjection(overrides = {}) {
   };
 }
 
-describe("0.14.12 basic-save target damage presentation feed", () => {
+describe("0.14.13 basic-save target damage presentation feed", () => {
   beforeEach(() => {
     clearBasicSavePresentationEmissions();
     clearBasicSaveDamagePresentationEmissions();

@@ -423,7 +423,7 @@ test("41-44. NelCine absence and broadcast failure fail open", async () => {
   assert.equal(broadcasts.length, 0);
 });
 
-test("45-55. Regression wiring + version 0.14.12 + previews", async () => {
+test("45-55. Regression wiring + version 0.14.13 + previews", async () => {
   const main = source("scripts/main.js");
   const bridge = source("scripts/nelcine-effect-bridge.js");
   const strike = source("scripts/nelcine-strike-delivery.js");
@@ -440,11 +440,11 @@ test("45-55. Regression wiring + version 0.14.12 + previews", async () => {
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.14.12");
-  assert.equal(pkg.version, "0.14.12");
+  assert.equal(module.version, "0.14.13");
+  assert.equal(pkg.version, "0.14.13");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.12/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.13/nelflow.zip",
   );
 
   const { broadcasts } = installMinimalGame();

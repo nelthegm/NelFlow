@@ -1,6 +1,11 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.13** auto-applies exact native DamageRolls for interactive
+single-target PF2e spell attacks (for example Ray of Frost) to the attack-time
+target, with fail-open ambiguity policy and presentation-neutral
+`spellAttackPresentation` protocol 1 (`damageRolled` / `damageApplied`).
+NelTactics is not modified in 0.14.13.
 Nelflow **0.14.12** adds presentation-neutral
 `nelflow.healingAppliedPresentation` — actual normal HP restored from PF2e
 `damage-taken` AppliedDamageFlag healing applications (overheal capped;
@@ -89,14 +94,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.12/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.13/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.12"
+game.modules.get("nelflow")?.version // "0.14.13"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -114,6 +119,32 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.13 single-target spell attack auto-apply
+
+After a successful interactive single-target PF2e spell attack (for example Ray
+of Frost), pressing Damage auto-applies the exact native DamageRoll to the
+**attack-time** target. Ambiguous overlapping casts, misses, and multi-target
+cases fail open.
+
+Presentation-neutral feed:
+
+```js
+game.nelflow.integrations.spellAttackPresentation
+// protocol 1 — damageRolled + damageApplied only
+```
+
+Dev:
+
+```js
+game.nelflow.dev.getSpellAttackStatus()
+game.nelflow.dev.watchSpellAttackFlow()
+```
+
+See [SPELL_ATTACK_AUTOMATION.md](docs/SPELL_ATTACK_AUTOMATION.md),
+[SPELL_ATTACK_PRESENTATION_CONTRACT.md](docs/SPELL_ATTACK_PRESENTATION_CONTRACT.md),
+[0.14.13 release notes](docs/RELEASE_NOTES_0.14.13.md), and
+[runtime plan](docs/NELFLOW_0.14.13_TEST_PLAN.md).
 
 ## Nelflow 0.14.12 authoritative healing presentation
 
