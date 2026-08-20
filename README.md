@@ -1,6 +1,11 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.14** restores the existing Target Helper integration for audited
+PF2e Toolbelt **3.54.1**. The durable save/result schema and message-update
+lifecycle are unchanged from 3.54.0; the supported range is narrowly extended
+to **3.52.0–3.54.1**, while 3.54.2+ remains unsupported. Basic-save protocol 3,
+the active spell-attack repairs, and all existing mechanics remain unchanged.
 Nelflow **0.14.13** auto-applies exact native DamageRolls for interactive
 single-target PF2e spell attacks (for example Ray of Frost) to the attack-time
 target, with fail-open ambiguity policy and presentation-neutral
@@ -77,7 +82,7 @@ uncertain linkage or presentation failure leaves the native card visible.
 - A supported NPC Strike or active player-/GM-owned character Strike with one
   target for the established flow, or two or more explicit targets for the
   shared-roll multi-target flow, or
-- PF2e Toolbelt **3.52.0–3.54.0** with Target Helper enabled for the recommended
+- PF2e Toolbelt **3.52.0–3.54.1** with Target Helper enabled for the recommended
   basic-save spell/ability workflow (capability-validated; unverified versions
   fail open to manual Toolbelt controls)
 
@@ -94,14 +99,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.13/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.14/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.13"
+game.modules.get("nelflow")?.version // "0.14.14"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -119,6 +124,42 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.14 Toolbelt 3.54.1 compatibility
+
+Official Toolbelt tags 3.54.0 and 3.54.1 were compared directly. The Target
+Helper schemas, save/reroll writers, damage projection, and queued same-message
+update lifecycle consumed by Nelflow are byte-identical. Toolbelt 3.54.1 only
+adds a color-blind palette setting/presentation and updates compatibility
+metadata, localization, and release notes.
+
+The gate remains strict semantic versioning:
+
+```text
+supported: 3.52.0 through 3.54.1 inclusive
+unsupported: 3.54.2, 3.54.10, 3.55.x, 4.x
+```
+
+Diagnostics:
+
+```js
+game.nelflow.dev.getStatus().toolbelt
+// {
+//   version: "3.54.1",
+//   supported: true,
+//   supportedRange: "3.52.0 - 3.54.1",
+//   targetHelperAvailable: true,
+//   schemaCompatibility: "3.54.1-audited"
+// }
+```
+
+Nelflow still observes only durable
+`flags.pf2e-toolbelt.targetHelper` data. It does not patch or fork Toolbelt,
+call private Toolbelt APIs, parse rendered chat HTML, recreate saves, or
+reimplement PF2e IWR.
+
+See [0.14.14 release notes](docs/RELEASE_NOTES_0.14.14.md) and the
+[runtime test plan](docs/NELFLOW_0.14.14_TEST_PLAN.md).
 
 ## Nelflow 0.14.13 single-target spell attack auto-apply
 
@@ -1233,7 +1274,7 @@ Undo Blocked.
   protocol exists yet.
 - Shared-roll multi-target Strikes do not emit ordinary NelCine Strike
   cinematics in 0.9.1 (no dedicated multi-target Strike presentation contract).
-- Toolbelt versions outside 3.52.0–3.54.0 remain unverified and fail open to
+- Toolbelt versions outside 3.52.0–3.54.1 remain unverified and fail open to
   manual Target Helper controls without disabling NPC Strike cinematics.
 
 ## Testing and design documentation
@@ -1242,6 +1283,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.14 Toolbelt 3.54.1 compatibility](docs/RELEASE_NOTES_0.14.14.md)
 - [Nelflow 0.14.11 Strike damage applied presentation](docs/RELEASE_NOTES_0.14.11.md)
 - [Nelflow 0.14.10 basic-save damage ownership reservation](docs/RELEASE_NOTES_0.14.10.md)
 - [Nelflow 0.14.9 basic-save target damage feed](docs/RELEASE_NOTES_0.14.9.md)

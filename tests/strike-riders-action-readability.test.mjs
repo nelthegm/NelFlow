@@ -53,9 +53,9 @@ function installGame(user = { isGM: true, isOwner: false }) {
   };
 }
 
-test("version is 0.14.13", () => {
-  assert.match(source("module.json"), /"version": "0.14.13"/);
-  assert.match(source("package.json"), /"version": "0.14.13"/);
+test("version is 0.14.14", () => {
+  assert.match(source("module.json"), /"version": "0.14.14"/);
+  assert.match(source("package.json"), /"version": "0.14.14"/);
 });
 
 test("1. Critical Strike with no riders shows no empty Rider section", () => {
@@ -335,7 +335,7 @@ test("regression: no new HP/condition application engine; Toolbelt & bridges pre
   assert.doesNotMatch(riders + actions, /system\.attributes\.hp/);
   assert.match(source("scripts/nelcine-defeated-bridge.js"), /broadcastDefeated/);
   assert.match(source("scripts/nelcine-impact-bridge.js"), /strikeImpact|impact/i);
-  assert.match(source("scripts/toolbelt-target-helper-adapter.js"), /3\.53/);
+  assert.match(source("scripts/toolbelt-target-helper-adapter.js"), /TOOLBELT_MAX_VERSION = "3\.54\.1"/);
 });
 
 test("diagnostics APIs are installed", () => {

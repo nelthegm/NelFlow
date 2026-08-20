@@ -184,11 +184,24 @@ async function initializeReady() {
   const root = (globalThis.game.nelflow ??= {});
   root.dev = root.dev ?? {};
   root.dev.getSpellAttackStatus = () => SpellAttackService.getStatus();
-  root.dev.getStatus = () => ({
-    moduleId: MODULE_ID,
-    version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.13",
-    spellAttack: SpellAttackService.getStatus(),
-  });
+  root.dev.getStatus = () => {
+    const toolbelt = ToolbeltTargetHelperAdapter.status();
+    return {
+      moduleId: MODULE_ID,
+      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.14",
+      toolbelt: {
+        installed: toolbelt.installed,
+        active: toolbelt.active,
+        version: toolbelt.version,
+        supported: toolbelt.supported,
+        supportedRange: toolbelt.supportedRange,
+        targetHelperEnabled: toolbelt.enabled,
+        targetHelperAvailable: toolbelt.targetHelperAvailable,
+        schemaCompatibility: toolbelt.schemaCompatibility,
+      },
+      spellAttack: SpellAttackService.getStatus(),
+    };
+  };
   root.dev.watchSpellAttackFlow = () => {
     SpellAttackService.watchFlow((event) => {
       try {
@@ -219,5 +232,5 @@ async function initializeReady() {
   };
   root.dev.stopWatchingSpellAttackFlow = () => SpellAttackService.stopWatchingFlow();
 
-  logger.debug("Nelflow 0.14.13 ready");
+  logger.debug("Nelflow 0.14.14 ready");
 }

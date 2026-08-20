@@ -343,12 +343,18 @@ export function getBasicSavePresentationStatus() {
   let toolbeltSupported = false;
   let toolbeltActive = false;
   let toolbeltEnabled = false;
+  let toolbeltSupportedRange = null;
+  let targetHelperAvailable = false;
+  let schemaCompatibility = "unverified";
   try {
     const status = ToolbeltTargetHelperAdapter.status();
     toolbeltVersion = status?.version ?? null;
     toolbeltSupported = status?.supported === true;
     toolbeltActive = status?.active === true;
     toolbeltEnabled = status?.enabled === true;
+    toolbeltSupportedRange = status?.supportedRange ?? null;
+    targetHelperAvailable = status?.targetHelperAvailable === true;
+    schemaCompatibility = status?.schemaCompatibility ?? "unverified";
   } catch {
     /* status probe must never break the contract */
   }
@@ -362,6 +368,11 @@ export function getBasicSavePresentationStatus() {
     hook: BASIC_SAVE_TARGET_RESOLVED_PRESENTATION_HOOK,
     toolbeltVersion,
     toolbeltSupported,
+    toolbeltActive,
+    toolbeltEnabled,
+    toolbeltSupportedRange,
+    targetHelperAvailable,
+    schemaCompatibility,
     producerAvailable,
     observedTargets: emittedByTargetResultId.size,
     emittedResults: emittedByTargetResultId.size,

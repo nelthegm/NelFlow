@@ -5,11 +5,14 @@ const TOOLBELT_ID = "pf2e-toolbelt";
 export const TOOLBELT_MIN_VERSION = "3.52.0";
 /**
  * Inclusive ceiling for versions whose Target Helper flag contract has been
- * structurally verified against NelFlow's adapter (includes 3.54.0).
- * 3.54.0 Target Helper durable save/result schema matches 3.53.1; only decode
- * dedupe and dice audio changed in Toolbelt itself.
+ * structurally verified against NelFlow's adapter (includes 3.54.1).
+ * Official Toolbelt tags 3.54.0 and 3.54.1 have byte-identical durable Target
+ * Helper schemas, save/reroll writers, damage projection, and update lifecycle.
+ * Toolbelt 3.54.1 adds only color-blind presentation plus compatibility metadata.
  */
-export const TOOLBELT_MAX_VERSION = "3.54.0";
+export const TOOLBELT_MAX_VERSION = "3.54.1";
+export const TOOLBELT_SUPPORTED_RANGE = `${TOOLBELT_MIN_VERSION} - ${TOOLBELT_MAX_VERSION}`;
+export const TOOLBELT_SCHEMA_COMPATIBILITY = "3.54.1-audited";
 const SAVE_TYPES = new Set(["fortitude", "reflex", "will"]);
 const OUTCOMES = new Set(["criticalSuccess", "success", "failure", "criticalFailure"]);
 
@@ -240,10 +243,16 @@ export class ToolbeltTargetHelperAdapter {
     }
     const compatibility = evaluateToolbeltCompatibility({ version });
     return {
+      installed: Boolean(module),
       active,
       enabled,
       version,
       supported: active && compatibility.supported,
+      supportedRange: TOOLBELT_SUPPORTED_RANGE,
+      targetHelperAvailable: active && enabled && compatibility.supported,
+      schemaCompatibility: compatibility.supported
+        ? TOOLBELT_SCHEMA_COMPATIBILITY
+        : "unverified",
       compatibility,
       publicApi: game.toolbelt?.targetHelper ?? null,
       hasPublicApplyApi: false,

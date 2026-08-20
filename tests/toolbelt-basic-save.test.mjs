@@ -40,6 +40,8 @@ test("Target Helper disabled remains a separate adapter status concern", () => a
 test("supported Toolbelt minimum version", () => assert.equal(isSupportedToolbeltVersion(TOOLBELT_MIN_VERSION), true));
 test("supported Toolbelt 3.52.1", () => assert.equal(isSupportedToolbeltVersion("3.52.1"), true));
 test("supported Toolbelt 3.54.0", () => assert.equal(isSupportedToolbeltVersion("3.54.0"), true));
+test("supported Toolbelt 3.54.1", () => assert.equal(isSupportedToolbeltVersion("3.54.1"), true));
+test("unsupported Toolbelt 3.54.2", () => assert.equal(isSupportedToolbeltVersion("3.54.2"), false));
 test("unsupported older Toolbelt version", () => assert.equal(isSupportedToolbeltVersion("3.51.9"), false));
 test("unsupported newer unverified Toolbelt version", () => assert.equal(isSupportedToolbeltVersion("3.55.0"), false));
 test("non-semantic Toolbelt version fails closed", () => assert.equal(isSupportedToolbeltVersion("master"), false));
@@ -56,6 +58,11 @@ test("Toolbelt 3.52.0 capability result is supported", () => {
 });
 test("Toolbelt 3.54.0 capability result is supported", () => {
   const result = evaluateToolbeltCompatibility({ version: "3.54.0" });
+  assert.equal(result.supported, true);
+  assert.equal(result.reason, null);
+});
+test("Toolbelt 3.54.1 capability result is supported", () => {
+  const result = evaluateToolbeltCompatibility({ version: "3.54.1" });
   assert.equal(result.supported, true);
   assert.equal(result.reason, null);
 });

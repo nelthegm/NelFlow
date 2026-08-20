@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14.14
+
+- Audit official PF2e Toolbelt 3.54.0 and 3.54.1 source tags and confirm the
+  durable Target Helper schema/save/reroll/application lifecycle is unchanged
+- Extend the strict supported Target Helper range from `3.52.0–3.54.0` to
+  `3.52.0–3.54.1`; keep 3.54.2+ unsupported
+- Add explicit 3.54.1 durable fixtures and focused compatibility coverage
+- Expose supported range, Target Helper availability, and
+  `3.54.1-audited` schema diagnostics
+- Preserve basic-save protocol 3, Strike protocol 4, spell-attack protocol 1,
+  healing protocol 1, NelCine, NelZones, Undo, PF2e IWR, and existing
+  spell-attack runtime repairs
+
 ## 0.14.13
 
 - Auto-apply exact native DamageRolls for interactive single-target PF2e spell

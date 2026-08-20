@@ -69,12 +69,14 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
     };
   });
 
-  it("1-4. version gate includes 3.52–3.54.0; rejects 3.55", () => {
+  it("1-4. version gate includes 3.52–3.54.1; rejects 3.54.2 and 3.55", () => {
     assert.equal(TOOLBELT_MIN_VERSION, "3.52.0");
-    assert.equal(TOOLBELT_MAX_VERSION, "3.54.0");
+    assert.equal(TOOLBELT_MAX_VERSION, "3.54.1");
     assert.equal(isSupportedToolbeltVersion("3.52.0"), true);
     assert.equal(isSupportedToolbeltVersion("3.53.1"), true);
     assert.equal(isSupportedToolbeltVersion("3.54.0"), true);
+    assert.equal(isSupportedToolbeltVersion("3.54.1"), true);
+    assert.equal(isSupportedToolbeltVersion("3.54.2"), false);
     assert.equal(isSupportedToolbeltVersion("3.55.0"), false);
     assert.equal(evaluateToolbeltCompatibility({ version: "3.55.0" }).reason, "toolbelt-version-unverified");
     assert.match(source("lang/en.json"), /This PF2e Toolbelt version is not supported by Nelflow/);
@@ -289,11 +291,11 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
     assert.equal(status.toolbeltVersion, "3.55.0");
   });
 
-  it("44-48. damageApplied / no Toolbelt private API / version 0.14.13", () => {
+  it("44-48. damageApplied / no Toolbelt private API / version 0.14.14", () => {
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
     assert.doesNotMatch(source("scripts/toolbelt-basic-save-service.js"), /rollSaveForTarget/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.13");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.13");
-    assert.equal(TOOLBELT_MAX_VERSION, "3.54.0");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.14");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.14");
+    assert.equal(TOOLBELT_MAX_VERSION, "3.54.1");
   });
 });

@@ -641,7 +641,8 @@ const toolbeltUi = read("scripts/toolbelt-basic-save-ui.js");
 const toolbeltModel = read("scripts/toolbelt-basic-save-model.js");
 for (const required of [
   'TOOLBELT_MIN_VERSION = "3.52.0"',
-  'TOOLBELT_MAX_VERSION = "3.54.0"',
+  'TOOLBELT_MAX_VERSION = "3.54.1"',
+  'TOOLBELT_SCHEMA_COMPATIBILITY = "3.54.1-audited"',
   "evaluateToolbeltCompatibility",
   'game.settings.get(TOOLBELT_ID, "targetHelper.enabled")',
   'message?.flags?.[TOOLBELT_ID]?.targetHelper',
@@ -1126,6 +1127,8 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.11.md",
   "docs/NELFLOW_0.14.12_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.12.md",
+  "docs/NELFLOW_0.14.14_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.14.md",
   "docs/HEALING_PRESENTATION_CONTRACT.md",
   "scripts/healing-presentation-feed.js",
   "tests/healing-presentation-feed.test.mjs",
@@ -1133,11 +1136,28 @@ for (const path of [
   "scripts/basic-save-presentation-identity.js",
   "scripts/basic-save-damage-presentation-feed.js",
   "tests/basic-save-damage-presentation-feed.test.mjs",
+  "tests/fixtures/toolbelt-target-helper-3.54.1.mjs",
+  "tests/toolbelt-3.54.1-compatibility.test.mjs",
   "docs/BASIC_SAVE_PRESENTATION_CONTRACT.md",
   "docs/NELFLOW_0.14.4_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.4.md",
 ]) {
   if (!existsSync(join(root, path))) fail(`Required Nelflow source or documentation file is missing: ${path}`);
+}
+const toolbelt3541Tests = read("tests/toolbelt-3.54.1-compatibility.test.mjs");
+if ((toolbelt3541Tests.match(/\bit\s*\(/g) ?? []).length < 58) {
+  fail("Nelflow 0.14.14 requires at least 58 focused Toolbelt 3.54.1 scenarios");
+}
+const toolbelt3541Fixture = read("tests/fixtures/toolbelt-target-helper-3.54.1.mjs");
+for (const required of [
+  "158d26ba7394b26f945c7807545e675822855eb4",
+  "dbbfe2e30e8ac22388057e6edd8dfd95be9df440",
+  "saveVariants",
+  "rerolled",
+  "private",
+  "roll",
+]) {
+  if (!toolbelt3541Fixture.includes(required)) fail(`Toolbelt 3.54.1 audit fixture is missing: ${required}`);
 }
 const healingPresentationFeed = read("scripts/healing-presentation-feed.js");
 for (const required of [

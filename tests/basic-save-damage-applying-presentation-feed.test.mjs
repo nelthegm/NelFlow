@@ -233,14 +233,14 @@ describe("0.14.13 basic-save damage applying ownership reservation", () => {
     );
   });
 
-  it("44-55. Strike protocol 4; safety + version 0.14.13", () => {
+  it("44-55. Strike protocol 4; safety + version 0.14.14", () => {
     assert.match(source("scripts/strike-presentation-feed.js"), /STRIKE_PRESENTATION_FEED_PROTOCOL = 4/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeAttackResolvedPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /floating|suppressNative|cssText/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.13");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.13");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.14");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.14");
     const id = buildBasicSaveTargetDamageResultId(args());
     assert.match(id, /:damage:/);
     emitBasicSaveTargetDamageApplyingPresentationFromApplication({
