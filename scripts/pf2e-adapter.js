@@ -173,14 +173,34 @@ function onCreateChatMessage(message) {
 }
 
 /** Accept Token placeable or TokenDocument — never assume `.document` exists. */
+export function resolveTokenDocument(value) {
+  if (!value) return null;
+  if (value.document?.uuid) return value.document;
+  if (value.actor && value.uuid) return value;
+  return null;
+}
+
+/** Prefer canvas Token placeable; fall back to TokenDocument when placeable is absent. */
+export function resolveApplicationToken(value) {
+  const document = resolveTokenDocument(value);
+  if (!document) return null;
+  try {
+    const placeable = document.object ?? canvas?.tokens?.get?.(document.id) ?? null;
+    if (placeable?.actor) return placeable;
+  } catch {
+    /* canvas unavailable */
+  }
+  return document.actor ? document : null;
+}
+
 function applicationTargetRefs(targetToken) {
-  if (!targetToken) return null;
-  const document = targetToken.document ?? (targetToken.actor && targetToken.uuid ? targetToken : null);
-  const actor = targetToken.actor ?? document?.actor ?? null;
-  const tokenUuid = document?.uuid ?? targetToken.uuid ?? null;
-  const tokenId = document?.id ?? targetToken.id ?? null;
+  const document = resolveTokenDocument(targetToken);
+  if (!document) return null;
+  const actor = targetToken?.actor ?? document.actor ?? null;
+  const tokenUuid = document.uuid ?? null;
+  const tokenId = document.id ?? null;
   if (!tokenUuid || !actor?.uuid) return null;
-  return { document, actor, tokenUuid, tokenId };
+  return { document, actor, tokenUuid, tokenId, applyToken: resolveApplicationToken(targetToken) };
 }
 
 function createApplicationCapture({
@@ -830,8 +850,8 @@ export class PF2eAdapter {
     });
     if (!capture) return null;
 
-    // Prefer canvas Token placeable when available; TokenDocument is accepted by newer PF2e.
-    const applyToken = targetToken?.document ? targetToken : targetToken?.object ?? targetToken;
+    const applyToken = targetRefs.applyToken ?? resolveApplicationToken(targetToken);
+    if (!applyToken) return null;
 
     try {
       if (typeof beforeApplyDamage === "function") {
