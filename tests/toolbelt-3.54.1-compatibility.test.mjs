@@ -1,4 +1,4 @@
-/** Focused PF2e Toolbelt 3.54.1 compatibility audit for Nelflow 0.14.14. */
+/** Focused PF2e Toolbelt 3.54.1 compatibility audit for Nelflow 0.14.15. */
 
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -98,7 +98,7 @@ function resolvedArgs(target, suffix = "result") {
   };
 }
 
-describe("Nelflow 0.14.14 — PF2e Toolbelt 3.54.1 compatibility", () => {
+describe("Nelflow 0.14.15 — PF2e Toolbelt 3.54.1 compatibility", () => {
   beforeEach(() => {
     installEnvironment();
     clearBasicSavePresentationEmissions();

@@ -32,6 +32,10 @@ import {
   shouldExpandStrikeRiders,
 } from "./strike-riders.js";
 import { renderActionResultPresentation } from "./action-result-presentation.js";
+import {
+  StackPresentationController,
+  stackRenderRevision,
+} from "./stack-presentation-controller.js";
 
 const reportedRenderFailures = new Set();
 
@@ -517,17 +521,30 @@ function renderStack(message, html, stack) {
 
   const header = document.createElement("header");
   header.className = "nelflow-stack__header";
+  const disclosure = document.createElement("button");
+  disclosure.type = "button";
+  disclosure.className = "nelflow-stack__disclosure";
   const actor = document.createElement("strong");
   actor.className = "nelflow-stack__actor";
   actor.textContent = inspectionTargetLabel({ tokenUuid: stack.actor?.tokenUuid }) ||
     localize("Nelflow.Stack.UnknownCombatant");
-  header.append(actor);
+  disclosure.append(actor);
   if (stack.identity?.outOfTurn) {
     const context = document.createElement("span");
     context.className = "nelflow-stack__context";
     context.textContent = localize("Nelflow.Stack.OutOfTurn");
-    header.append(context);
+    disclosure.append(context);
   }
+  const count = document.createElement("span");
+  count.className = "nelflow-stack__count";
+  count.textContent = format(
+    (stack.rows?.length ?? 0) === 1 ? "Nelflow.Stack.RowCountOne" : "Nelflow.Stack.RowCountMany",
+    { count: stack.rows?.length ?? 0 },
+  );
+  const chevron = document.createElement("i");
+  chevron.setAttribute("aria-hidden", "true");
+  disclosure.append(count, chevron);
+  header.append(disclosure);
 
   const nativeRecords = NativeRecordsController.recordsForStack(stack);
   let nativeRecordsButton = null;
@@ -542,18 +559,37 @@ function renderStack(message, html, stack) {
 
   const rows = document.createElement("ol");
   rows.className = "nelflow-stack__rows";
+  rows.id = `nelflow-stack-rows-${message.id}`;
   rows.setAttribute("aria-label", localize("Nelflow.Stack.RowsAria"));
+  disclosure.setAttribute("aria-controls", rows.id);
   for (const row of stack.rows ?? []) {
     rows.append(renderRow(row, stack, NativeRecordsController.recordsForRow(stack, row)));
   }
   article.append(header, rows);
   content.replaceChildren(article);
   html.classList.add("nelflow-stack-message");
-  html.dataset.nelflowStackId = message.id;
+  try {
+    StackPresentationController.enhanceDisclosure({
+      messageId: message.id, article, rows, button: disclosure, chevron,
+    });
+  } catch (error) {
+    article.classList.remove("nelflow-stack--collapsed");
+    rows.hidden = false;
+    disclosure.setAttribute("aria-expanded", "true");
+    chevron.className = "fa-solid fa-chevron-up";
+    logger.debug("Stack disclosure failed open", {
+      messageId: message.id,
+      reason: error instanceof Error ? error.message : String(error),
+    });
+  }
   if (nativeRecordsButton) {
     NativeRecordsController.bindStackControl(stack, nativeRecordsButton, nativeRecords);
   }
   NativeRecordsController.markStackRendered(stack);
+  // Mark the outer message only after every canonical enhancement succeeds.
+  // The live-follow controller will never move a failed/fallback projection.
+  html.dataset.nelflowStackId = message.id;
+  html.dataset.nelflowStackRevision = stackRenderRevision(stack);
 }
 
 function stateLabel(state) {

@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.15** adds client-only follow and disclosure controls for compact
+NPC Strike stacks. A live update to the current turn's stack can move that exact
+rendered card to the bottom of chat, and each viewer may default stacks to
+expanded or collapsed without changing the durable message or its flags.
 Nelflow **0.14.14** restores the existing Target Helper integration for audited
 PF2e Toolbelt **3.54.1**. The durable save/result schema and message-update
 lifecycle are unchanged from 3.54.0; the supported range is narrowly extended
@@ -99,14 +103,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.14/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.15/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.14"
+game.modules.get("nelflow")?.version // "0.14.15"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -124,6 +128,20 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.15 stack follow and collapse controls
+
+Compact NPC Strike stacks remain one durable ChatMessage per qualifying stack.
+When the active turn's stack receives a live row update, the default client
+behavior moves that exact rendered element to the end of its current chat
+container and follows it. No message is reposted, cloned, re-timestamped, or
+re-flagged, and initial chat-history hydration never mass-reorders old stacks.
+
+The compact heading is a keyboard-operable disclosure button showing the
+attacker, row count, and state chevron. Collapsing hides only Strike rows;
+authorized **Results (N)** remains available. A viewer's toggle survives live
+rerenders in that client and may reset on reload. See the
+[architecture and runtime checklist](docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md).
 
 ## Nelflow 0.14.14 Toolbelt 3.54.1 compatibility
 
@@ -748,6 +766,11 @@ and the [164-case runtime plan](docs/SLICE_004_0_TEST_PLAN.md).
   batches use the same read-only projection as live messages.
 - Other GM clients render the stack but cannot project a transaction claimed by
   the authoring GM. Compact-row Undo is offered to that authoring GM.
+- A live update to the current active-turn stack may locally move its existing
+  rendered node to the bottom of chat. Historical hydration and completed
+  earlier-turn stacks retain their normal positions.
+- The stack heading can locally collapse its row body while retaining attacker,
+  row count, and authorized Results. Disclosure state never changes flags.
 
 The stack is presentation only. The native attack message's canonical
 `flags.nelflow.transaction` remains the sole mechanical state.
@@ -958,6 +981,12 @@ targets, and ambiguous structures also remain manual.
   export, audit data, and guarded recovery remain available through **Review**.
 - **Compact Turn Stacks** — `NPC Strikes Only` by default; choose `Off` to keep
   Slice 1 per-message status presentation.
+- **Keep Active Turn Stack at Bottom** — client-scoped and enabled by default.
+  Live row updates to the current combat turn's canonical stack move only that
+  rendered card to the end of its chat container and follow it.
+- **Default Turn Stack State** — client-scoped, `Expanded` by default, with a
+  `Collapsed` alternative. Per-card toggles remain local and may reset after
+  reload.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
   stacks remain active, native PF2e cards stay fully expanded, and Nelflow adds
   no replacement collapse controls.
@@ -1283,6 +1312,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.15 stack follow and collapse controls](docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md)
 - [Nelflow 0.14.14 Toolbelt 3.54.1 compatibility](docs/RELEASE_NOTES_0.14.14.md)
 - [Nelflow 0.14.11 Strike damage applied presentation](docs/RELEASE_NOTES_0.14.11.md)
 - [Nelflow 0.14.10 basic-save damage ownership reservation](docs/RELEASE_NOTES_0.14.10.md)

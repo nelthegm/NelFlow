@@ -42,6 +42,7 @@ import {
 } from "./healing-presentation-feed.js";
 import { installSpellAttackPresentationFeedApi } from "./spell-attack-presentation-feed.js";
 import { SpellAttackService } from "./spell-attack-service.js";
+import { StackPresentationController } from "./stack-presentation-controller.js";
 
 Hooks.once("init", () => {
   runNelflowSyncBoundary({ subsystem: "settings", operation: "init", task: registerSettings });
@@ -166,7 +167,8 @@ async function initializeReady() {
       onFailure: (failure) => ToolbeltBasicSaveService.recordBoundaryFailure(message.id, failure),
     });
   });
-  Hooks.on("updateChatMessage", (message) => {
+  Hooks.on("updateChatMessage", (message, changed) => {
+    StackPresentationController.handleChatMessageUpdate(message, changed);
     void runNelflowBoundary({
       subsystem: "autoroll", operation: "update-chat-message", messageId: message.id,
       transactionType: "autoroll", task: () => AutoDamageRollService.handleUpdatedMessage(message),
@@ -178,6 +180,9 @@ async function initializeReady() {
       onFailure: (failure) => ToolbeltBasicSaveService.recordBoundaryFailure(message.id, failure),
     });
   });
+  Hooks.on("deleteChatMessage", (message) => {
+    StackPresentationController.forget(message.id);
+  });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
 
@@ -188,7 +193,7 @@ async function initializeReady() {
     const toolbelt = ToolbeltTargetHelperAdapter.status();
     return {
       moduleId: MODULE_ID,
-      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.14",
+      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.15",
       toolbelt: {
         installed: toolbelt.installed,
         active: toolbelt.active,
@@ -232,5 +237,5 @@ async function initializeReady() {
   };
   root.dev.stopWatchingSpellAttackFlow = () => SpellAttackService.stopWatchingFlow();
 
-  logger.debug("Nelflow 0.14.14 ready");
+  logger.debug("Nelflow 0.14.15 ready");
 }

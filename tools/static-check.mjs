@@ -1129,6 +1129,8 @@ for (const path of [
   "docs/RELEASE_NOTES_0.14.12.md",
   "docs/NELFLOW_0.14.14_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.14.md",
+  "docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md",
+  "scripts/stack-presentation-controller.js",
   "docs/HEALING_PRESENTATION_CONTRACT.md",
   "scripts/healing-presentation-feed.js",
   "tests/healing-presentation-feed.test.mjs",
@@ -1147,6 +1149,27 @@ for (const path of [
 const toolbelt3541Tests = read("tests/toolbelt-3.54.1-compatibility.test.mjs");
 if ((toolbelt3541Tests.match(/\bit\s*\(/g) ?? []).length < 58) {
   fail("Nelflow 0.14.14 requires at least 58 focused Toolbelt 3.54.1 scenarios");
+}
+const stackPresentationController = read("scripts/stack-presentation-controller.js");
+for (const required of [
+  "hasStackRowProjectionChange",
+  "isActiveCombatStack",
+  "parentElement?.append(node)",
+  "scrollBottom",
+  "aria-expanded",
+  "SETTINGS.KEEP_ACTIVE_STACK_AT_BOTTOM",
+  "SETTINGS.STACK_DEFAULT_STATE",
+]) {
+  if (!stackPresentationController.includes(required)) {
+    fail(`stack follow/collapse presentation is missing: ${required}`);
+  }
+}
+if (/ChatMessage\.create|createDocuments|deleteDocuments|message\??\.update\(|message\??\.setFlag\(|message\??\.delete\(/.test(stackPresentationController)) {
+  fail("stack follow/collapse must not mutate or recreate ChatMessage documents");
+}
+const stackPresentationTests = read("tests/stack-presentation-refinement.test.mjs");
+if ((stackPresentationTests.match(/\btest\s*\(/g) ?? []).length < 85) {
+  fail("Nelflow 0.14.15 requires at least 25 added stack follow/collapse scenarios");
 }
 const toolbelt3541Fixture = read("tests/fixtures/toolbelt-target-helper-3.54.1.mjs");
 for (const required of [

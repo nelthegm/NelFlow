@@ -7,6 +7,8 @@ export const SETTINGS = Object.freeze({
   AUTO_APPLY: "autoApply",
   ENABLE_UNDO: "enableUndo",
   COMPACT_TURN_STACKS: "compactTurnStacks",
+  KEEP_ACTIVE_STACK_AT_BOTTOM: "keepActiveStackAtBottom",
+  STACK_DEFAULT_STATE: "stackDefaultState",
   COLLAPSE_LINKED_NATIVE_CARDS: "collapseLinkedNativeCards",
   STACK_FIRST_NATIVE_RECORDS: "stackFirstNativeRecords",
   BASIC_SAVE_RESOLVER: "basicSaveResolver",
@@ -39,6 +41,11 @@ export const SETTINGS = Object.freeze({
 export const COMPACT_STACK_MODES = Object.freeze({
   OFF: "off",
   NPC_STRIKES: "npc-strikes",
+});
+
+export const STACK_DEFAULT_STATES = Object.freeze({
+  EXPANDED: "expanded",
+  COLLAPSED: "collapsed",
 });
 
 export const STACK_FIRST_NATIVE_RECORD_MODES = Object.freeze({

@@ -136,12 +136,26 @@ function Assert-ZipRootModuleJson {
   }
 }
 
+function Get-Sha256Hex {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  $stream = [System.IO.File]::OpenRead($Path)
+  $algorithm = [System.Security.Cryptography.SHA256]::Create()
+  try {
+    $bytes = $algorithm.ComputeHash($stream)
+    return ([System.BitConverter]::ToString($bytes)).Replace("-", "").ToLowerInvariant()
+  }
+  finally {
+    $algorithm.Dispose()
+    $stream.Dispose()
+  }
+}
+
 New-ZipFromDirectory -SourceDirectory $stageModule -ArchivePath $versionedArchive
 $entries = Assert-ZipRootModuleJson -ArchivePath $versionedArchive
 Copy-Item -LiteralPath $versionedArchive -Destination $compatArchive -Force
 Copy-Item -LiteralPath $manifestPath -Destination $distManifest -Force
 
-$hash = (Get-FileHash -LiteralPath $versionedArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+$hash = Get-Sha256Hex -Path $versionedArchive
 $size = (Get-Item -LiteralPath $versionedArchive).Length
 @(
   "$hash  nelflow-$version.zip"

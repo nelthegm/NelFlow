@@ -7,6 +7,14 @@ import {
   buildDamageRollInspection,
   inspectionKind,
 } from "../scripts/strike-roll-inspection.js";
+import {
+  createStackPresentationController,
+  defaultStackExpanded,
+  hasStackRowProjectionChange,
+  isActiveCombatStack,
+  repositionRenderedStack,
+  stackRenderRevision,
+} from "../scripts/stack-presentation-controller.js";
 
 const source = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
@@ -245,8 +253,349 @@ test("Results is omitted when no inspection records exist", () => {
   assert.doesNotMatch(source("scripts/player-strike-ui.js"), /Results|recordsForTransaction|RollPopoverController/);
   assert.match(source("scripts/save-resolver-ui.js"), /if \(nativeIds\.length\)/);
 });
-test("version is 0.14.14", () => {
+test("version is 0.14.15", () => {
   const manifest = JSON.parse(source("module.json"));
   assert.equal(manifest.id, "nelflow");
-  assert.equal(manifest.version, "0.14.14");
+  assert.equal(manifest.version, "0.14.15");
+});
+
+const activeStack = (changes = {}) => ({
+  id: "stack-1",
+  kind: "combat-turn",
+  updatedAt: 200,
+  rows: [{ id: "row-1" }],
+  identity: {
+    combatId: "combat-1",
+    round: 3,
+    combatantId: "combatant-1",
+    turnIndex: 2,
+    turnMarkerId: "marker-1",
+  },
+  ...changes,
+});
+
+const activeCombat = (changes = {}) => ({
+  id: "combat-1",
+  started: true,
+  round: 3,
+  turn: 2,
+  combatant: { id: "combatant-1" },
+  getFlag: () => ({ markerId: "marker-1" }),
+  ...changes,
+});
+
+function disclosureView(messageId = "stack-message") {
+  const classes = new Set();
+  const attributes = new Map();
+  let click = null;
+  return {
+    messageId,
+    article: { classList: { toggle: (name, force) => force ? classes.add(name) : classes.delete(name), contains: (name) => classes.has(name) } },
+    rows: { hidden: false },
+    button: {
+      setAttribute: (name, value) => attributes.set(name, value),
+      getAttribute: (name) => attributes.get(name),
+      addEventListener: (type, listener) => { if (type === "click") click = listener; },
+      click: () => click?.(),
+    },
+    chevron: { className: "" },
+  };
+}
+
+function presentationHarness({ keep = true, compact = "npc-strikes", stack = activeStack(), nodes = [] } = {}) {
+  const frames = [];
+  const scrolls = [];
+  const debug = [];
+  const root = { contains: (node) => nodes.includes(node) };
+  const chat = { element: root, scrollBottom: (options) => scrolls.push(options) };
+  const controller = createStackPresentationController({
+    settings: (key) => ({
+      keepActiveStackAtBottom: keep,
+      compactTurnStacks: compact,
+      stackDefaultState: "expanded",
+    })[key],
+    combat: () => activeCombat(),
+    chat: () => chat,
+    documentRef: () => ({ querySelectorAll: () => nodes }),
+    scheduleFrame: (callback) => frames.push(callback),
+    debug: (message, data) => debug.push({ message, data }),
+  });
+  const message = {
+    id: "message-1",
+    visible: true,
+    isContentVisible: true,
+    getFlag: () => stack,
+  };
+  const flush = (limit = 25) => {
+    for (let index = 0; frames.length && index < limit; index += 1) frames.shift()();
+  };
+  return { controller, message, frames, scrolls, debug, flush };
+}
+
+test("stack follow recognizes nested row projections", () => assert.equal(hasStackRowProjectionChange({ flags: { nelflow: { stack: { rows: [] } } } }), true));
+test("stack follow recognizes flattened row projections", () => assert.equal(hasStackRowProjectionChange({ "flags.nelflow.stack.rows.0.state": "applied" }), true));
+test("stack follow ignores unrelated message updates", () => assert.equal(hasStackRowProjectionChange({ content: "ordinary update" }), false));
+test("active turn identity accepts its current canonical stack", () => assert.equal(isActiveCombatStack(activeStack(), activeCombat()), true));
+test("standalone stacks never follow the combat turn", () => assert.equal(isActiveCombatStack(activeStack({ kind: "standalone" }), activeCombat()), false));
+test("earlier-round stacks never follow", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, round: 2 } }), activeCombat()), false));
+test("another combatant's stack never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, combatantId: "other" } }), activeCombat()), false));
+test("another numeric turn never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, turnIndex: 1 } }), activeCombat()), false));
+test("a stale durable turn marker never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, turnMarkerId: "old" } }), activeCombat()), false));
+test("expanded is the default disclosure state", () => assert.equal(defaultStackExpanded("expanded"), true));
+test("collapsed is an explicit disclosure state", () => assert.equal(defaultStackExpanded("collapsed"), false));
+test("unknown stored disclosure values fail open expanded", () => assert.equal(defaultStackExpanded("future-value"), true));
+test("stack render revision is derived from durable projection data", () => assert.match(stackRenderRevision(activeStack()), /^200:[a-z0-9]+$/));
+test("same-millisecond row changes have distinct render revisions", () => {
+  assert.notEqual(stackRenderRevision(activeStack()), stackRenderRevision(activeStack({ rows: [{ id: "row-1", state: "applied" }] })));
+});
+
+function withGameI18n(task) {
+  const prior = globalThis.game;
+  globalThis.game = { i18n: { localize: (key) => key } };
+  try { task(); } finally { globalThis.game = prior; }
+}
+
+test("collapsed disclosure hides only the row body", () => withGameI18n(() => {
+  const controller = createStackPresentationController({ settings: () => "collapsed" });
+  const view = disclosureView();
+  controller.enhanceDisclosure(view);
+  assert.equal(view.rows.hidden, true);
+  assert.equal(view.button.getAttribute("aria-expanded"), "false");
+  assert.equal(view.article.classList.contains("nelflow-stack--collapsed"), true);
+}));
+
+test("expanded disclosure exposes the row body", () => withGameI18n(() => {
+  const controller = createStackPresentationController({ settings: () => "expanded" });
+  const view = disclosureView();
+  controller.enhanceDisclosure(view);
+  assert.equal(view.rows.hidden, false);
+  assert.equal(view.button.getAttribute("aria-expanded"), "true");
+}));
+
+test("disclosure toggles are keyboard-button click compatible", () => withGameI18n(() => {
+  const controller = createStackPresentationController({ settings: () => "expanded" });
+  const view = disclosureView();
+  controller.enhanceDisclosure(view);
+  view.button.click();
+  assert.equal(view.rows.hidden, true);
+  view.button.click();
+  assert.equal(view.rows.hidden, false);
+}));
+
+test("collapsed preference survives the same stack rerender", () => withGameI18n(() => {
+  const controller = createStackPresentationController({ settings: () => "expanded" });
+  const first = disclosureView("same");
+  controller.enhanceDisclosure(first);
+  first.button.click();
+  const rerender = disclosureView("same");
+  controller.enhanceDisclosure(rerender);
+  assert.equal(rerender.rows.hidden, true);
+}));
+
+test("per-viewer disclosure memory is not shared between controllers", () => withGameI18n(() => {
+  const first = createStackPresentationController({ settings: () => "expanded" });
+  const second = createStackPresentationController({ settings: () => "expanded" });
+  const changed = disclosureView("same");
+  first.enhanceDisclosure(changed);
+  changed.button.click();
+  const independent = disclosureView("same");
+  second.enhanceDisclosure(independent);
+  assert.equal(independent.rows.hidden, false);
+}));
+
+test("forget clears only the deleted stack's local disclosure override", () => withGameI18n(() => {
+  const controller = createStackPresentationController({ settings: () => "expanded" });
+  const changed = disclosureView("forgotten");
+  controller.enhanceDisclosure(changed);
+  changed.button.click();
+  controller.forget("forgotten");
+  const rerender = disclosureView("forgotten");
+  controller.enhanceDisclosure(rerender);
+  assert.equal(rerender.rows.hidden, false);
+}));
+
+function renderedNode(id = "message-1", revision = stackRenderRevision(activeStack())) {
+  const parent = {
+    children: [],
+    append(node) {
+      this.children = this.children.filter((entry) => entry !== node);
+      this.children.push(node);
+    },
+  };
+  const listener = () => "preserved";
+  const node = {
+    dataset: { nelflowStackId: id, nelflowStackRevision: revision },
+    parentElement: parent,
+    listener,
+  };
+  parent.children = [{ id: "newer-message" }, node, { id: "latest-message" }];
+  return { node, parent, listener };
+}
+
+test("reposition moves the exact existing stack node to its container end", () => {
+  const { node, parent } = renderedNode();
+  const root = { contains: (candidate) => candidate === node };
+  assert.equal(repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(activeStack()) }), 1);
+  assert.equal(parent.children.at(-1), node);
+});
+
+test("reposition leaves unrelated stack nodes untouched", () => {
+  const { node, parent } = renderedNode("other-message");
+  const before = [...parent.children];
+  const root = { contains: () => true };
+  assert.equal(repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(activeStack()) }), 0);
+  assert.deepEqual(parent.children, before);
+});
+
+test("reposition requires the newly rendered projection revision", () => {
+  const { node } = renderedNode("message-1", "199");
+  const root = { contains: () => true };
+  assert.equal(repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(activeStack()) }), 0);
+});
+
+test("DOM reparenting preserves the node and its listeners", () => {
+  const { node, listener } = renderedNode();
+  const root = { contains: () => true };
+  repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(activeStack()) });
+  assert.equal(node.listener, listener);
+});
+
+test("a live active stack update follows to the bottom and scrolls", () => {
+  const { node, parent } = renderedNode();
+  const harness = presentationHarness({ nodes: [node] });
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { flags: { nelflow: { stack: { rows: activeStack().rows, updatedAt: 200 } } } }), true);
+  harness.flush();
+  assert.equal(parent.children.at(-1), node);
+  assert.equal(harness.scrolls.length, 1);
+  assert.deepEqual(harness.scrolls[0].scrollOptions, { behavior: "smooth", block: "end" });
+});
+
+test("follow setting off schedules no DOM work", () => {
+  const harness = presentationHarness({ keep: false });
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }), false);
+  assert.equal(harness.frames.length, 0);
+});
+
+test("compact stacks off schedules no DOM work", () => {
+  const harness = presentationHarness({ compact: "off" });
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }), false);
+  assert.equal(harness.frames.length, 0);
+});
+
+test("historical stack updates schedule no DOM work", () => {
+  const stack = activeStack({ identity: { ...activeStack().identity, round: 2 } });
+  const harness = presentationHarness({ stack });
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }), false);
+  assert.equal(harness.frames.length, 0);
+});
+
+test("invisible private stacks schedule no DOM work", () => {
+  const harness = presentationHarness();
+  harness.message.visible = false;
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }), false);
+});
+
+test("empty stack projections schedule no DOM work", () => {
+  const harness = presentationHarness({ stack: activeStack({ rows: [] }) });
+  assert.equal(harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }), false);
+});
+
+test("render hydration alone never follows historical stacks", () => withGameI18n(() => {
+  const harness = presentationHarness();
+  harness.controller.enhanceDisclosure(disclosureView());
+  assert.equal(harness.frames.length, 0);
+}));
+
+test("a fresh controller can follow the next live update after reload", () => {
+  const { node, parent } = renderedNode();
+  const harness = presentationHarness({ nodes: [node] });
+  harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.updatedAt": 200 });
+  harness.flush();
+  assert.equal(parent.children.at(-1), node);
+});
+
+test("following works while the viewer keeps the stack collapsed", () => withGameI18n(() => {
+  const { node, parent } = renderedNode();
+  const harness = presentationHarness({ nodes: [node] });
+  const view = disclosureView("message-1");
+  harness.controller.enhanceDisclosure(view);
+  view.button.click();
+  harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] });
+  harness.flush();
+  const rerender = disclosureView("message-1");
+  harness.controller.enhanceDisclosure(rerender);
+  assert.equal(parent.children.at(-1), node);
+  assert.equal(rerender.rows.hidden, true);
+}));
+
+test("missing rendered nodes fail open without throwing", () => {
+  const harness = presentationHarness();
+  assert.doesNotThrow(() => harness.controller.handleChatMessageUpdate(harness.message, { "flags.nelflow.stack.rows": [] }));
+  harness.flush();
+  assert.equal(harness.debug.length, 1);
+});
+
+test("stack presentation controller contains no document mutation API", () => {
+  const controller = source("scripts/stack-presentation-controller.js");
+  assert.doesNotMatch(controller, /message\??\.update\(|message\??\.setFlag\(|message\??\.delete\(|ChatMessage\.create|createDocuments|deleteDocuments/);
+  assert.match(controller, /parentElement\?\.append\(node\)/);
+});
+
+test("stack header keeps Results as a sibling of the disclosure button", () => {
+  const chat = source("scripts/chat-ui.js");
+  assert.match(chat, /header\.append\(disclosure\)[\s\S]*header\.append\(nativeRecordsButton\)/);
+});
+
+test("stack disclosure is a real button with ARIA wiring", () => {
+  const chat = source("scripts/chat-ui.js");
+  assert.match(chat, /disclosure\.type = "button"/);
+  assert.match(chat, /aria-controls/);
+  assert.match(source("scripts/stack-presentation-controller.js"), /aria-expanded/);
+});
+
+test("new presentation settings are client scoped and independently configured", () => {
+  const settings = source("scripts/settings.js");
+  assert.match(settings, /KEEP_ACTIVE_STACK_AT_BOTTOM[\s\S]*scope: "client"[\s\S]*config: true[\s\S]*default: true/);
+  assert.match(settings, /STACK_DEFAULT_STATE[\s\S]*scope: "client"[\s\S]*config: true[\s\S]*STACK_DEFAULT_STATES\.EXPANDED/);
+});
+
+test("reposition preserves stack message ID and durable flags", () => {
+  const { node } = renderedNode();
+  const stack = activeStack();
+  const before = JSON.stringify(stack);
+  const root = { contains: () => true };
+  repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(stack) });
+  assert.equal(node.dataset.nelflowStackId, "message-1");
+  assert.equal(JSON.stringify(stack), before);
+});
+
+test("collapsed heading remains rendered and Results remains outside hidden rows", () => {
+  const chat = source("scripts/chat-ui.js");
+  assert.match(chat, /article\.append\(header, rows\)/);
+  assert.match(chat, /header\.append\(nativeRecordsButton\)/);
+  assert.match(source("scripts/stack-presentation-controller.js"), /view\.rows\.hidden = !expanded/);
+});
+
+test("Undo and Results handlers survive exact-node reparenting", () => {
+  const { node } = renderedNode();
+  node.undoHandler = () => "undo";
+  node.resultsHandler = () => "results";
+  const root = { contains: () => true };
+  repositionRenderedStack({ documentRef: { querySelectorAll: () => [node] }, chat: { element: root }, messageId: "message-1", revision: stackRenderRevision(activeStack()) });
+  assert.equal(node.undoHandler(), "undo");
+  assert.equal(node.resultsHandler(), "results");
+});
+
+test("linked suppression, player cards, and Toolbelt/save renderers remain separate", () => {
+  const main = source("scripts/main.js");
+  const controller = source("scripts/stack-presentation-controller.js");
+  assert.match(source("scripts/chat-ui.js"), /NativeCardCompactor\.render/);
+  assert.doesNotMatch(controller, /NativeCardCompactor|renderPlayerStrike|renderToolbeltBasicSave|renderSaveResolverChat/);
+  assert.match(main, /ToolbeltBasicSaveService\.handleMessage/);
+});
+
+test("localized setting labels match the requested Configure Settings text", () => {
+  const localization = source("lang/en.json");
+  assert.match(localization, /Keep Active Turn Stack at Bottom/);
+  assert.match(localization, /Default Turn Stack State/);
 });

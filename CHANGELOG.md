@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14.15
+
+- Keep the current combat turn's compact NPC Strike stack at the bottom after
+  legitimate live row updates by reparenting only its exact rendered DOM node
+- Add client-scoped **Keep Active Turn Stack at Bottom** and **Default Turn
+  Stack State** settings, defaulting to enabled and Expanded
+- Add an accessible compact heading disclosure with attacker, row count,
+  chevron, and authorized Results retained while collapsed
+- Preserve local disclosure state across live stack rerenders without flags or
+  broadcasts; do not reorder history during reload hydration
+- Preserve all mechanics, native messages, privacy, Undo, Toolbelt, NelCine,
+  NelZones, and presentation protocol versions
+
 ## 0.14.14
 
 - Audit official PF2e Toolbelt 3.54.0 and 3.54.1 source tags and confirm the
