@@ -36,6 +36,7 @@ import {
 import { installStrikeRidersPublicApi } from "./strike-riders.js";
 import { installActionResultPresentationApi } from "./action-result-presentation.js";
 import { installDamageAppliedPublicApi } from "./damage-applied-bridge.js";
+import { initializeShieldBlockGate } from "./shield-block-gate.js";
 import {
   installHealingPresentationFeedApi,
   registerHealingPresentationHooks,
@@ -129,6 +130,11 @@ async function initializeReady() {
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "capture-initialize", task: () => MultiTargetStrikeCapture.initialize() });
   await runNelflowBoundary({ subsystem: "player-strike", operation: "initialize", task: () => PlayerStrikeService.initialize() });
+  await runNelflowBoundary({
+    subsystem: "shield-block-gate",
+    operation: "initialize",
+    task: () => initializeShieldBlockGate(),
+  });
   await runNelflowBoundary({ subsystem: "spell-attack", operation: "initialize", task: () => SpellAttackService.initialize() });
   Hooks.on("createChatMessage", (message) => {
     void runNelflowBoundary({
@@ -193,7 +199,7 @@ async function initializeReady() {
     const toolbelt = ToolbeltTargetHelperAdapter.status();
     return {
       moduleId: MODULE_ID,
-      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.15",
+      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.16",
       toolbelt: {
         installed: toolbelt.installed,
         active: toolbelt.active,
@@ -237,5 +243,5 @@ async function initializeReady() {
   };
   root.dev.stopWatchingSpellAttackFlow = () => SpellAttackService.stopWatchingFlow();
 
-  logger.debug("Nelflow 0.14.15 ready");
+  logger.debug("Nelflow 0.14.16 ready");
 }

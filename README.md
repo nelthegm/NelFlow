@@ -1,6 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.16** prompts for **Shield Block** before Strike auto-apply when
+the target has Raise a Shield active, asking the token's controlling user and
+passing PF2e's native `shieldBlockRequest` (PC, NPC, and multi-target Strikes;
+not spell attacks or saves).
 Nelflow **0.14.15** adds client-only follow and disclosure controls for compact
 NPC Strike stacks. A live update to the current turn's stack can move that exact
 rendered card to the bottom of chat, and each viewer may default stacks to
@@ -103,14 +107,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.15/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.16/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.15"
+game.modules.get("nelflow")?.version // "0.14.16"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -128,6 +132,15 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.16 Shield Block prompt on Strike auto-apply
+
+When a Strike target has Raise a Shield active, Nelflow pauses auto-apply and
+asks the controlling user whether to Shield Block. PF2e applies via native
+`shieldBlockRequest`. Spell attacks and save damage are not prompted.
+
+See [0.14.16 release notes](docs/RELEASE_NOTES_0.14.16.md) and
+[runtime plan](docs/NELFLOW_0.14.16_TEST_PLAN.md).
 
 ## Nelflow 0.14.15 stack follow and collapse controls
 
@@ -1226,10 +1239,11 @@ Undo Blocked.
   single-target Strikes after the user creates native damage; familiars,
   companions, NPCs, hazards, spell/impulse attacks, and multiple targets stay
   manual.
-- Automatic application can precede Shield Block, Champion reactions, or
-  table-specific reaction handling.
+- Strike auto-apply prompts for Shield Block when the target has Raise a Shield
+  active (setting Prompt Shield Block on Strike Auto-Apply). Spell attacks,
+  save damage, and other reactions (for example Champion) are still not gated.
 - Undo restores only guarded HP and temporary HP, not conditions, persistent
-  damage, shields, effects, defeated state, or other resources.
+  damage, inventories, shield HP, effects, defeated state, or other resources.
 - Manual use of PF2e's damage controls while auto-application is disabled is
   not tracked as an automatic application; the row remains Not Applied.
 - A user-deleted native message disappears from Results. The row and canonical
@@ -1293,8 +1307,8 @@ Undo Blocked.
   completed out of causal order can still require recovery rather than a
   time/chat-order guess.
 - PF2e exposes no conclusive structured Shield Block eligibility signal for
-  this workflow. Nelflow 0.6.3 adds no reaction prompt and uses no Shield Block;
-  tables requiring reaction decisions should keep Player Strike Auto-Apply Off.
+  this workflow beyond Raise a Shield / shield.raised. Nelflow 0.14.16 prompts
+  Shield Block for Strike auto-apply when raised; other reactions remain ungated.
 - Private/self-roll documents unavailable to the elected GM cannot be applied.
 - NelCine basic-save batch cinematics (0.9.0) are presentation-only. HP still
   applies before the cinematic. A GM reload during the short resolution window
@@ -1312,6 +1326,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.16 Shield Block prompt](docs/RELEASE_NOTES_0.14.16.md)
 - [Nelflow 0.14.15 stack follow and collapse controls](docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md)
 - [Nelflow 0.14.14 Toolbelt 3.54.1 compatibility](docs/RELEASE_NOTES_0.14.14.md)
 - [Nelflow 0.14.11 Strike damage applied presentation](docs/RELEASE_NOTES_0.14.11.md)

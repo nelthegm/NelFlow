@@ -462,6 +462,7 @@ async function processDamage(message) {
         outcome: damage.evidence.outcome,
         applicationId: transaction.id,
         attackMessageId: attackMessage.id,
+        shieldBlockPrompt: true,
       });
       if (!applied) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
       const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);

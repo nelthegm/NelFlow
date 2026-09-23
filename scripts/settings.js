@@ -184,6 +184,12 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.PROMPT_SHIELD_BLOCK,
+    name: "Nelflow.Settings.PromptShieldBlock.Name",
+    hint: "Nelflow.Settings.PromptShieldBlock.Hint",
+    default: true,
+  },
+  {
     key: SETTINGS.SPELL_ATTACK_AUTO_APPLY,
     name: "Nelflow.Settings.SpellAttackAutoApply.Name",
     hint: "Nelflow.Settings.SpellAttackAutoApply.Hint",

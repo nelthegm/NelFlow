@@ -7,6 +7,7 @@ import {
 } from "./damage-correlation.js";
 import { logger } from "./logger.js";
 import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
+import { resolveShieldBlockForApplication } from "./shield-block-gate.js";
 
 const pendingApplicationCaptures = new Map();
 const pendingSpellDamageCaptures = new Map();
@@ -747,6 +748,7 @@ export class PF2eAdapter {
       outcome: messageFlags(damageMessage).context?.outcome,
       applicationId: transactionId,
       attackMessageId: attackMessage.id,
+      shieldBlockPrompt: true,
     });
   }
 
@@ -763,6 +765,7 @@ export class PF2eAdapter {
     attackMessageId = null,
     nativeMarker = null,
     beforeApplyDamage = null,
+    shieldBlockPrompt = false,
   }) {
     const targetRefs = applicationTargetRefs(targetToken);
     const targetActor = targetRefs?.actor ?? targetToken?.actor ?? null;
@@ -875,13 +878,45 @@ export class PF2eAdapter {
           );
         }
       }
+
+      let shieldBlockRequest = false;
+      if (shieldBlockPrompt === true) {
+        try {
+          const choice = await resolveShieldBlockForApplication({
+            targetToken,
+            targetActor,
+            applicationId,
+          });
+          shieldBlockRequest = choice.block === true;
+          if (choice.prompted) {
+            logger.debug("Shield Block prompt resolved", {
+              stage: "shield-block-gate",
+              applicationId,
+              block: shieldBlockRequest,
+              reason: choice.reason,
+            });
+          }
+        } catch (error) {
+          logger.warn(
+            "Shield Block prompt failed open; applying without block",
+            {
+              stage: "shield-block-gate",
+              reason: error instanceof Error ? error.message : String(error),
+              applicationId,
+            },
+            error,
+          );
+          shieldBlockRequest = false;
+        }
+      }
+
       await contextClone.applyDamage({
         damage: transformedRoll,
         token: applyToken,
         item,
         skipIWR: false,
         rollOptions,
-        shieldBlockRequest: false,
+        shieldBlockRequest,
         outcome,
       });
       const applicationMessage = finishApplicationCapture(capture);

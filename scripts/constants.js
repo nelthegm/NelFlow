@@ -19,6 +19,7 @@ export const SETTINGS = Object.freeze({
   AUTOMATIC_BASIC_SAVE_DAMAGE_ROLL: "automaticBasicSaveDamageRoll",
   GUARD_TOOLBELT_DAMAGE_CONTROLS: "guardToolbeltDamageControls",
   PLAYER_STRIKE_AUTO_APPLY: "playerStrikeAutoApply",
+  PROMPT_SHIELD_BLOCK: "promptShieldBlockOnAutoApply",
   SPELL_ATTACK_AUTO_APPLY: "spellAttackAutoApply",
   SHARED_ROLL_MULTI_TARGET_STRIKES: "sharedRollMultiTargetStrikes",
   SHOW_TRANSACTION_DIAGNOSTICS: "showTransactionDiagnostics",

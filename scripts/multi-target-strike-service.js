@@ -203,6 +203,7 @@ async function processDamageGroup(message, strike, transaction, groupName, group
       outcome,
       applicationId,
       attackMessageId: message.id,
+      shieldBlockPrompt: true,
       nativeMarker: {
         transactionType: MULTI_TARGET_STRIKE_TRANSACTION_TYPE,
         transactionId: transaction.id,

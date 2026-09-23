@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.14.16
+
+- Prompt for Shield Block before Strike auto-apply when the target has Raise a
+  Shield active (`system.attributes.shield.raised`)
+- Ask the token's controlling user (player owner or GM); pass PF2e's native
+  `shieldBlockRequest` so hardness and shield HP stay authoritative
+- Covers PC, NPC, and multi-target Strike auto-apply; spell attacks and save
+  damage are not prompted
+- Add world setting **Prompt Shield Block on Strike Auto-Apply** (default on);
+  timeout applies without blocking
+- Preserve Undo HP/temp-only restore; Undo still does not restore shield HP
+
 ## 0.14.15
 
 - Keep the current combat turn's compact NPC Strike stack at the bottom after

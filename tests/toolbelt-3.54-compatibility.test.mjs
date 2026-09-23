@@ -291,11 +291,11 @@ describe("0.14.8 Toolbelt 3.54.0 compatibility", () => {
     assert.equal(status.toolbeltVersion, "3.55.0");
   });
 
-  it("44-48. damageApplied / no Toolbelt private API / version 0.14.15", () => {
+  it("44-48. damageApplied / no Toolbelt private API / version 0.14.16", () => {
     assert.match(source("scripts/damage-applied-bridge.js"), /nelflow\.damageApplied/);
     assert.doesNotMatch(source("scripts/toolbelt-basic-save-service.js"), /rollSaveForTarget/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.15");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.15");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.16");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.16");
     assert.equal(TOOLBELT_MAX_VERSION, "3.54.1");
   });
 });
