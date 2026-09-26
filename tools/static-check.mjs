@@ -1134,6 +1134,10 @@ for (const path of [
   "docs/NELFLOW_0.14.16_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.17.md",
   "docs/NELFLOW_0.14.17_TEST_PLAN.md",
+  "docs/RELEASE_NOTES_0.14.18.md",
+  "docs/NELFLOW_0.14.18_TEST_PLAN.md",
+  "scripts/strike-row-presentation.js",
+  "tests/compact-strike-row-readability.test.mjs",
   "scripts/shield-block-gate.js",
   "tests/shield-block-gate.test.mjs",
   "tests/turn-stack-grouping.test.mjs",
@@ -1177,6 +1181,32 @@ if (/ChatMessage\.create|createDocuments|deleteDocuments|message\??\.update\(|me
 const stackPresentationTests = read("tests/stack-presentation-refinement.test.mjs");
 if ((stackPresentationTests.match(/\btest\s*\(/g) ?? []).length < 85) {
   fail("Nelflow 0.14.15 requires at least 25 added stack follow/collapse scenarios");
+}
+const strikeRowPresentation = read("scripts/strike-row-presentation.js");
+const compactStrikeRowTests = read("tests/compact-strike-row-readability.test.mjs");
+if ((compactStrikeRowTests.match(/\bit\s*\(/g) ?? []).length < 40) {
+  fail("Nelflow 0.14.18 requires at least 40 focused compact Strike-row scenarios");
+}
+for (const required of [
+  "buildStrikeRowPresentation",
+  "attackTotalFromExactRecord",
+  "hasExactDamageRecord",
+]) {
+  if (!strikeRowPresentation.includes(required)) {
+    fail(`compact Strike-row projection is missing: ${required}`);
+  }
+}
+if (/innerHTML|outerHTML|querySelector|rollDamage|applyDamage|ChatMessage\.create|setFlag|deleteFlag/.test(strikeRowPresentation)) {
+  fail("compact Strike-row projection must remain exact-record presentation only");
+}
+for (const key of [
+  "Nelflow.Stack.DamageLabel",
+  "Nelflow.Stack.ViewAttackRoll",
+  "Nelflow.Stack.ViewDamageRoll",
+  "Nelflow.Stack.ViewCriticalDamageRoll",
+  "Nelflow.Stack.UndoAppliedDamage",
+]) {
+  if (!translations[key]) fail(`compact Strike-row localization is missing: ${key}`);
 }
 const toolbelt3541Fixture = read("tests/fixtures/toolbelt-target-helper-3.54.1.mjs");
 for (const required of [

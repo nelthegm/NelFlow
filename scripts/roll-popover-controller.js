@@ -279,6 +279,12 @@ export class RollPopoverController {
     control.dataset.nelflowRollKind = kind;
     control.setAttribute("aria-haspopup", "true");
     descriptors.set(control, factory);
+    // Native button activation (pointer, Enter, or Space) opens the same exact
+    // record inspection used by hover and focus without searching chat history.
+    control.addEventListener("click", (event) => {
+      event.preventDefault();
+      openPopover(control);
+    });
     return control;
   }
 }

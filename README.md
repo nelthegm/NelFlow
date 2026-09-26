@@ -1,7 +1,10 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.17** repairs compact NPC Strike stack grouping so multiple
+Nelflow **0.14.18** separates authoritative attack results from structured
+damage/application results in compact NPC Strike rows and replaces row text
+controls with accessible exact-record icons. Nelflow **0.14.17** repairs compact
+NPC Strike stack grouping so multiple
 Strikes from the same attacker in one logical combat activation append to a
 single parent stack (stable under NelTempo / Dynamic Initiative Combat updates).
 Nelflow **0.14.16** prompts for **Shield Block** before Strike auto-apply when
@@ -71,11 +74,16 @@ for single-target NPC Strike HP timing.
 [Foundry speaker: Stone Giant]
 Stone Giant                                  Results (5)
 Greatclub → Vincent
-Hit · 24 bludgeoning · Applied (24 HP) · Undo
+Hit · 31
+Damage · 24 Bludgeoning · Applied (24 HP)
+[d20] [burst] [undo]
 Greatclub · MAP −5 → Vincent
-Critical Hit · 47 bludgeoning · Applied (47 HP) · Actions (1)
+Critical Hit · 34
+Damage · 47 Bludgeoning · Applied (47 HP)
+[d20] [burst] [undo]
 Fist · MAP −10 → Brynna
-Miss
+Miss · 18
+[d20]
 ```
 
 Original PF2e attack, damage, and damage-taken messages remain intact. Ordinary
@@ -110,14 +118,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.17/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.18/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.17"
+game.modules.get("nelflow")?.version // "0.14.18"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -135,6 +143,25 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.18 compact Strike row readability
+
+Single-target NPC Strike rows now keep the Strike/target heading, attack result,
+and damage/application result on separate compact lines. The attack total comes
+only from the exact viewer-visible native attack roll; if that record is absent
+or private, Nelflow shows the already-authorized stored outcome without
+inventing a number. A damage line is rendered only for an exact linked native
+damage record and continues to use the structured damage summary, keeping rolled
+damage distinct from actual HP loss after PF2e IWR.
+
+When **Results** is open, exact attack and damage inspection controls share one
+nowrap icon row with the existing guarded Undo control. The controls are real
+buttons with localized labels/tooltips, keyboard activation, and visible focus.
+Results disclosure, stack collapse/follow, Riders, Actions, privacy, native
+messages, mechanics, and all presentation protocols are unchanged.
+
+See the [0.14.18 design notes](docs/RELEASE_NOTES_0.14.18.md) and
+[runtime checklist](docs/NELFLOW_0.14.18_TEST_PLAN.md).
 
 ## Nelflow 0.14.17 compact Strike stack grouping repair
 
@@ -1338,6 +1365,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.18 compact Strike row readability](docs/RELEASE_NOTES_0.14.18.md)
 - [Nelflow 0.14.17 stack grouping repair](docs/RELEASE_NOTES_0.14.17.md)
 - [Nelflow 0.14.16 Shield Block prompt](docs/RELEASE_NOTES_0.14.16.md)
 - [Nelflow 0.14.15 stack follow and collapse controls](docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md)

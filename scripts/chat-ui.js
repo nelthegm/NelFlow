@@ -27,6 +27,7 @@ import { canUndoBatchChild } from "./multi-target-strike-model.js";
 import { MultiTargetStrikeService } from "./multi-target-strike-service.js";
 import { RollPopoverController } from "./roll-popover-controller.js";
 import { buildRollInspection, inspectionKind } from "./strike-roll-inspection.js";
+import { buildStrikeRowPresentation } from "./strike-row-presentation.js";
 import {
   ridersForStackRow,
   shouldExpandStrikeRiders,
@@ -64,6 +65,16 @@ function labeledButton({ className, iconClass, label, title = label }) {
   const text = document.createElement("span");
   text.textContent = label;
   button.append(text);
+  return button;
+}
+
+function iconButton({ className, iconClass, label, title = label }) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.title = title;
+  button.setAttribute("aria-label", label);
+  button.append(icon(iconClass));
   return button;
 }
 
@@ -172,32 +183,36 @@ function inspectionTargetLabel(target) {
   return canSeeName ? token.name : localize("Nelflow.Roll.HiddenTarget");
 }
 
+function inspectionModel(record) {
+  const kind = inspectionKind(record);
+  const current = NativeRecordsController.refreshRecord(record);
+  if (!current) return { kind, available: false };
+  return buildRollInspection(current, {
+    transaction: current.transaction,
+    canInspectTarget,
+    targetLabel: inspectionTargetLabel,
+    hiddenTargetLabel: localize("Nelflow.Roll.HiddenTarget"),
+  });
+}
+
 function inspectionButton(record) {
   const kind = inspectionKind(record);
   const labels = {
-    attack: ["Nelflow.Stack.AttackMessage", "fa-solid fa-dice-d20"],
-    damage: ["Nelflow.Stack.DamageMessage", "fa-solid fa-burst"],
-    criticalDamage: ["Nelflow.Stack.CriticalDamageMessage", "fa-solid fa-burst"],
+    attack: ["Nelflow.Stack.ViewAttackRoll", "fa-solid fa-dice-d20"],
+    damage: ["Nelflow.Stack.ViewDamageRoll", "fa-solid fa-burst"],
+    criticalDamage: ["Nelflow.Stack.ViewCriticalDamageRoll", "fa-solid fa-burst"],
   };
   const [labelKey, iconClass] = labels[kind] ?? labels.damage;
-  const control = labeledButton({
+  const label = localize(labelKey);
+  const control = iconButton({
     className: "nelflow-stack__reference",
     iconClass,
-    label: localize(labelKey),
-    title: localize("Nelflow.Roll.InspectTitle"),
+    label,
+    title: label,
   });
   return RollPopoverController.register(
     control,
-    () => {
-      const current = NativeRecordsController.refreshRecord(record);
-      if (!current) return { kind, available: false };
-      return buildRollInspection(current, {
-        transaction: current.transaction,
-        canInspectTarget,
-        targetLabel: inspectionTargetLabel,
-        hiddenTargetLabel: localize("Nelflow.Roll.HiddenTarget"),
-      });
-    },
+    () => inspectionModel(record),
     kind,
   );
 }
@@ -345,20 +360,25 @@ function renderRow(row, stack, records) {
   });
   attackLine.append(target);
 
-  const resultLine = document.createElement("div");
-  resultLine.className = "nelflow-stack__result";
+  const presentation = buildStrikeRowPresentation({
+    row,
+    records,
+    inspectAttack: inspectionModel,
+    formatDamage: formatDamageSummary,
+  });
+
+  const attackResult = document.createElement("div");
+  attackResult.className = "nelflow-stack__attack-result";
   const outcome = document.createElement("span");
-  outcome.textContent = strikeOutcomeLabel(row.outcome);
-  resultLine.append(outcome);
-  const damage =
-    game.user.isGM || canRevealNativeRecord(row.damageMessageId)
-      ? formatDamageSummary(row.damageSummary)
-      : "";
-  if (damage) {
-    const damageLabel = document.createElement("span");
-    damageLabel.textContent = damage;
-    resultLine.append(damageLabel);
+  outcome.textContent = strikeOutcomeLabel(presentation.outcome);
+  attackResult.append(outcome);
+  if (Number.isFinite(presentation.attackTotal)) {
+    const total = document.createElement("span");
+    total.className = "nelflow-stack__attack-total";
+    total.textContent = String(presentation.attackTotal);
+    attackResult.append(total);
   }
+
   const stateLabel = document.createElement("span");
   stateLabel.className = "nelflow-stack__state";
   stateLabel.textContent = localize(state.key);
@@ -374,23 +394,50 @@ function renderRow(row, stack, records) {
       amount: row.appliedAmount,
     });
   }
-  if (row.transactionState !== TRANSACTION_STATES.SKIPPED) resultLine.append(stateLabel);
+
+  let damageResult = null;
+  if (presentation.showDamage) {
+    damageResult = document.createElement("div");
+    damageResult.className = "nelflow-stack__damage-result";
+    const damageHeading = document.createElement("span");
+    damageHeading.className = "nelflow-stack__damage-heading";
+    damageHeading.textContent = localize("Nelflow.Stack.DamageLabel");
+    damageResult.append(damageHeading);
+    if (presentation.damage) {
+      const damageLabel = document.createElement("span");
+      damageLabel.textContent = presentation.damage;
+      damageResult.append(damageLabel);
+    }
+    if (row.transactionState !== TRANSACTION_STATES.SKIPPED) damageResult.append(stateLabel);
+  }
+
+  let statusLine = null;
+  if (!presentation.showDamage && row.transactionState !== TRANSACTION_STATES.SKIPPED) {
+    statusLine = document.createElement("div");
+    statusLine.className = "nelflow-stack__status";
+    statusLine.append(stateLabel);
+  }
+
   const riders = renderStrikeRiders(row, stack);
+  let supplementalActions = null;
   if (riders) {
     // Rider section replaces the coarse Actions badge when structured notes exist.
   } else {
-    const supplementalActions = renderSupplementalActions(row, stackId);
-    if (supplementalActions) resultLine.append(supplementalActions);
+    supplementalActions = renderSupplementalActions(row, stackId);
   }
+
+  const controls = document.createElement("div");
+  controls.className = "nelflow-strike-controls";
   const inspection = resultsPanel(records);
-  if (inspection) resultLine.append(inspection);
+  if (inspection) controls.append(inspection);
 
   if (canUseUndo(row, stack)) {
-    const undo = labeledButton({
+    const label = localize("Nelflow.Stack.UndoAppliedDamage");
+    const undo = iconButton({
       className: "nelflow-stack__undo",
       iconClass: "fa-solid fa-rotate-left",
-      label: localize("Nelflow.Status.Undo"),
-      title: localize("Nelflow.Status.UndoTitle"),
+      label,
+      title: label,
     });
     undo.addEventListener("click", () => {
       runControl(async () => {
@@ -403,10 +450,19 @@ function renderRow(row, stack, records) {
         }
       }, "stack-row-undo");
     });
-    resultLine.append(undo);
+    controls.append(undo);
   }
 
-  main.append(attackLine, resultLine);
+  main.append(attackLine, attackResult);
+  if (damageResult) main.append(damageResult);
+  if (statusLine) main.append(statusLine);
+  if (supplementalActions) {
+    const auxiliary = document.createElement("div");
+    auxiliary.className = "nelflow-stack__auxiliary";
+    auxiliary.append(supplementalActions);
+    main.append(auxiliary);
+  }
+  if (controls.childElementCount) main.append(controls);
   if (riders) main.append(riders);
   summary.append(image, main);
   item.append(summary);

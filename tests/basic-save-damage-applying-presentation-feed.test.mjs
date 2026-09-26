@@ -239,8 +239,8 @@ describe("0.14.13 basic-save damage applying ownership reservation", () => {
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeDamageRolledPresentation/);
     assert.match(source("scripts/strike-presentation-feed.js"), /nelflow\.strikeResolvedPresentation/);
     assert.doesNotMatch(source("scripts/basic-save-damage-presentation-feed.js"), /floating|suppressNative|cssText/);
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.17");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.17");
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.18");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.18");
     const id = buildBasicSaveTargetDamageResultId(args());
     assert.match(id, /:damage:/);
     emitBasicSaveTargetDamageApplyingPresentationFromApplication({

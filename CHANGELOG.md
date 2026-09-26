@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.14.18
+
+- Separate compact NPC Strike attack outcomes/totals from structured damage and
+  application state
+- Read the displayed attack total only from the exact authorized native attack
+  roll; omit it when unavailable rather than reconstructing it
+- Omit synthetic damage lines and controls when no exact native damage record
+  exists
+- Replace Attack, Damage, and Undo row text controls with localized,
+  keyboard-operable Font Awesome icon buttons in one compact row
+- Preserve Results disclosure, stack follow/collapse, Riders, Actions, privacy,
+  native messages, guarded Undo, mechanics, and integration protocols
+
 ## 0.14.17
 
 - Repair compact NPC Strike stack grouping so same-activation Strikes append to
