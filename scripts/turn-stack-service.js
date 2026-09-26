@@ -20,25 +20,49 @@ function stableHash(value) {
   return hash.toString(16).padStart(16, "0");
 }
 
-function markerMatches(marker, combat, combatant) {
+function markerMatchesActivation(marker, combat, combatant) {
   return (
     marker?.combatId === combat.id &&
     marker.round === combat.round &&
-    marker.combatantId === combatant.id &&
-    marker.turnIndex === combat.turn
+    marker.combatantId === combatant.id
   );
 }
 
-function makeTurnMarker(combat, combatant) {
-  const modifiedTime = combat._stats?.modifiedTime ?? Date.now();
+/**
+ * Durable activation marker for combat-turn stacks.
+ *
+ * markerId is deterministic from combat + round + combatant + activationSeq.
+ * It deliberately excludes combat._stats.modifiedTime and turn index so
+ * mid-activation Combat updates (for example Dynamic Initiative reshuffles)
+ * cannot mint a new parent stack.
+ *
+ * activationSeq increments only when round or active combatant changes.
+ */
+export function makeDurableTurnMarker(combat, combatant, { previousMarker = null } = {}) {
+  const round = combat.round;
+  const combatantId = combatant.id;
+  let activationSeq = 1;
+  if (
+    previousMarker?.combatId === combat.id &&
+    previousMarker.round === round &&
+    previousMarker.combatantId === combatantId &&
+    Number.isFinite(Number(previousMarker.activationSeq))
+  ) {
+    activationSeq = Number(previousMarker.activationSeq);
+  } else if (
+    previousMarker?.combatId === combat.id &&
+    Number.isFinite(Number(previousMarker.activationSeq))
+  ) {
+    activationSeq = Number(previousMarker.activationSeq) + 1;
+  }
+
   return {
     combatId: combat.id,
-    round: combat.round,
-    combatantId: combatant.id,
-    turnIndex: combat.turn,
-    markerId: stableHash(
-      `${combat.id}|${combat.round}|${combatant.id}|${combat.turn}|${modifiedTime}`,
-    ),
+    round,
+    combatantId,
+    turnIndex: combat.turn ?? null,
+    activationSeq,
+    markerId: stableHash(`${combat.id}|${round}|${combatantId}|${activationSeq}`),
   };
 }
 
@@ -70,9 +94,11 @@ export function currentCombatFor(transaction) {
 
 async function ensureTurnMarker(combat, combatant) {
   const existing = combat.getFlag(MODULE_ID, "turnMarker");
-  if (markerMatches(existing, combat, combatant)) return existing;
+  if (markerMatchesActivation(existing, combat, combatant)) {
+    return existing;
+  }
 
-  const marker = makeTurnMarker(combat, combatant);
+  const marker = makeDurableTurnMarker(combat, combatant, { previousMarker: existing });
   try {
     await combat.setFlag(MODULE_ID, "turnMarker", marker);
     return combat.getFlag(MODULE_ID, "turnMarker") ?? marker;
@@ -88,6 +114,27 @@ async function ensureTurnMarker(combat, combatant) {
   }
 }
 
+function logStackIdentity(descriptor, transaction) {
+  if (getSetting(SETTINGS.DEBUG) !== true) return;
+  logger.debug("Stack identity", {
+    stage: "stack-identity",
+    transactionId: transaction?.id ?? null,
+    kind: descriptor.kind,
+    stackMessageId: descriptor.id,
+    key: descriptor.key,
+    combat: descriptor.identity?.combatId ?? null,
+    round: descriptor.identity?.round ?? null,
+    combatant: descriptor.identity?.combatantId ?? null,
+    turnIndex: descriptor.identity?.turnIndex ?? null,
+    turnWindow: descriptor.identity?.turnMarkerId ?? null,
+    activationSeq: descriptor.identity?.activationSeq ?? null,
+    attackerToken: descriptor.identity?.attackerTokenUuid ?? null,
+    author: descriptor.identity?.authorUserId ?? null,
+    visibility: descriptor.identity?.visibilityKey ?? null,
+    outOfTurn: descriptor.identity?.outOfTurn ?? null,
+  });
+}
+
 async function stackIdentity(attackMessage, transaction) {
   const visibility = sourceVisibility(attackMessage);
   const active = currentCombatFor(transaction);
@@ -98,7 +145,7 @@ async function stackIdentity(attackMessage, transaction) {
       transaction.snapshot.processingUserId,
       visibility.key,
     ].join("|");
-    return {
+    const descriptor = {
       id: stableHash(key),
       key,
       kind: "standalone",
@@ -109,10 +156,13 @@ async function stackIdentity(attackMessage, transaction) {
         combatantId: null,
         turnIndex: null,
         turnMarkerId: transaction.id,
+        activationSeq: null,
         authorUserId: transaction.snapshot.processingUserId,
         visibilityKey: visibility.key,
       },
     };
+    logStackIdentity(descriptor, transaction);
+    return descriptor;
   }
 
   const marker = active.combatant
@@ -122,14 +172,16 @@ async function stackIdentity(attackMessage, transaction) {
         round: active.combat.round,
         combatantId: null,
         turnIndex: null,
-        markerId: stableHash(`${active.combat.id}|${active.combat.round}|no-active-turn`),
+        activationSeq: 0,
+        markerId: stableHash(`${active.combat.id}|${active.combat.round}|no-active-turn|0`),
       };
   const identity = {
     combatId: active.combat.id,
     round: marker.round,
     combatantId: marker.combatantId,
-    turnIndex: marker.turnIndex,
+    turnIndex: marker.turnIndex ?? active.combat.turn ?? null,
     turnMarkerId: marker.markerId,
+    activationSeq: marker.activationSeq ?? null,
     attackerTokenUuid: transaction.snapshot.sourceTokenUuid,
     attackerCombatantId: active.attackerCombatant.id,
     outOfTurn: Boolean(active.combatant && active.combatant.id !== active.attackerCombatant.id),
@@ -137,16 +189,21 @@ async function stackIdentity(attackMessage, transaction) {
     visibilityKey: visibility.key,
   };
   const key = combatStackKey(identity);
-  return { id: stableHash(key), key, kind: "combat-turn", visibility, identity };
+  const descriptor = { id: stableHash(key), key, kind: "combat-turn", visibility, identity };
+  logStackIdentity(descriptor, transaction);
+  return descriptor;
 }
 
+/**
+ * Parent stack merge key. turnIndex is observational only and must not participate.
+ * turnMarkerId already encodes the durable activation window.
+ */
 export function combatStackKey(identity) {
   return [
     "combat-turn",
     identity.combatId,
     identity.round,
     identity.combatantId,
-    identity.turnIndex,
     identity.turnMarkerId,
     identity.attackerTokenUuid,
     identity.authorUserId,
@@ -303,18 +360,21 @@ export class TurnStackService {
       if (!game.user.isActiveGM) return;
 
       const existing = combat.getFlag(MODULE_ID, "turnMarker");
-      const sameTurn =
+      // Same logical activation: ignore turn-index-only noise (Dynamic Initiative
+      // may reshuffle combat.turn without ending the active combatant).
+      const sameActivation =
         prior?.round === current?.round &&
         prior?.combatantId === current?.combatantId &&
-        prior?.turn === current?.turn &&
+        existing?.combatId === combat.id &&
         existing?.combatantId === current?.combatantId &&
-        existing?.round === current?.round &&
-        existing?.turnIndex === combat.turn;
-      if (sameTurn) return;
+        existing?.round === current?.round;
+      if (sameActivation) return;
 
       const combatant = combat.combatant;
-      if (!combatant || combat.round == null || combat.turn == null) return;
-      void combat.setFlag(MODULE_ID, "turnMarker", makeTurnMarker(combat, combatant)).catch((error) => {
+      if (!combatant || combat.round == null) return;
+      void combat
+        .setFlag(MODULE_ID, "turnMarker", makeDurableTurnMarker(combat, combatant, { previousMarker: existing }))
+        .catch((error) => {
         logger.error(
           "Unable to persist combat turn change",
           {

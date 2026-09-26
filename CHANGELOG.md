@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.17
+
+- Repair compact NPC Strike stack grouping so same-activation Strikes append to
+  one parent stack
+- Make durable turn markers ignore Combat `modifiedTime` and turn-index-only
+  drift (NelTempo / Dynamic Initiative safe)
+- Keep activation separation when round or active combatant changes
+- Preserve stack-follow, mechanics, Undo, and presentation protocols
+
 ## 0.14.16
 
 - Prompt for Shield Block before Strike auto-apply when the target has Raise a

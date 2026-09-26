@@ -1,6 +1,9 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.17** repairs compact NPC Strike stack grouping so multiple
+Strikes from the same attacker in one logical combat activation append to a
+single parent stack (stable under NelTempo / Dynamic Initiative Combat updates).
 Nelflow **0.14.16** prompts for **Shield Block** before Strike auto-apply when
 the target has Raise a Shield active, asking the token's controlling user and
 passing PF2e's native `shieldBlockRequest` (PC, NPC, and multi-target Strikes;
@@ -107,14 +110,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.16/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.17/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.16"
+game.modules.get("nelflow")?.version // "0.14.17"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -132,6 +135,15 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.17 compact Strike stack grouping repair
+
+Same-attacker Strikes in one logical combat activation append to one compact
+parent stack. Durable turn markers ignore Combat modifiedTime and turn-index-only
+drift so NelTempo / Dynamic Initiative updates do not split stacks.
+
+See [0.14.17 release notes](docs/RELEASE_NOTES_0.14.17.md) and
+[runtime plan](docs/NELFLOW_0.14.17_TEST_PLAN.md).
 
 ## Nelflow 0.14.16 Shield Block prompt on Strike auto-apply
 
@@ -1326,6 +1338,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.17 stack grouping repair](docs/RELEASE_NOTES_0.14.17.md)
 - [Nelflow 0.14.16 Shield Block prompt](docs/RELEASE_NOTES_0.14.16.md)
 - [Nelflow 0.14.15 stack follow and collapse controls](docs/NELFLOW_0.14.15_STACK_FOLLOW_AND_COLLAPSE.md)
 - [Nelflow 0.14.14 Toolbelt 3.54.1 compatibility](docs/RELEASE_NOTES_0.14.14.md)

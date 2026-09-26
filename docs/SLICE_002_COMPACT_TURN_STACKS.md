@@ -64,11 +64,18 @@ A combat stack key contains:
 - a visibility key derived from the attack message's blind and whisper state.
 
 The active GM writes `flags.nelflow.turnMarker` on the Combat document from
-Foundry's `combatTurnChange` hook. A same-round order edit that leaves the same
-combatant active retains the marker. Leaving and returning to a combatant, or
-changing rounds, writes a new marker. If the marker is absent when the first
+Foundry's `combatTurnChange` hook. The durable `markerId` is
+`hash(combatId|round|combatantId|activationSeq)` and deliberately excludes
+Combat `_stats.modifiedTime` and turn index. A same-round order edit that leaves
+the same combatant active retains the marker (turn-index-only noise is ignored).
+Leaving and returning to a combatant, or changing rounds, increments
+`activationSeq` and writes a new marker. If the marker is absent when the first
 Strike arrives, the authoring GM persists it then. No stack is created merely
 because a turn begins.
+
+Parent stack keys use combat id, round, active combatant id, durable turn marker
+id, attacker token UUID, processing GM, and visibility — **not** turn index,
+damage state, Undo state, or message IDs.
 
 An attack is grouped only when an active combat's current combatant matches the
 snapshotted source actor or token. Otherwise its key contains the transaction

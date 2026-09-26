@@ -353,7 +353,7 @@ describe("0.14.13 healing presentation feed", () => {
 
   it("metadata version 0.14.16", () => {
     const manifest = JSON.parse(source("module.json"));
-    assert.equal(manifest.version, "0.14.16");
-    assert.match(manifest.download, /v0\.14\.16\/nelflow\.zip/);
+    assert.equal(manifest.version, "0.14.17");
+    assert.match(manifest.download, /v0\.14\.17\/nelflow\.zip/);
   });
 });

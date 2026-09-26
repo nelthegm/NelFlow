@@ -39,9 +39,10 @@ export function isActiveCombatStack(stack, combat) {
   if (
     identity.combatId !== combat.id ||
     identity.round !== combat.round ||
-    identity.combatantId !== combat.combatant?.id ||
-    identity.turnIndex !== combat.turn
-  ) return false;
+    identity.combatantId !== combat.combatant?.id
+  ) {
+    return false;
+  }
   const marker = combat.getFlag?.(MODULE_ID, "turnMarker");
   return Boolean(marker?.markerId && marker.markerId === identity.turnMarkerId);
 }

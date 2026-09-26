@@ -253,10 +253,10 @@ test("Results is omitted when no inspection records exist", () => {
   assert.doesNotMatch(source("scripts/player-strike-ui.js"), /Results|recordsForTransaction|RollPopoverController/);
   assert.match(source("scripts/save-resolver-ui.js"), /if \(nativeIds\.length\)/);
 });
-test("version is 0.14.16", () => {
+test("version is 0.14.17", () => {
   const manifest = JSON.parse(source("module.json"));
   assert.equal(manifest.id, "nelflow");
-  assert.equal(manifest.version, "0.14.16");
+  assert.equal(manifest.version, "0.14.17");
 });
 
 const activeStack = (changes = {}) => ({
@@ -339,7 +339,7 @@ test("active turn identity accepts its current canonical stack", () => assert.eq
 test("standalone stacks never follow the combat turn", () => assert.equal(isActiveCombatStack(activeStack({ kind: "standalone" }), activeCombat()), false));
 test("earlier-round stacks never follow", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, round: 2 } }), activeCombat()), false));
 test("another combatant's stack never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, combatantId: "other" } }), activeCombat()), false));
-test("another numeric turn never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, turnIndex: 1 } }), activeCombat()), false));
+test("turnIndex-only drift still follows when durable marker matches", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, turnIndex: 1 } }), activeCombat()), true));
 test("a stale durable turn marker never follows", () => assert.equal(isActiveCombatStack(activeStack({ identity: { ...activeStack().identity, turnMarkerId: "old" } }), activeCombat()), false));
 test("expanded is the default disclosure state", () => assert.equal(defaultStackExpanded("expanded"), true));
 test("collapsed is an explicit disclosure state", () => assert.equal(defaultStackExpanded("collapsed"), false));
