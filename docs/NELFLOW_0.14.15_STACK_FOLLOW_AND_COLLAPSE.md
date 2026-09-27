@@ -66,9 +66,14 @@ acceptance item.
 - **Default Turn Stack State** (`stackDefaultState`) is a client-scoped choice,
   shown in Configure Settings, with `expanded` and `collapsed`; default
   `expanded`.
+- **Default Strike Results State** (`resultsDefaultState`, added in 0.14.19) is
+  a separate client-scoped choice with `expanded` and `collapsed`; default
+  `expanded`. It controls only the initial visibility of authorized exact
+  Attack, Damage, and Undo controls inside visible rows.
 
 The settings are independent. Turning follow off does not affect disclosure,
-and collapsing does not prevent a live active stack from following.
+whole-stack collapse does not rewrite Results state, and collapsing does not
+prevent a live active stack from following.
 
 ## Disclosure architecture and accessibility
 
@@ -84,6 +89,11 @@ Results popovers, and guarded Undo are neither removed nor rebuilt. A per-client
 in-memory map keyed by the durable message ID keeps a viewer's disclosure choice
 across live rerenders. It does not write flags, settings, or socket data and may
 reset after reload.
+
+Results uses its own per-client in-memory override registry. In the absence of
+an override it reads `resultsDefaultState`; an explicit local collapse or expand
+survives ordinary rerenders and appended rows. It does not alter the whole-stack
+registry or any durable message data.
 
 ## Reload and fail-open behavior
 

@@ -2,12 +2,39 @@ import {
   COMPACT_STACK_MODES,
   MODULE_ID,
   SETTINGS,
+  STACK_DEFAULT_STATES,
   STACK_FIRST_NATIVE_RECORD_MODES,
 } from "./constants.js";
 import { getSetting } from "./settings.js";
 import { TransactionStore } from "./transaction-store.js";
 
-const resultsOpenByStack = new Map();
+export function defaultResultsExpanded(value) {
+  return value !== STACK_DEFAULT_STATES.COLLAPSED;
+}
+
+export function createResultsDisclosureState({ readDefault = () => true } = {}) {
+  const overrides = new Map();
+  const expandedFor = (stackId) => overrides.has(stackId)
+    ? overrides.get(stackId) === true
+    : readDefault() !== false;
+  return Object.freeze({
+    expandedFor,
+    toggle(stackId) {
+      const expanded = !expandedFor(stackId);
+      overrides.set(stackId, expanded);
+      return expanded;
+    },
+    hasOverride: (stackId) => overrides.has(stackId),
+    clear: () => overrides.clear(),
+    delete: (stackId) => overrides.delete(stackId),
+  });
+}
+
+// This replaces the original per-client Map with the same session-local state,
+// adding an explicit false override so rerenders cannot reopen a collapsed stack.
+const resultsOpenByStack = createResultsDisclosureState({
+  readDefault: () => defaultResultsExpanded(getSetting(SETTINGS.RESULTS_DEFAULT_STATE)),
+});
 const failedStacks = new Set();
 let initialized = false;
 
@@ -130,7 +157,7 @@ function updateControl(button, stackId, count, visible) {
 function applyVisibility(stackId, pendingControl = null) {
   const controls = renderedControls(stackId);
   if (pendingControl && !controls.includes(pendingControl)) controls.push(pendingControl);
-  const visible = resultsOpenByStack.get(stackId) === true;
+  const visible = resultsOpenByStack.expandedFor(stackId);
   for (const article of document.querySelectorAll(".nelflow-stack[data-stack-id]")) {
     if (article.dataset.stackId === stackId) article.classList.toggle("nelflow-stack--results-open", visible);
   }
@@ -271,10 +298,9 @@ export class NativeRecordsController {
   static bindStackControl(stack, button, records) {
     if (!resultsEnabled() || !records.length) return;
 
-    updateControl(button, stack.id, records.length, resultsOpenByStack.get(stack.id) === true);
+    updateControl(button, stack.id, records.length, resultsOpenByStack.expandedFor(stack.id));
     button.addEventListener("click", () => {
-      if (resultsOpenByStack.get(stack.id) === true) resultsOpenByStack.delete(stack.id);
-      else resultsOpenByStack.set(stack.id, true);
+      resultsOpenByStack.toggle(stack.id);
       applyVisibility(stack.id, button);
     });
     applyVisibility(stack.id, button);

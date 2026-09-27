@@ -346,12 +346,12 @@ describe("0.14.13 Strike damageApplied presentation feed", () => {
     );
   });
 
-  it("version metadata is 0.14.18", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.18");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.18");
+  it("version metadata is 0.14.19", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.19");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.19");
     assert.match(
       source("module.json"),
-      /releases\/download\/v0\.14\.18\/nelflow\.zip/,
+      /releases\/download\/v0\.14\.19\/nelflow\.zip/,
     );
   });
 

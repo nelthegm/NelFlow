@@ -518,8 +518,8 @@ describe("0.14.7 basic save presentation feed", () => {
     assert.notEqual(a, b);
   });
 
-  it("version metadata is 0.14.18", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.18");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.18");
+  it("version metadata is 0.14.19", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.19");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.19");
   });
 });

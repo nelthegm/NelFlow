@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.19
+
+- Default viewer-authorized compact Strike Results controls to Expanded
+- Add client-scoped **Default Strike Results State**, independent from whole
+  stack disclosure and defaulting to Expanded
+- Preserve explicit local expanded/collapsed Results overrides across ordinary
+  rerenders, appended rows, and stack-follow DOM reparenting
+- Keep Results state entirely client-local with no ChatMessage flags, updates,
+  broadcasts, schema changes, or mechanics changes
+
 ## 0.14.18
 
 - Separate compact NPC Strike attack outcomes/totals from structured damage and

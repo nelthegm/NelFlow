@@ -75,6 +75,21 @@ const SETTING_DEFINITIONS = [
     onChange: refreshPresentation,
   },
   {
+    key: SETTINGS.RESULTS_DEFAULT_STATE,
+    name: "Nelflow.Settings.ResultsDefaultState.Name",
+    hint: "Nelflow.Settings.ResultsDefaultState.Hint",
+    scope: "client",
+    config: true,
+    restricted: false,
+    type: String,
+    choices: {
+      [STACK_DEFAULT_STATES.EXPANDED]: "Nelflow.Settings.ResultsDefaultState.Expanded",
+      [STACK_DEFAULT_STATES.COLLAPSED]: "Nelflow.Settings.ResultsDefaultState.Collapsed",
+    },
+    default: STACK_DEFAULT_STATES.EXPANDED,
+    onChange: refreshPresentation,
+  },
+  {
     key: SETTINGS.COLLAPSE_LINKED_NATIVE_CARDS,
     name: "Nelflow.Settings.CollapseLinkedNativeCards.Name",
     hint: "Nelflow.Settings.CollapseLinkedNativeCards.Hint",

@@ -1136,8 +1136,11 @@ for (const path of [
   "docs/NELFLOW_0.14.17_TEST_PLAN.md",
   "docs/RELEASE_NOTES_0.14.18.md",
   "docs/NELFLOW_0.14.18_TEST_PLAN.md",
+  "docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md",
+  "docs/NELFLOW_0.14.19_TEST_PLAN.md",
   "scripts/strike-row-presentation.js",
   "tests/compact-strike-row-readability.test.mjs",
+  "tests/results-default-state.test.mjs",
   "scripts/shield-block-gate.js",
   "tests/shield-block-gate.test.mjs",
   "tests/turn-stack-grouping.test.mjs",
@@ -1181,6 +1184,44 @@ if (/ChatMessage\.create|createDocuments|deleteDocuments|message\??\.update\(|me
 const stackPresentationTests = read("tests/stack-presentation-refinement.test.mjs");
 if ((stackPresentationTests.match(/\btest\s*\(/g) ?? []).length < 85) {
   fail("Nelflow 0.14.15 requires at least 25 added stack follow/collapse scenarios");
+}
+const nativeRecordsController = read("scripts/native-records-controller.js");
+const resultsDefaultTests = read("tests/results-default-state.test.mjs");
+for (const required of [
+  "SETTINGS.RESULTS_DEFAULT_STATE",
+  "scope: \"client\"",
+  "default: STACK_DEFAULT_STATES.EXPANDED",
+  "Nelflow.Settings.ResultsDefaultState.Name",
+  "Nelflow.Settings.ResultsDefaultState.Hint",
+  "Nelflow.Settings.ResultsDefaultState.Expanded",
+  "Nelflow.Settings.ResultsDefaultState.Collapsed",
+]) {
+  if (!settingsSource.includes(required)) {
+    fail(`default Strike Results setting is missing: ${required}`);
+  }
+}
+for (const required of [
+  "createResultsDisclosureState",
+  "defaultResultsExpanded",
+  "resultsOpenByStack.expandedFor",
+  "resultsOpenByStack.toggle",
+  "resultsOpenByStack.clear()",
+  "resultsOpenByStack.delete(stack.id)",
+]) {
+  if (!nativeRecordsController.includes(required)) {
+    fail(`default-expanded Strike Results presentation is missing: ${required}`);
+  }
+}
+if ((resultsDefaultTests.match(/\bit\s*\(/g) ?? []).length < 25) {
+  fail("Nelflow 0.14.19 requires at least 25 focused default Results-state scenarios");
+}
+if (/ChatMessage\.create|createDocuments|updateDocuments|message\??\.update\(|message\??\.setFlag\(|message\??\.unsetFlag\(/.test(
+  nativeRecordsController.slice(
+    nativeRecordsController.indexOf("export function createResultsDisclosureState"),
+    nativeRecordsController.indexOf("const failedStacks"),
+  ),
+)) {
+  fail("Strike Results disclosure state must remain local and document-neutral");
 }
 const strikeRowPresentation = read("scripts/strike-row-presentation.js");
 const compactStrikeRowTests = read("tests/compact-strike-row-readability.test.mjs");

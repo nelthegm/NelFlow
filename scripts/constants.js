@@ -9,6 +9,7 @@ export const SETTINGS = Object.freeze({
   COMPACT_TURN_STACKS: "compactTurnStacks",
   KEEP_ACTIVE_STACK_AT_BOTTOM: "keepActiveStackAtBottom",
   STACK_DEFAULT_STATE: "stackDefaultState",
+  RESULTS_DEFAULT_STATE: "resultsDefaultState",
   COLLAPSE_LINKED_NATIVE_CARDS: "collapseLinkedNativeCards",
   STACK_FIRST_NATIVE_RECORDS: "stackFirstNativeRecords",
   BASIC_SAVE_RESOLVER: "basicSaveResolver",

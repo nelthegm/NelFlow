@@ -1,6 +1,8 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.19** shows viewer-authorized compact Strike result controls by
+default and adds an independent client preference for their initial disclosure.
 Nelflow **0.14.18** separates authoritative attack results from structured
 damage/application results in compact NPC Strike rows and replaces row text
 controls with accessible exact-record icons. Nelflow **0.14.17** repairs compact
@@ -118,14 +120,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.18/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.19/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.18"
+game.modules.get("nelflow")?.version // "0.14.19"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -143,6 +145,26 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.19 default-expanded Strike Results
+
+Compact Strike stacks now initialize **Results** expanded, so authorized Attack,
+Damage, and eligible guarded Undo icons are immediately available without an
+extra click. The Results button remains an accessible local disclosure control;
+collapsing it hides only the exact-result controls, survives ordinary rerenders
+and appended rows for that stack, and never writes a ChatMessage flag or socket
+state.
+
+Two separate client settings control the initial presentation:
+
+- **Default Turn Stack State** controls whether Strike row bodies start visible.
+- **Default Strike Results State** controls whether the exact result controls
+  inside visible rows start visible.
+
+Both default to **Expanded**. Viewer authorization and exact-message filtering
+still determine which controls exist. See the
+[design notes](docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md) and
+[runtime checklist](docs/NELFLOW_0.14.19_TEST_PLAN.md).
 
 ## Nelflow 0.14.18 compact Strike row readability
 
@@ -1039,6 +1061,10 @@ targets, and ambiguous structures also remain manual.
 - **Default Turn Stack State** — client-scoped, `Expanded` by default, with a
   `Collapsed` alternative. Per-card toggles remain local and may reset after
   reload.
+- **Default Strike Results State** — client-scoped, `Expanded` by default, with
+  a `Collapsed` alternative. It controls only the initial visibility of the
+  Attack, Damage, and Undo result controls inside visible Strike rows; its
+  per-card toggle remains local and independent from whole-stack disclosure.
 - **Collapse Linked Native Cards** — enabled by default. When disabled, compact
   stacks remain active, native PF2e cards stay fully expanded, and Nelflow adds
   no replacement collapse controls.
@@ -1365,6 +1391,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.19 default-expanded Strike Results](docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md)
 - [Nelflow 0.14.18 compact Strike row readability](docs/RELEASE_NOTES_0.14.18.md)
 - [Nelflow 0.14.17 stack grouping repair](docs/RELEASE_NOTES_0.14.17.md)
 - [Nelflow 0.14.16 Shield Block prompt](docs/RELEASE_NOTES_0.14.16.md)
