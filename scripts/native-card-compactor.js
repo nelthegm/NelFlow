@@ -107,8 +107,16 @@ function visibleRecordedTarget(transaction) {
   );
 }
 
+function actionLabel(transaction) {
+  return (
+    transaction.snapshot?.strikeName ??
+    transaction.snapshot?.actionName ??
+    localize("Nelflow.Stack.UnknownStrike")
+  );
+}
+
 function summaryText(message, role, transaction) {
-  const strike = transaction.snapshot?.strikeName ?? localize("Nelflow.Stack.UnknownStrike");
+  const strike = actionLabel(transaction);
   if (transaction.transactionType === "multi-target-strike") {
     if (role === "attack") {
       return format("Nelflow.Native.BatchAttackSummary", {

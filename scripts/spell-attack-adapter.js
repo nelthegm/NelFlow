@@ -158,6 +158,12 @@ export function normalizeSpellAttack(message) {
       capturedTargetCount != null && optionTargetCount != null && capturedTargetCount !== optionTargetCount
         ? null
         : capturedTargetCount ?? optionTargetCount ?? (context?.target?.token ? 1 : 0);
+    let targetName = null;
+    try {
+      targetName = targetToken?.name ?? null;
+    } catch {
+      targetName = null;
+    }
 
     let sourceTokenUuid = null;
     try {
@@ -187,6 +193,7 @@ export function normalizeSpellAttack(message) {
         attackRollId: roll?.id ?? roll?._id ?? null,
         targetActorUuid: context?.target?.actor ?? null,
         targetTokenUuid: context?.target?.token ?? null,
+        targetName,
         sceneId: targetToken?.parent?.id ?? null,
         targetCount,
         outcome: context?.outcome ?? null,

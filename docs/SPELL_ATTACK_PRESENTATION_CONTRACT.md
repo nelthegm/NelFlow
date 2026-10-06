@@ -12,8 +12,9 @@
 | stages.damageRolled | `true` |
 | stages.damageApplied | `true` |
 
-No attack-roll presentation in this feed. Attack display remains with generic-check
-consumers (e.g. NelTactics 0.6.0). This feed covers **damage lifecycle only**.
+No attack-roll presentation in this feed. Attack and damage **display** use
+PF2e's native cards via NelFlow native-augmented presentation (0.14.20+). This
+feed covers **damage lifecycle hooks only** for integration consumers.
 
 ## Stage 1 — damageRolled
 

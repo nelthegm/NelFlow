@@ -3,6 +3,9 @@
  *
  * Ordinary single-target character Strikes keep PF2e's native attack and damage
  * cards. Nelflow augments the exact native damage card only after application.
+ * Single-target spell attacks (for example Ray of Frost) use the same native
+ * attack/damage surface — they have no compact stack projection, so collapsing
+ * them into Strike-shaped summaries produced unreadable "Unknown Strike" cards.
  * NPC Strikes retain compact stacks. Shared-roll multi-target character Strikes
  * also retain their existing batch projection because PF2e has no one native
  * card that can represent every target-specific outcome and Undo operation.
@@ -15,6 +18,9 @@ export const STRIKE_PRESENTATION_MODES = Object.freeze({
 export function getStrikePresentationMode(transaction) {
   if (transaction?.transactionType === "multi-target-strike") {
     return STRIKE_PRESENTATION_MODES.CANONICAL_STACK;
+  }
+  if (transaction?.transactionType === "spell-attack") {
+    return STRIKE_PRESENTATION_MODES.NATIVE_AUGMENTED;
   }
   if (
     transaction?.transactionType === "player-strike" &&

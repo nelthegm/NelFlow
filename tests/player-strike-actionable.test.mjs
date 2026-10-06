@@ -56,6 +56,14 @@ test("5. unsupported transaction types fail to canonical presentation", () => {
 test("6. native presentation predicate is explicit", () => {
   assert.equal(usesNativeAugmentedStrikePresentation(player()), true);
   assert.equal(usesNativeAugmentedStrikePresentation({ transactionType: "strike" }), false);
+  assert.equal(usesNativeAugmentedStrikePresentation({ transactionType: "spell-attack" }), true);
+});
+
+test("6c. spell-attack selects native-augmented presentation", () => {
+  assert.equal(
+    getStrikePresentationMode({ transactionType: "spell-attack", snapshot: { actionName: "Ray of Frost" } }),
+    STRIKE_PRESENTATION_MODES.NATIVE_AUGMENTED,
+  );
 });
 
 test("6b. durable legacy player-strike flags rehydrate to native presentation", () => {
@@ -250,14 +258,14 @@ test("44. recovery remains separate and fail-open", () => {
   assert.match(chat, /NativeRecordsController\.failOpen/);
 });
 
-test("45. 0.14.19 metadata targets the release package", () => {
+test("45. 0.14.20 metadata targets the release package", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.19");
-  assert.equal(packageMetadata.version, "0.14.19");
+  assert.equal(module.version, "0.14.20");
+  assert.equal(packageMetadata.version, "0.14.20");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.19/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.20/nelflow.zip");
 });
 
 test("46. NelCine strike delivery remains after PC actionable presentation", () => {

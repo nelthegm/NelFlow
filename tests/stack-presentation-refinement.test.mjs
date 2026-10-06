@@ -253,10 +253,10 @@ test("Results is omitted when no inspection records exist", () => {
   assert.doesNotMatch(source("scripts/player-strike-ui.js"), /Results|recordsForTransaction|RollPopoverController/);
   assert.match(source("scripts/save-resolver-ui.js"), /if \(nativeIds\.length\)/);
 });
-test("version is 0.14.19", () => {
+test("version is 0.14.20", () => {
   const manifest = JSON.parse(source("module.json"));
   assert.equal(manifest.id, "nelflow");
-  assert.equal(manifest.version, "0.14.19");
+  assert.equal(manifest.version, "0.14.20");
 });
 
 const activeStack = (changes = {}) => ({

@@ -81,6 +81,19 @@ casts of the same spell do **not** auto-apply.
 - NelCine spell cinematics
 - DOM Damage-button interception
 
+## Presentation
+
+Single-target spell attacks use the same **native-augmented** chat surface as
+character Strikes: PF2e owns the attack and damage cards; Nelflow adds Applied /
+Undo only on the exact damage host after auto-apply. Compact "Unknown Strike"
+summaries are not used for `spell-attack` transactions.
+
+Attack-time snapshot fields used for presentation include:
+
+- `actionName` (spell name)
+- `targetName` when the token name is available at claim time
+- `targetTokenUuid` / `targetActorUuid` / `sceneId`
+
 ## Dev
 
 ```js

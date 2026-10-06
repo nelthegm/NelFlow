@@ -252,6 +252,7 @@ export class TransactionStore {
       applicationMessageId: null,
       stackRef: null,
       snapshot,
+      targetName: snapshot.targetName ?? null,
       sourceUserId: snapshot.authoringUserId,
       processingUserId: snapshot.processingUserId,
       preApplication: null,

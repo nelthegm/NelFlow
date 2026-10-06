@@ -1,6 +1,9 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.20** presents single-target spell attacks on native PF2e attack and
+damage cards (no more "Unknown Strike" compact summaries) while keeping auto-apply
+and Applied/Undo on the damage host.
 Nelflow **0.14.19** shows viewer-authorized compact Strike result controls by
 default and adds an independent client preference for their initial disclosure.
 Nelflow **0.14.18** separates authoritative attack results from structured
@@ -120,14 +123,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.19/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.20/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.19"
+game.modules.get("nelflow")?.version // "0.14.20"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -145,6 +148,17 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.20 spell-attack native presentation
+
+Single-target spell attacks (for example Ray of Frost) keep PF2e's native attack
+and damage cards readable — the same surface as character Strikes — instead of
+collapsing into "Unknown Strike" compact summaries. Auto-apply still targets the
+attack-time token; Applied / Undo augments the exact native damage host.
+
+See [SPELL_ATTACK_AUTOMATION.md](docs/SPELL_ATTACK_AUTOMATION.md),
+[RELEASE_NOTES_0.14.20.md](docs/RELEASE_NOTES_0.14.20.md), and
+[NELFLOW_0.14.20_TEST_PLAN.md](docs/NELFLOW_0.14.20_TEST_PLAN.md).
 
 ## Nelflow 0.14.19 default-expanded Strike Results
 
@@ -1391,6 +1405,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.20 spell-attack native presentation](docs/RELEASE_NOTES_0.14.20.md)
 - [Nelflow 0.14.19 default-expanded Strike Results](docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md)
 - [Nelflow 0.14.18 compact Strike row readability](docs/RELEASE_NOTES_0.14.18.md)
 - [Nelflow 0.14.17 stack grouping repair](docs/RELEASE_NOTES_0.14.17.md)

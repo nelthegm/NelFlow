@@ -76,6 +76,7 @@ export function buildSpellAttackSnapshot(evidence, { processingUserId, sessionId
     attackRollId: evidence.attackRollId ?? null,
     targetActorUuid: evidence.targetActorUuid,
     targetTokenUuid: evidence.targetTokenUuid,
+    targetName: evidence.targetName ?? null,
     sceneId: evidence.sceneId ?? null,
     targetCount: evidence.targetCount,
     outcome: evidence.outcome,

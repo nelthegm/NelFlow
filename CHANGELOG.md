@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.20
+
+- Present single-target spell attacks (for example Ray of Frost) on PF2e's native
+  attack and damage cards, matching character Strike readability
+- Stop collapsing spell-attack rolls into Strike-shaped "Unknown Strike" compact
+  summaries; compact summaries now prefer `actionName` when `strikeName` is absent
+- Augment only the exact native damage host with Applied / Undo status after
+  auto-apply; capture optional attack-time target name on the spell-attack snapshot
+- Preserve spell-attack auto-apply mechanics, Undo, presentation protocol 1, and
+  existing Strike / stack / Toolbelt behavior
+
 ## 0.14.19
 
 - Default viewer-authorized compact Strike Results controls to Expanded
