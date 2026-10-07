@@ -42,7 +42,8 @@ function finiteNumber(value) {
 
 /**
  * Observe actual target resource loss after PF2e's authoritative application.
- * Temporary HP is deliberately included so temp-only damage is not reported as 0.
+ * Temporary HP and Stamina (when snapshotted) are included so pool absorption
+ * is not reported as 0.
  */
 export function deriveActualBasicSaveHpLoss(args = {}) {
   const beforeHp = finiteNumber(args.beforeHp);
@@ -52,7 +53,13 @@ export function deriveActualBasicSaveHpLoss(args = {}) {
   if ([beforeHp, beforeTempHp, afterHp, afterTempHp].some((value) => value == null)) {
     return null;
   }
-  return Math.max(0, beforeHp + beforeTempHp - afterHp - afterTempHp);
+  const beforeStamina = finiteNumber(args.beforeStamina);
+  const afterStamina = finiteNumber(args.afterStamina);
+  const staminaLoss =
+    beforeStamina != null && afterStamina != null
+      ? Math.max(0, beforeStamina - afterStamina)
+      : 0;
+  return Math.max(0, beforeHp + beforeTempHp - afterHp - afterTempHp + staminaLoss);
 }
 
 /**
@@ -173,6 +180,16 @@ export function buildBasicSaveTargetDamagePresentationPayload(args = {}) {
   const degreeAdjustedAmount = finiteNumber(args.degreeAdjustedAmount);
   if (baseRollTotal != null) damage.baseRollTotal = baseRollTotal;
   if (degreeAdjustedAmount != null) damage.degreeAdjustedAmount = degreeAdjustedAmount;
+  const resourceLoss = (() => {
+    const raw = args.resourceLoss;
+    if (!raw || typeof raw !== "object") return null;
+    const hp = finiteNumber(raw.hp ?? raw.hpLoss);
+    const tempHp = finiteNumber(raw.tempHp ?? raw.tempHpLoss);
+    const stamina = finiteNumber(raw.stamina ?? raw.staminaLoss);
+    if ([hp, tempHp, stamina].some((value) => value == null || value < 0)) return null;
+    return { hp, tempHp, stamina, total: hp + tempHp + stamina };
+  })();
+  if (resourceLoss) damage.resourceLoss = resourceLoss;
 
   const payload = {
     schemaVersion: 1,
@@ -189,6 +206,7 @@ export function buildBasicSaveTargetDamagePresentationPayload(args = {}) {
     damage,
     createdAt: Number.isFinite(args.createdAt) ? Number(args.createdAt) : Date.now(),
   };
+  if (resourceLoss) payload.resourceLoss = resourceLoss;
   appendOptionalStrings(payload, args);
 
   try {
@@ -399,9 +417,31 @@ export function emitBasicSaveTargetDamagePresentationFromApplication({
     : deriveActualBasicSaveHpLoss({
         beforeHp: record?.preApplicationHp,
         beforeTempHp: record?.preApplicationTempHp,
+        beforeStamina: record?.preApplicationStamina,
         afterHp: record?.postApplicationHp,
         afterTempHp: record?.postApplicationTempHp,
+        afterStamina: record?.postApplicationStamina,
       });
+  const resourceLoss =
+    applied == null
+      ? null
+      : conclusiveZero
+        ? { hp: 0, tempHp: 0, stamina: 0, total: 0 }
+        : {
+            hp: Math.max(
+              0,
+              Number(record?.preApplicationHp) - Number(record?.postApplicationHp),
+            ) || 0,
+            tempHp: Math.max(
+              0,
+              Number(record?.preApplicationTempHp ?? 0) - Number(record?.postApplicationTempHp ?? 0),
+            ),
+            stamina: Math.max(
+              0,
+              Number(record?.preApplicationStamina ?? 0) - Number(record?.postApplicationStamina ?? 0),
+            ),
+            total: applied,
+          };
 
   return tryEmitBasicSaveTargetDamagePresentation({
     integrationId: draft?.integrationId,
@@ -420,6 +460,7 @@ export function emitBasicSaveTargetDamagePresentationFromApplication({
     private: target?.private === true,
     degreeOfSuccess: target?.degreeOfSuccess ?? record?.effectiveOutcome,
     applied,
+    resourceLoss,
     baseRollTotal: finiteNumber(damageRoll?.total),
     degreeAdjustedAmount: finiteNumber(transformedRoll?.total),
   });

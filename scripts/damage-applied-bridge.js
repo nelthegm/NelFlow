@@ -178,6 +178,47 @@ export function buildDamageAppliedPayload(input = {}) {
     isUndo: false,
   };
 
+  // Optional structured resource loss (0.14.21+). Protocol stays 1; consumers that
+  // ignore unknown fields remain compatible. Prefer AppliedDamageFlag updates.
+  const resourceLoss = (() => {
+    const fromInput = input.resourceLoss;
+    if (fromInput && typeof fromInput === "object") {
+      const hp = Number(fromInput.hp ?? fromInput.hpLoss);
+      const tempHp = Number(fromInput.tempHp ?? fromInput.tempHpLoss);
+      const stamina = Number(fromInput.stamina ?? fromInput.staminaLoss);
+      if ([hp, tempHp, stamina].every((value) => Number.isFinite(value) && value >= 0)) {
+        return { hp, tempHp, stamina, total: hp + tempHp + stamina };
+      }
+    }
+    const updates = appliedDamage.updates ?? [];
+    let hp = 0;
+    let tempHp = 0;
+    let stamina = 0;
+    let saw = false;
+    for (const entry of updates) {
+      const path = typeof entry?.path === "string" ? entry.path : "";
+      const value = Number(entry?.value);
+      if (!Number.isFinite(value)) continue;
+      const loss = Math.max(0, value);
+      if (path === "system.attributes.hp.value") {
+        hp = loss;
+        saw = true;
+      } else if (path === "system.attributes.hp.temp") {
+        tempHp = loss;
+        saw = true;
+      } else if (path === "system.attributes.hp.sp.value") {
+        stamina = loss;
+        saw = true;
+      }
+    }
+    if (!saw) return null;
+    return { hp, tempHp, stamina, total: hp + tempHp + stamina };
+  })();
+  if (resourceLoss) {
+    payload.resourceLoss = resourceLoss;
+    payload.totalAppliedDamage = resourceLoss.total;
+  }
+
   try {
     JSON.parse(JSON.stringify(payload));
   } catch {

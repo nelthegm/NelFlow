@@ -260,6 +260,7 @@ function makeRow(transaction) {
     damageCorrelation: transaction.damageCorrelation ?? null,
     manualApplicationRequired: transaction.manualApplicationRequired ?? false,
     appliedAmount: transaction.appliedAmount,
+    resourceLoss: transaction.resourceLoss ?? null,
     transactionState: transaction.state,
     autoApplyRequested: transaction.autoApplyRequested ?? false,
     undoBlocked: transaction.undoBlocked ?? false,

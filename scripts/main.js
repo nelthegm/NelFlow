@@ -199,7 +199,7 @@ async function initializeReady() {
     const toolbelt = ToolbeltTargetHelperAdapter.status();
     return {
       moduleId: MODULE_ID,
-      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.20",
+      version: game.modules?.get?.(MODULE_ID)?.version ?? "0.14.21",
       toolbelt: {
         installed: toolbelt.installed,
         active: toolbelt.active,
@@ -243,5 +243,5 @@ async function initializeReady() {
   };
   root.dev.stopWatchingSpellAttackFlow = () => SpellAttackService.stopWatchingFlow();
 
-  logger.debug("Nelflow 0.14.20 ready");
+  logger.debug("Nelflow 0.14.21 ready");
 }

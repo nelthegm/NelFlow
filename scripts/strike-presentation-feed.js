@@ -152,7 +152,8 @@ export function tryEmitStrikeDamageRolledPresentationFeed(args = {}) {
 
 /**
  * Observe actual target resource loss after PF2e's authoritative Strike application.
- * Temporary HP is included so temp-only absorption is not reported as 0.
+ * Temporary HP and Stamina (when snapshotted) are included so absorption by those
+ * pools is not reported as 0. Prefer deriveResourceLoss for structured breakdowns.
  */
 export function deriveActualStrikeHpLoss(args = {}) {
   const beforeHp = Number(args.beforeHp ?? args.preApplication?.hp);
@@ -162,7 +163,13 @@ export function deriveActualStrikeHpLoss(args = {}) {
   if (![beforeHp, beforeTempHp, afterHp, afterTempHp].every((value) => Number.isFinite(value))) {
     return null;
   }
-  return Math.max(0, beforeHp + beforeTempHp - afterHp - afterTempHp);
+  const beforeStamina = Number(args.beforeStamina ?? args.preApplication?.stamina);
+  const afterStamina = Number(args.afterStamina ?? args.postApplication?.stamina);
+  const staminaLoss =
+    Number.isFinite(beforeStamina) && Number.isFinite(afterStamina)
+      ? Math.max(0, beforeStamina - afterStamina)
+      : 0;
+  return Math.max(0, beforeHp + beforeTempHp - afterHp - afterTempHp + staminaLoss);
 }
 
 export function buildStrikeDamageAppliedResultId(transactionId) {
@@ -202,6 +209,17 @@ export function buildStrikeDamageAppliedPresentationPayload(args = {}) {
       : null;
   if (rolledTotal != null) damage.rolledTotal = rolledTotal;
 
+  const resourceLoss = (() => {
+    const raw = args.resourceLoss;
+    if (!raw || typeof raw !== "object") return null;
+    const hp = Number(raw.hpLoss ?? raw.hp);
+    const tempHp = Number(raw.tempHpLoss ?? raw.tempHp);
+    const stamina = Number(raw.staminaLoss ?? raw.stamina);
+    if (![hp, tempHp, stamina].every((value) => Number.isFinite(value) && value >= 0)) return null;
+    return { hp, tempHp, stamina, total: hp + tempHp + stamina };
+  })();
+  if (resourceLoss) damage.resourceLoss = resourceLoss;
+
   /** @type {Record<string, unknown>} */
   const payload = {
     schemaVersion: 1,
@@ -212,6 +230,7 @@ export function buildStrikeDamageAppliedPresentationPayload(args = {}) {
     damage,
     createdAt: Number.isFinite(args.createdAt) ? Number(args.createdAt) : Date.now(),
   };
+  if (resourceLoss) payload.resourceLoss = resourceLoss;
 
   const optional = [
     ["sceneId", args.sceneId],

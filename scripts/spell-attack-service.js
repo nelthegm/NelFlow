@@ -14,6 +14,7 @@ import { getRuntimeSessionId } from "./runtime-session.js";
 import { getSetting } from "./settings.js";
 import { electProcessingGm } from "./toolbelt-target-helper-adapter.js";
 import { TransactionStore } from "./transaction-store.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { deriveActualStrikeHpLoss } from "./strike-presentation-feed.js";
 import {
   buildSpellAttackDamageAppliedResultId,
@@ -512,15 +513,21 @@ async function processDamage(message) {
         transaction = await TransactionStore.linkMessage(attackMessage, applied.applicationMessage, "application");
       }
 
-      const appliedHpLoss =
-        deriveActualStrikeHpLoss({ preApplication, postApplication }) ??
-        Math.max(0, preApplication.hp + preApplication.tempHp - postApplication.hp - postApplication.tempHp);
+      const resourceLoss =
+        deriveResourceLossFromSnapshots(preApplication, postApplication) ?? {
+          hpLoss: 0,
+          tempHpLoss: 0,
+          staminaLoss: 0,
+          totalApplied:
+            deriveActualStrikeHpLoss({ preApplication, postApplication }) ?? 0,
+        };
 
       await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.APPLIED,
         preApplication,
         postApplication,
-        appliedAmount: appliedHpLoss,
+        appliedAmount: resourceLoss.totalApplied,
+        resourceLoss,
         applicationState: "applied",
         authorityClaimState: "completed",
         appliedAt: Date.now(),
@@ -536,7 +543,8 @@ async function processDamage(message) {
         tryEmitSpellAttackDamageAppliedPresentation({
           ...presentationArgs,
           damageResultId: buildSpellAttackDamageAppliedResultId(transaction.id),
-          applied: appliedHpLoss,
+          applied: resourceLoss.totalApplied,
+          resourceLoss,
           preApplication,
           postApplication,
         });
@@ -556,7 +564,7 @@ async function processDamage(message) {
       emitWatch({
         event: "spell-attack-damage-applied",
         rolled: damage.evidence.rolledTotal,
-        applied: appliedHpLoss,
+        applied: resourceLoss.totalApplied,
         transaction: transaction.id,
       });
       emitWatch({

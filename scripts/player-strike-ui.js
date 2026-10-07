@@ -1,3 +1,4 @@
+import { buildAppliedDamagePresentation } from "./applied-damage-presentation.js";
 import { MODULE_ID, SETTINGS } from "./constants.js";
 import { PLAYER_STRIKE_TRANSACTION_TYPE } from "./player-strike-model.js";
 import { getSetting } from "./settings.js";
@@ -38,26 +39,33 @@ function canViewLinkedMessage(currentMessage, messageId) {
   return Boolean(candidate?.visible && candidate.isContentVisible);
 }
 
-function applicationText(transaction, { showAppliedAmount }) {
+function applicationPresentation(transaction, { showAppliedAmount }) {
   const state = playerStrikePresentationState(transaction);
   const target = targetLabel(transaction);
   if (state === "applied") {
-    return showAppliedAmount && Number.isFinite(transaction.appliedAmount)
-      ? localize("Nelflow.PlayerStrike.Application.Applied", {
-          amount: transaction.appliedAmount,
-          target,
-        })
-      : localize("Nelflow.PlayerStrike.Application.AppliedUnknown", { target });
+    return buildAppliedDamagePresentation(transaction, {
+      target,
+      showAmount: showAppliedAmount,
+    });
   }
   if (state === "undone") {
-    return showAppliedAmount && Number.isFinite(transaction.appliedAmount)
-      ? localize("Nelflow.PlayerStrike.Application.Reverted", { amount: transaction.appliedAmount })
-      : localize("Nelflow.PlayerStrike.Application.RevertedUnknown");
+    return {
+      primary:
+        showAppliedAmount && Number.isFinite(transaction.appliedAmount)
+          ? localize("Nelflow.PlayerStrike.Application.Reverted", {
+              amount: transaction.appliedAmount,
+            })
+          : localize("Nelflow.PlayerStrike.Application.RevertedUnknown"),
+      breakdown: "",
+    };
   }
   if (state === "undo-blocked") {
-    return localize("Nelflow.PlayerStrike.Application.UndoBlocked");
+    return { primary: localize("Nelflow.PlayerStrike.Application.UndoBlocked"), breakdown: "" };
   }
-  return localize("Nelflow.PlayerStrike.Application.Applying", { target });
+  return {
+    primary: localize("Nelflow.PlayerStrike.Application.Applying", { target }),
+    breakdown: "",
+  };
 }
 
 function stateIcon(state) {
@@ -109,8 +117,15 @@ export function renderPlayerStrike(message, html) {
     isGM: game.user?.isGM,
     canViewMessage: (messageId) => canViewLinkedMessage(message, messageId),
   });
-  body.textContent = applicationText(transaction, { showAppliedAmount });
+  const presentation = applicationPresentation(transaction, { showAppliedAmount });
+  body.textContent = presentation.primary;
   status.append(icon, body);
+  if (presentation.breakdown) {
+    const breakdown = document.createElement("span");
+    breakdown.className = "nelflow-player-strike-application__breakdown";
+    breakdown.textContent = presentation.breakdown;
+    status.append(breakdown);
+  }
 
   if (canShowPlayerStrikeUndo(transaction, {
     isGM: game.user?.isGM,

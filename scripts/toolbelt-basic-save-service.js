@@ -7,6 +7,7 @@ import {
   TOOLBELT_TRANSACTION_SCHEMA_VERSION,
 } from "./constants.js";
 import { sourceModeAllows } from "./basic-save-source-classifier.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
@@ -596,9 +597,19 @@ async function applyOne(message, draft, targetKey) {
     });
     record.preApplicationHp = before.hp;
     record.preApplicationTempHp = before.tempHp;
+    record.preApplicationStamina = Number.isFinite(before.stamina) ? before.stamina : 0;
     record.postApplicationHp = after.hp;
     record.postApplicationTempHp = after.tempHp;
-    record.actualHpDelta = before.hp + before.tempHp - after.hp - after.tempHp;
+    record.postApplicationStamina = Number.isFinite(after.stamina) ? after.stamina : 0;
+    const resourceLoss = deriveResourceLossFromSnapshots(before, after) ?? {
+      hpLoss: Math.max(0, before.hp - after.hp),
+      tempHpLoss: Math.max(0, before.tempHp - after.tempHp),
+      staminaLoss: 0,
+      totalApplied: Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp),
+    };
+    // actualHpDelta remains the displayed/total applied resource loss (HP+Temp+Stamina).
+    record.actualHpDelta = resourceLoss.totalApplied;
+    record.resourceLoss = resourceLoss;
     record.applicationMessageId = result.applicationMessage?.id ?? null;
     record.state = TOOLBELT_TARGET_STATES.APPLIED;
     record.undoState = "available";
@@ -1042,8 +1053,16 @@ export class ToolbeltBasicSaveService {
         restoreHealth: (actor, snapshot) => PF2eAdapter.restoreHealth(actor, snapshot),
         targetTokenUuid: record.tokenUuid,
         targetActorUuid: record.actorUuid,
-        preApplication: { hp: record.preApplicationHp, tempHp: record.preApplicationTempHp },
-        postApplication: { hp: record.postApplicationHp, tempHp: record.postApplicationTempHp },
+        preApplication: {
+          hp: record.preApplicationHp,
+          tempHp: record.preApplicationTempHp,
+          stamina: record.preApplicationStamina,
+        },
+        postApplication: {
+          hp: record.postApplicationHp,
+          tempHp: record.postApplicationTempHp,
+          stamina: record.postApplicationStamina,
+        },
       });
       if (!restored.ok) {
         record.state = TOOLBELT_TARGET_STATES.UNDO_BLOCKED;

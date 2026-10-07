@@ -22,6 +22,7 @@ import {
   normalizePlayerStrikeDamage as normalizeDamage,
   playerStrikeAuthorId as authorId,
 } from "./player-strike-adapter.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
@@ -64,8 +65,15 @@ function enqueue(id, operation) {
   });
 }
 
-function appliedAmount(before, after) {
-  return before.hp + before.tempHp - after.hp - after.tempHp;
+function resourceLossFromSnapshots(before, after) {
+  return (
+    deriveResourceLossFromSnapshots(before, after) ?? {
+      hpLoss: 0,
+      tempHpLoss: 0,
+      staminaLoss: 0,
+      totalApplied: 0,
+    }
+  );
 }
 
 async function markManual(
@@ -479,12 +487,13 @@ async function processDamage(message) {
       if (applied.applicationMessage) {
         transaction = await TransactionStore.linkMessage(attackMessage, applied.applicationMessage, "application");
       }
-      const appliedHpLoss = appliedAmount(preApplication, postApplication);
+      const resourceLoss = resourceLossFromSnapshots(preApplication, postApplication);
       await TransactionStore.update(attackMessage, {
         state: TRANSACTION_STATES.APPLIED,
         preApplication,
         postApplication,
-        appliedAmount: appliedHpLoss,
+        appliedAmount: resourceLoss.totalApplied,
+        resourceLoss,
         applicationState: "applied",
         authorityClaimState: "completed",
         appliedAt: Date.now(),
@@ -501,10 +510,11 @@ async function processDamage(message) {
         stage: "player-strike-application",
         reason: null,
       });
-      // Stage 3: authoritative actual HP+temp loss after PF2e application.
+      // Stage 3: authoritative actual resource loss after PF2e application.
       tryEmitStrikeDamageAppliedPresentationFeed({
         ...presentationArgs,
-        applied: appliedHpLoss,
+        applied: resourceLoss.totalApplied,
+        resourceLoss,
         preApplication,
         postApplication,
       });

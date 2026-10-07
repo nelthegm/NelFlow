@@ -21,7 +21,11 @@ function enqueue(id, operation) {
 }
 
 function exactHealth(left, right) {
-  return left?.hp === right?.hp && left?.tempHp === right?.tempHp;
+  if (left?.hp !== right?.hp || left?.tempHp !== right?.tempHp) return false;
+  if (Number.isFinite(left?.stamina) || Number.isFinite(right?.stamina)) {
+    return left?.stamina === right?.stamina;
+  }
+  return true;
 }
 
 function authoritativeUndoChild(attackMessage, transaction, child) {

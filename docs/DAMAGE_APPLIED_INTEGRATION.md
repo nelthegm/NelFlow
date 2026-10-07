@@ -50,9 +50,19 @@ Ambiguous concurrent captures → no event (fail closed for typed consumers).
     uuid, isHealing, updates: [{ path, value }], shield
   },
   applicationMessageId,
-  isUndo: false
+  isUndo: false,
+  // 0.14.21+ optional additive fields (protocol remains 1):
+  resourceLoss?: { hp, tempHp, stamina, total },
+  totalAppliedDamage?: number
 }
 ```
+
+## Resource loss (0.14.21+)
+
+When PF2e `AppliedDamageFlag.updates` identify HP / Temp HP / Stamina paths,
+NelFlow may add `resourceLoss` and `totalAppliedDamage`. These are observational
+deltas after PF2e application — not recalculated IWR. Older consumers that ignore
+unknown fields remain compatible.
 
 ## Semantics
 

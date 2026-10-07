@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.14.21
+
+- Account for Temporary HP and Stamina (when the PF2e Stamina variant is
+  enabled) in applied-damage totals and breakdowns
+- Keep ordinary HP loss as an explicit component; `totalApplied` is the sum of
+  HP + Temp HP + Stamina losses observed after PF2e application
+- Present `Applied X Damage` with a concise resource breakdown only when Temp
+  HP or Stamina participated
+- Persist `resourceLoss` on transactions for reload reconstruction; Undo still
+  restores snapshotted resources (now including Stamina when recorded)
+- Add optional `resourceLoss` / `totalAppliedDamage` on `nelflow.damageApplied`
+  without changing protocol 1
+- Preserve PC native cards, NPC stacks, Shield Block, spell-attack auto-apply,
+  and existing presentation protocols
+
 ## 0.14.20
 
 - Present single-target spell attacks (for example Ray of Frost) on PF2e's native

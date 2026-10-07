@@ -1,5 +1,6 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
 import { DAMAGE_CORRELATION_REASONS } from "./damage-correlation.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { logger } from "./logger.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import {
@@ -78,8 +79,15 @@ function makeSnapshot(attackMessage, strike, targetToken) {
   };
 }
 
-function appliedAmount(before, after) {
-  return Math.max(0, before.hp + before.tempHp - after.hp - after.tempHp);
+function resourceLossFromSnapshots(before, after) {
+  return (
+    deriveResourceLossFromSnapshots(before, after) ?? {
+      hpLoss: 0,
+      tempHpLoss: 0,
+      staminaLoss: 0,
+      totalApplied: 0,
+    }
+  );
 }
 
 function presentationArgsFromStrike({
@@ -192,12 +200,13 @@ async function commitStrikeApplication({
   if (applied.applicationMessage) {
     next = await TransactionStore.linkMessage(message, applied.applicationMessage, "application");
   }
-  const appliedHpLoss = appliedAmount(preApplication, postApplication);
+  const resourceLoss = resourceLossFromSnapshots(preApplication, postApplication);
   next = await TransactionStore.update(message, {
     state: TRANSACTION_STATES.APPLIED,
     preApplication,
     postApplication,
-    appliedAmount: appliedHpLoss,
+    appliedAmount: resourceLoss.totalApplied,
+    resourceLoss,
     targetName: targetToken.name,
     impactCommit: {
       triggerSource,
@@ -210,9 +219,10 @@ async function commitStrikeApplication({
     preApplication,
     postApplication,
     appliedAmount: next.appliedAmount,
+    resourceLoss,
     triggerSource,
   });
-  // Stage 3: authoritative actual HP+temp loss after PF2e application.
+  // Stage 3: authoritative actual resource loss after PF2e application.
   // Emits for both immediate and delayed (impact-sync) commits.
   tryEmitStrikeDamageAppliedPresentationFeed({
     ...presentationArgsFromStrike({
@@ -224,7 +234,8 @@ async function commitStrikeApplication({
       damageSummary: next.damageSummary ?? null,
       includeDamage: true,
     }),
-    applied: appliedHpLoss,
+    applied: resourceLoss.totalApplied,
+    resourceLoss,
     preApplication,
     postApplication,
   });

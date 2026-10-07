@@ -184,7 +184,7 @@ test("33. application augmentation never reconstructs native PF2e HTML", () => {
 test("34. application footer does not repeat Strike or damage roll details", () => {
   const ui = source("scripts/player-strike-ui.js");
   assert.doesNotMatch(ui, /strikeOutcomeLabel|damageSummary|attack total|damage formula/i);
-  assert.match(ui, /Application\.Applied/);
+  assert.match(ui, /buildAppliedDamagePresentation/);
 });
 
 test("35. existing exact guarded Undo implementation is reused", () => {
@@ -258,14 +258,14 @@ test("44. recovery remains separate and fail-open", () => {
   assert.match(chat, /NativeRecordsController\.failOpen/);
 });
 
-test("45. 0.14.20 metadata targets the release package", () => {
+test("45. 0.14.21 metadata targets the release package", () => {
   const module = JSON.parse(source("module.json"));
   const packageMetadata = JSON.parse(source("package.json"));
   assert.equal(module.id, "nelflow");
-  assert.equal(module.version, "0.14.20");
-  assert.equal(packageMetadata.version, "0.14.20");
+  assert.equal(module.version, "0.14.21");
+  assert.equal(packageMetadata.version, "0.14.21");
   assert.equal(module.manifest, "https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json");
-  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.20/nelflow.zip");
+  assert.equal(module.download, "https://github.com/nelthegm/NelFlow/releases/download/v0.14.21/nelflow.zip");
 });
 
 test("46. NelCine strike delivery remains after PC actionable presentation", () => {

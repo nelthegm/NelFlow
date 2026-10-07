@@ -1,6 +1,8 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
+Nelflow **0.14.21** accounts for Temporary HP and Stamina in applied-damage totals
+and breakdowns while preserving ordinary HP as a separate component.
 Nelflow **0.14.20** presents single-target spell attacks on native PF2e attack and
 damage cards (no more "Unknown Strike" compact summaries) while keeping auto-apply
 and Applied/Undo on the damage host.
@@ -123,14 +125,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.20/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.21/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.20"
+game.modules.get("nelflow")?.version // "0.14.21"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -148,6 +150,15 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.21 damage resource accounting
+
+Applied damage now includes Temporary HP and Stamina loss observed after PF2e's
+authoritative application. The primary line shows `Applied X Damage`; mixed pools
+add a concise breakdown. See
+[RELEASE_NOTES_0.14.21.md](docs/RELEASE_NOTES_0.14.21.md),
+[NELFLOW_0.14.21_DAMAGE_RESOURCE_AUDIT.md](docs/NELFLOW_0.14.21_DAMAGE_RESOURCE_AUDIT.md),
+and [NELFLOW_0.14.21_TEST_PLAN.md](docs/NELFLOW_0.14.21_TEST_PLAN.md).
 
 ## Nelflow 0.14.20 spell-attack native presentation
 
@@ -1405,6 +1416,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.21 damage resource accounting](docs/RELEASE_NOTES_0.14.21.md)
 - [Nelflow 0.14.20 spell-attack native presentation](docs/RELEASE_NOTES_0.14.20.md)
 - [Nelflow 0.14.19 default-expanded Strike Results](docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md)
 - [Nelflow 0.14.18 compact Strike row readability](docs/RELEASE_NOTES_0.14.18.md)

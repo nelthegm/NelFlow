@@ -12,6 +12,7 @@ import {
   validCapture,
   multiTargetModeAllows,
 } from "./multi-target-strike-model.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { playerStrikeModeAllows } from "./player-strike-model.js";
@@ -37,8 +38,15 @@ function authorityFor(message) {
 }
 
 
-function appliedAmount(before, after) {
-  return before.hp + before.tempHp - after.hp - after.tempHp;
+function resourceLossFromSnapshots(before, after) {
+  return (
+    deriveResourceLossFromSnapshots(before, after) ?? {
+      hpLoss: 0,
+      tempHpLoss: 0,
+      staminaLoss: 0,
+      totalApplied: 0,
+    }
+  );
 }
 
 function canApplyChild(transaction, child, currentToken) {
@@ -245,13 +253,15 @@ async function processDamageGroup(message, strike, transaction, groupName, group
         processingUserId: transaction.snapshot.processingUserId,
       });
     }
+    const resourceLoss = resourceLossFromSnapshots(preApplication, postApplication);
     targets = transaction.targets.map((candidate) => candidate.key === child.key
       ? {
           ...candidate,
           state: "applied",
           preApplication,
           postApplication,
-          appliedAmount: appliedAmount(preApplication, postApplication),
+          appliedAmount: resourceLoss.totalApplied,
+          resourceLoss,
           appliedSequence: Number(transaction.revision ?? 0) + 1,
           applicationMessageId: applied.applicationMessage?.id ?? null,
           undoEligible: transaction.snapshot.actorType === "npc" || Boolean(applied.applicationMessage),

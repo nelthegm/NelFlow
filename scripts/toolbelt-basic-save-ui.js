@@ -4,6 +4,7 @@ import {
   SETTINGS,
   TOOLBELT_APPLICATION_MODES,
 } from "./constants.js";
+import { formatResourceLossBreakdown } from "./damage-resource-loss.js";
 import { getSetting } from "./settings.js";
 import { allPrimarySavesResolved, TOOLBELT_TARGET_STATES } from "./toolbelt-basic-save-model.js";
 import { ToolbeltBasicSaveService, TOOLBELT_BASIC_SAVE_FLAG } from "./toolbelt-basic-save-service.js";
@@ -46,7 +47,9 @@ function stateLabel(record) {
   }
   const key = `Nelflow.Toolbelt.State.${record.state}`;
   if (record.state === TOOLBELT_TARGET_STATES.APPLIED && Number.isFinite(record.actualHpDelta) && maySeeHp(record)) {
-    return localize("Nelflow.Toolbelt.State.appliedAmount", { amount: record.actualHpDelta });
+    const primary = localize("Nelflow.Toolbelt.State.appliedAmount", { amount: record.actualHpDelta });
+    const breakdown = formatResourceLossBreakdown(record.resourceLoss, localize);
+    return breakdown ? `${primary} (${breakdown})` : primary;
   }
   return localize(key);
 }

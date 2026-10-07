@@ -1,4 +1,5 @@
 import { MODULE_ID, SETTINGS, TRANSACTION_STATES } from "./constants.js";
+import { formatResourceLossBreakdown } from "./damage-resource-loss.js";
 import { getSetting } from "./settings.js";
 import { logger } from "./logger.js";
 import { NativeCardCompactor } from "./native-card-compactor.js";
@@ -385,6 +386,7 @@ function renderRow(row, stack, records) {
   if (row.manualApplicationRequired && game.user.isGM) {
     stateLabel.title = localize("Nelflow.State.DamageUnlinkedTitle");
   }
+  let resourceBreakdown = null;
   if (
     row.appliedAmount != null &&
     state.className === "applied" &&
@@ -393,6 +395,12 @@ function renderRow(row, stack, records) {
     stateLabel.textContent = format("Nelflow.State.AppliedAmount", {
       amount: row.appliedAmount,
     });
+    const breakdown = formatResourceLossBreakdown(row.resourceLoss, format);
+    if (breakdown) {
+      resourceBreakdown = document.createElement("span");
+      resourceBreakdown.className = "nelflow-stack__resource-breakdown";
+      resourceBreakdown.textContent = breakdown;
+    }
   }
 
   let damageResult = null;
@@ -408,7 +416,10 @@ function renderRow(row, stack, records) {
       damageLabel.textContent = presentation.damage;
       damageResult.append(damageLabel);
     }
-    if (row.transactionState !== TRANSACTION_STATES.SKIPPED) damageResult.append(stateLabel);
+    if (row.transactionState !== TRANSACTION_STATES.SKIPPED) {
+      damageResult.append(stateLabel);
+      if (resourceBreakdown) damageResult.append(resourceBreakdown);
+    }
   }
 
   let statusLine = null;

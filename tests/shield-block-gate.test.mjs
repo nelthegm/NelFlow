@@ -191,8 +191,8 @@ describe("0.14.16 Shield Block prompt gate", () => {
     assert.equal(SHIELD_BLOCK_SOCKET_ACTION, "shield-block-prompt");
   });
 
-  it("16. version metadata is 0.14.20", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.20");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.20");
+  it("16. version metadata is 0.14.21", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
   });
 });

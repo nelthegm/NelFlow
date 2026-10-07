@@ -4,6 +4,7 @@ import {
   SAVE_RESOLVER_SCHEMA_VERSION,
   SETTINGS,
 } from "./constants.js";
+import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
 import { guardedHealthRestore } from "./guarded-health-restore.js";
 import { logger } from "./logger.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
@@ -993,10 +994,17 @@ export class SaveResolverService {
               entry.applicationMessageId = applied.applicationMessage?.id ?? null;
               entry.preApplication = before;
               entry.postApplication = after;
-              entry.appliedAmount = Math.max(
-                0,
-                before.hp + before.tempHp - after.hp - after.tempHp,
-              );
+              const resourceLoss = deriveResourceLossFromSnapshots(before, after) ?? {
+                hpLoss: 0,
+                tempHpLoss: 0,
+                staminaLoss: 0,
+                totalApplied: Math.max(
+                  0,
+                  before.hp + before.tempHp - after.hp - after.tempHp,
+                ),
+              };
+              entry.appliedAmount = resourceLoss.totalApplied;
+              entry.resourceLoss = resourceLoss;
             }
             return draft;
           }),

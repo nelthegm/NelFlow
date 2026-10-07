@@ -955,13 +955,27 @@ export class PF2eAdapter {
     }
   }
 
-  /** Read the two resources Slice 1 is allowed to restore. */
+  /**
+   * Snapshot damage-bearing resources NelFlow may observe and restore.
+   * HP + Temporary HP are always present. Stamina is included as 0 when the
+   * PF2e Stamina variant is disabled or the actor has no sp field.
+   */
   static healthSnapshot(actor) {
     const hp = actor?.system?.attributes?.hp;
     if (!Number.isFinite(hp?.value) || !Number.isFinite(hp?.temp)) return null;
+    let staminaEnabled = false;
+    try {
+      staminaEnabled = game.pf2e?.settings?.variants?.stamina === true;
+    } catch {
+      staminaEnabled = false;
+    }
+    const staminaRaw = hp?.sp?.value;
+    const stamina =
+      staminaEnabled && Number.isFinite(Number(staminaRaw)) ? Number(staminaRaw) : 0;
     return {
       hp: hp.value,
       tempHp: hp.temp,
+      stamina,
     };
   }
 
@@ -971,12 +985,28 @@ export class PF2eAdapter {
     return tokenDocument?.object ?? null;
   }
 
-  /** Restore only HP and temporary HP after the caller has completed all guards. */
+  /**
+   * Restore snapshotted HP, temporary HP, and (when present) Stamina after
+   * the caller has completed all guards. Does not invent Stamina when the
+   * historical snapshot omitted it.
+   */
   static async restoreHealth(actor, snapshot) {
-    return actor.update({
+    const update = {
       "system.attributes.hp.value": snapshot.hp,
       "system.attributes.hp.temp": snapshot.tempHp,
-    });
+    };
+    if (Number.isFinite(snapshot?.stamina)) {
+      let staminaEnabled = false;
+      try {
+        staminaEnabled = game.pf2e?.settings?.variants?.stamina === true;
+      } catch {
+        staminaEnabled = false;
+      }
+      if (staminaEnabled) {
+        update["system.attributes.hp.sp.value"] = snapshot.stamina;
+      }
+    }
+    return actor.update(update);
   }
 
   /** Produce debug-safe message metadata without serializing actor or item documents. */
