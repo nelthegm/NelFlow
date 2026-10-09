@@ -104,6 +104,11 @@ function rowState(row) {
       className: "manual",
     };
   }
+  // Native PF2e mitigation (e.g. Shield Block toggle + Apply) — generic label;
+  // do not claim "Shield Block" unless PF2e exposes structured proof.
+  if (row.transactionState === TRANSACTION_STATES.AWAITING_MITIGATION) {
+    return { key: "Nelflow.State.WaitingForDamageResolution", className: "pending" };
+  }
   if (row.manualApplicationRequired) {
     return { key: "Nelflow.State.ManualApplicationRequired", className: "manual" };
   }
@@ -526,6 +531,9 @@ function renderBatchRow(row, stack, records) {
         ? format("Nelflow.MultiTarget.Applied", { amount: target.appliedAmount })
         : localize("Nelflow.State.Applied"));
     } else if (target.state === "review") parts.push(localize("Nelflow.MultiTarget.Review"));
+    else if (target.state === "awaiting-mitigation") {
+      parts.push(localize("Nelflow.State.WaitingForDamageResolution"));
+    }
     else if (target.state === "damage-rolled") parts.push(localize("Nelflow.State.NotApplied"));
     else if (target.state === "resolving") parts.push(localize("Nelflow.State.Resolving"));
     else if (target.state === "undone") parts.push(localize("Nelflow.State.Undone"));
@@ -666,6 +674,7 @@ function stateLabel(state) {
     [TRANSACTION_STATES.SKIPPED]: "Nelflow.Status.Skipped",
     [TRANSACTION_STATES.DAMAGE_ROLLED]: "Nelflow.Status.DamageRolled",
     [TRANSACTION_STATES.AWAITING_IMPACT]: "Nelflow.Status.AwaitingImpact",
+    [TRANSACTION_STATES.AWAITING_MITIGATION]: "Nelflow.Status.AwaitingMitigation",
     [TRANSACTION_STATES.APPLIED]: "Nelflow.Status.Applied",
     [TRANSACTION_STATES.FAILED]: "Nelflow.Status.Failed",
     [TRANSACTION_STATES.UNDONE]: "Nelflow.Status.Undone",
@@ -704,6 +713,7 @@ function shouldRenderLegacy(localMarker, transaction) {
     return [
       TRANSACTION_STATES.DAMAGE_ROLLED,
       TRANSACTION_STATES.AWAITING_IMPACT,
+      TRANSACTION_STATES.AWAITING_MITIGATION,
       TRANSACTION_STATES.APPLIED,
       TRANSACTION_STATES.FAILED,
       TRANSACTION_STATES.UNDONE,

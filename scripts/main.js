@@ -1,5 +1,5 @@
 import { renderNelflowChat } from "./chat-ui.js";
-import { MODULE_ID } from "./constants.js";
+import { MODULE_ID, TRANSACTION_STATES } from "./constants.js";
 import { logger } from "./logger.js";
 import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
@@ -37,6 +37,7 @@ import { installStrikeRidersPublicApi } from "./strike-riders.js";
 import { installActionResultPresentationApi } from "./action-result-presentation.js";
 import { installDamageAppliedPublicApi } from "./damage-applied-bridge.js";
 import { initializeShieldBlockGate } from "./shield-block-gate.js";
+import { reconcileOrphanedMitigations } from "./native-mitigation-deferral.js";
 import {
   installHealingPresentationFeedApi,
   registerHealingPresentationHooks,
@@ -190,6 +191,25 @@ async function initializeReady() {
     StackPresentationController.forget(message.id);
   });
   await runNelflowBoundary({ subsystem: "multi-target-strike", operation: "ready-reconciliation", task: () => MultiTargetStrikeService.reconcileExisting() });
+  await runNelflowBoundary({
+    subsystem: "native-mitigation",
+    operation: "ready-reconciliation",
+    task: () =>
+      reconcileOrphanedMitigations({
+        updateTransaction: async (message) => {
+          const updated = await TransactionStore.update(message, {
+            state: TRANSACTION_STATES.INTERRUPTED,
+            mitigationPending: null,
+            manualApplicationRequired: true,
+            applicationState: "interrupted",
+            failureCode: "mitigation-unresolved",
+            errorStage: "reload-during-awaiting-mitigation",
+            manualReason: "reload-orphaned-mitigation",
+          });
+          NativeRecordsController.failOpen(updated?.stackRef?.id);
+        },
+      }),
+  });
   await runNelflowBoundary({ subsystem: "transaction-health", operation: "ready-reconciliation", task: () => TransactionDiagnosticsService.initialize() });
 
   const root = (globalThis.game.nelflow ??= {});

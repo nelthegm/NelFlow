@@ -335,6 +335,31 @@ async function processDamageGroup(message, strike, transaction, groupName, group
           }
           return { settled: true };
         },
+        onAbandoned: async ({ reason }) => {
+          const liveMessage = game.messages.get(message.id) ?? message;
+          const liveTx = TransactionStore.get(liveMessage);
+          if (!liveTx) return;
+          const liveChild = liveTx.targets?.find((candidate) => candidate.key === targetKey);
+          if (!liveChild || liveChild.state === "applied") return;
+          if (liveChild.state !== "awaiting-mitigation") return;
+          const reviewed = liveTx.targets.map((candidate) =>
+            candidate.key === targetKey
+              ? {
+                  ...candidate,
+                  state: "review",
+                  reviewReason: reason ?? "mitigation-unresolved",
+                  mitigationPending: null,
+                }
+              : candidate,
+          );
+          const next = await update(liveMessage, {
+            targets: reviewed,
+            state: batchState(reviewed),
+          });
+          if (next.stackRef?.id) {
+            NativeRecordsController.failOpen(next.stackRef.id);
+          }
+        },
       });
       targets = transaction.targets.map((candidate) =>
         candidate.key === targetKey

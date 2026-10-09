@@ -73,6 +73,8 @@
   "Nelflow.Status.Skipped": "Skipped",
   "Nelflow.Status.DamageRolled": "Damage rolled",
   "Nelflow.Status.AwaitingImpact": "Awaiting cinematic impact",
+  "Nelflow.Status.AwaitingMitigation": "Waiting for Damage Resolution",
+  "Nelflow.State.AwaitingMitigation": "Waiting for Damage Resolution",
   "Nelflow.Status.Applied": "Applied",
   "Nelflow.Status.Applying": "Applying…",
   "Nelflow.Status.Failed": "Failed",
@@ -97,6 +99,7 @@
 
   "Nelflow.State.Resolving": "Resolving",
   "Nelflow.State.PendingApplication": "Pending Application",
+  "Nelflow.State.WaitingForDamageResolution": "Waiting for Damage Resolution",
   "Nelflow.State.Applied": "Applied",
   "Nelflow.State.AppliedAmount": "Applied {amount} Damage",
   "Nelflow.Application.AppliedDamage": "Applied {amount} Damage",

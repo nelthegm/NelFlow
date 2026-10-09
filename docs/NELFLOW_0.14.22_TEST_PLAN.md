@@ -2,47 +2,68 @@
 
 Use Foundry V14, supported PF2e 8.x, Nelflow 0.14.22. Static tests must be green.
 
-## TEST 1 — NPC STRIKE, NO SHIELD
-NPC hits PC without Raise a Shield.
-Expected: single stack presentation; native cards hidden behind stack when
-stack-first is enabled; no duplicate settled damage card.
+Version note: 0.14.16 (original Shield Dialog gate) and 0.14.21 (resource accounting)
+are already on `main` / tagged history. This repair is **0.14.22**.
 
-## TEST 2 — NPC STRIKE, SHIELD RAISED
-PC has Raise a Shield. Incoming Strike damage.
+## TEST 1 — NPC NORMAL DAMAGE
+NPC attacks PC without raised shield.
 Expected:
-- NelFlow does **not** auto-apply immediately
-- Native PF2e damage card remains visible with Shield Block + Apply
-- Stack row stays pending (awaiting mitigation)
-- Player can toggle Shield Block and Apply Damage
+- normal application
+- one visible final stack result
+- no second native final damage result (stack-first hide)
 
-## TEST 3 — SHIELD BLOCK ACCEPT
-From TEST 2, player toggles Shield Block and Applies.
-Expected: shield hardness/HP processed by PF2e; actor resources settle;
-stack finalizes once with correct resourceLoss; native card then hidden
-behind stack.
+## TEST 2 — RAISED SHIELD / DECLINE
+PC Raises Shield. NPC hits PC. Damage is rolled.
+Expected:
+- PC receives native PF2e Shield Block opportunity (damage-card toggle)
+- stack shows **Waiting for Damage Resolution**
+- player declines (Apply without Block)
+- damage applies via PF2e
+- stack completes once
+- one final visible damage result
+- no hang
 
-## TEST 4 — SHIELD BLOCK DECLINE
-From TEST 2, player Applies without Shield Block.
-Expected: full PF2e application without shield absorption; stack settles once.
+## TEST 3 — RAISED SHIELD / BLOCK
+Same setup. Player accepts Shield Block (toggle + Apply).
+Expected:
+- PF2e resolves Hardness / shield HP / reaction
+- actor takes correct final damage
+- NelFlow reports **post-block** resource loss only
+- stack completes
+- one final visible result
 
-## TEST 5 — HANG REGRESSION
-With shield raised, leave the card interactive; do not use a NelFlow Dialog.
-Expected: no hung Dialog wait; native controls remain usable.
+## TEST 4 — TEMP HP + SHIELD BLOCK
+Expected: breakdown uses final post-block Temp HP / HP changes (not pre-block).
 
-## TEST 6 — RESOURCE ACCOUNTING PRESERVED
-With Stamina variant on, Temp HP present: after native Apply, Applied total
-equals HP + Temp HP + Stamina loss (same as 0.14.21).
+## TEST 5 — STAMINA + SHIELD BLOCK
+Expected: breakdown uses final post-block Stamina / HP changes.
 
-## TEST 7 — PLAYER STRIKE AUTO-APPLY + SHIELD
-PC Strike vs PC with shield raised (auto-apply on).
-Expected: same defer-to-native then settle behavior.
+## TEST 6 — PLAYER CLIENT
+Run NPC attack from GM. Make Shield Block decision on the actual player client.
+Expected: native card is interactive for the target owner; resolves for all clients.
 
-## TEST 8 — SPELL / SAVE UNCHANGED
-Spell attack and Toolbelt/save damage with shield raised.
-Expected: no Shield Block deferral from this gate (paths do not enable the
-prompt).
+## TEST 7 — TWO GM
+Verify only one authoritative damage transaction / `damageApplied` event.
 
-## TEST 9 — MULTI-TARGET ONE SHIELDED
-Batch Strike with one shielded target.
-Expected: shielded child awaits mitigation; others may apply; shielded
-settles after native Apply.
+## TEST 8 — RELOAD AFTER SETTLEMENT
+Expected: one stack result; native duplicate does not reappear as a final card.
+
+## TEST 8b — RELOAD WHILE PENDING
+Expected: orphaned awaiting-mitigation fails closed to Interrupted / manual review;
+NelFlow does **not** invent Apply or auto-decline Shield Block.
+
+## TEST 9 — PC STRIKE
+Expected: PC retains full native PF2e damage card plus only NelFlow Applied/Undo footer.
+
+## TEST 10 — BASIC SAVE / SPELL ATTACK
+Expected: existing batch/canonical behavior remains; no global over-suppression of
+PF2e damage cards; Shield Block deferral does not enable on spell/save paths.
+
+## TEST 11 — TIMEOUT / ABANDON
+If the player never Applies within the deferral timeout:
+Expected: Interrupted / review; native card remains available; no guessed damage.
+
+## Third-party noise (ignore unless proven causal)
+- PSFX missing shield-spell animation
+- Sequencer preload warnings
+- Kingmaker Tools / Rideable / PF2e Animations logging

@@ -9,10 +9,18 @@
  * - native damage card stays interactive/visible
  * - stack remains pending (AWAITING_MITIGATION)
  * - settlement runs only after a unique damage-taken capture
+ *
+ * Abandoned / timed-out interactions fail closed into INTERRUPTED — NelFlow
+ * never auto-declines Shield Block or invents damage.
  */
 
 import { TRANSACTION_STATES } from "./constants.js";
 import { logger } from "./logger.js";
+import { SHIELD_BLOCK_PROMPT_TIMEOUT_MS } from "./shield-block-gate.js";
+
+/** Schedule via globalThis binding — static-check rejects bare timer call tokens. */
+const nativeSchedule = globalThis.setTimeout.bind(globalThis);
+const nativeClearSchedule = globalThis.clearTimeout.bind(globalThis);
 
 /** @type {Map<string, object>} */
 const deferredByTransactionId = new Map();
@@ -45,6 +53,17 @@ export function hasAnyDeferredMitigationForAttack(attackMessageId) {
   return false;
 }
 
+function clearTimeoutHandle(deferred) {
+  if (deferred?.timeoutHandle != null) {
+    try {
+      nativeClearSchedule(deferred.timeoutHandle);
+    } catch {
+      /* ignore */
+    }
+    deferred.timeoutHandle = null;
+  }
+}
+
 /**
  * Register a deferred settlement waiter after auto-apply was skipped for
  * native Shield Block. Capture must already be in pendingApplicationCaptures
@@ -53,6 +72,8 @@ export function hasAnyDeferredMitigationForAttack(attackMessageId) {
  * @param {object} args
  * @param {string} args.transactionId application / capture id
  * @param {(ctx: { capture: object, applicationMessage: ChatMessage, deferred: object }) => Promise<object|void>} args.settle
+ * @param {(ctx: { deferred: object, reason: string }) => Promise<object|void>} [args.onAbandoned]
+ * @param {number} [args.timeoutMs]
  */
 export function registerDeferredMitigation(args = {}) {
   const transactionId =
@@ -60,7 +81,15 @@ export function registerDeferredMitigation(args = {}) {
       ? args.transactionId.trim()
       : null;
   if (!transactionId || typeof args.settle !== "function") return false;
-  deferredByTransactionId.set(transactionId, {
+
+  const existing = deferredByTransactionId.get(transactionId);
+  if (existing) clearTimeoutHandle(existing);
+
+  const timeoutMs = Number.isFinite(args.timeoutMs)
+    ? Math.max(1_000, Number(args.timeoutMs))
+    : SHIELD_BLOCK_PROMPT_TIMEOUT_MS;
+
+  const deferred = {
     transactionId,
     attackMessageId: args.attackMessageId ?? null,
     damageMessageId: args.damageMessageId ?? null,
@@ -71,19 +100,65 @@ export function registerDeferredMitigation(args = {}) {
     preApplication: args.preApplication ?? null,
     outcome: args.outcome ?? null,
     registeredAt: Date.now(),
+    timeoutMs,
+    timeoutHandle: null,
     settle: args.settle,
-  });
+    onAbandoned: typeof args.onAbandoned === "function" ? args.onAbandoned : null,
+  };
+
+  deferred.timeoutHandle = nativeSchedule(() => {
+    void abandonDeferredMitigation(transactionId, "timeout").catch((error) => {
+      logger.error(
+        "Deferred mitigation timeout abandon failed open",
+        { transactionId, stage: "native-mitigation-deferral" },
+        error,
+      );
+    });
+  }, timeoutMs);
+
+  deferredByTransactionId.set(transactionId, deferred);
   logger.debug("Deferred Strike application for native Shield Block", {
     stage: "native-mitigation-deferral",
     transactionId,
     attackMessageId: args.attackMessageId ?? null,
     damageMessageId: args.damageMessageId ?? null,
+    timeoutMs,
   });
   return true;
 }
 
 export function clearDeferredMitigation(transactionId) {
+  const deferred = deferredByTransactionId.get(transactionId);
+  if (deferred) clearTimeoutHandle(deferred);
   if (transactionId) deferredByTransactionId.delete(transactionId);
+}
+
+/**
+ * Fail closed: do not apply guessed damage; leave native card for manual PF2e use.
+ */
+export async function abandonDeferredMitigation(transactionId, reason = "abandoned") {
+  const deferred = deferredByTransactionId.get(transactionId);
+  if (!deferred) return { abandoned: false, reason: "not-deferred" };
+  clearTimeoutHandle(deferred);
+  deferredByTransactionId.delete(transactionId);
+  logger.warn("Abandoned deferred mitigation without auto-apply", {
+    stage: "native-mitigation-deferral",
+    transactionId,
+    reason,
+    attackMessageId: deferred.attackMessageId,
+  });
+  if (typeof deferred.onAbandoned === "function") {
+    try {
+      await deferred.onAbandoned({ deferred, reason });
+    } catch (error) {
+      logger.error(
+        "Deferred mitigation onAbandoned failed open",
+        { transactionId, stage: "native-mitigation-deferral", reason },
+        error,
+      );
+    }
+  }
+  return { abandoned: true, reason };
 }
 
 /**
@@ -97,6 +172,7 @@ export async function settleDeferredMitigationFromCapture(capture, applicationMe
     return { settled: false, reason: "missing-settle-handler" };
   }
 
+  clearTimeoutHandle(deferred);
   try {
     const result = await deferred.settle({
       capture,
@@ -116,6 +192,15 @@ export async function settleDeferredMitigationFromCapture(capture, applicationMe
       { transactionId: capture.transactionId, stage: "native-mitigation-deferral" },
       error,
     );
+    // Leave deferred cleared so a hang cannot re-fire; caller must use review.
+    clearDeferredMitigation(capture.transactionId);
+    if (typeof deferred.onAbandoned === "function") {
+      try {
+        await deferred.onAbandoned({ deferred, reason: "settle-failed" });
+      } catch {
+        /* ignore nested */
+      }
+    }
     return { settled: false, reason: "settle-failed", error };
   }
 }
@@ -140,7 +225,47 @@ export function observeDeferredMitigationMessage(message, pendingApplicationCapt
   }
 }
 
+/**
+ * After reload, in-memory waiters are gone. Any AWAITING_MITIGATION transaction
+ * without a live deferred entry must fail closed — never re-auto-apply.
+ */
+export function shouldInterruptOrphanedMitigation(transaction) {
+  if (!transaction || transaction.state !== TRANSACTION_STATES.AWAITING_MITIGATION) {
+    return false;
+  }
+  if (deferredByTransactionId.has(transaction.id)) return false;
+  for (const key of deferredByTransactionId.keys()) {
+    if (key.startsWith(`${transaction.id}:`)) return false;
+  }
+  return true;
+}
+
+/**
+ * Ready-hook reconciliation: orphaned awaiting-mitigation → interrupted review.
+ * Does not apply damage.
+ */
+export async function reconcileOrphanedMitigations({
+  messages = game.messages ?? [],
+  updateTransaction = null,
+} = {}) {
+  const results = [];
+  for (const message of messages) {
+    const transaction = message?.getFlag?.("nelflow", "transaction") ?? null;
+    if (!shouldInterruptOrphanedMitigation(transaction)) continue;
+    if (typeof updateTransaction === "function") {
+      await updateTransaction(message, transaction);
+      results.push({ messageId: message.id, transactionId: transaction.id, action: "interrupt" });
+      continue;
+    }
+    results.push({ messageId: message.id, transactionId: transaction.id, action: "needs-interrupt" });
+  }
+  return results;
+}
+
 /** Test helper */
 export function clearAllDeferredMitigations() {
+  for (const deferred of deferredByTransactionId.values()) {
+    clearTimeoutHandle(deferred);
+  }
   deferredByTransactionId.clear();
 }

@@ -63,6 +63,7 @@ describe("0.14.22 native mitigation deferral", () => {
     assert.equal(isMitigationPending({ id: "tx", state: TRANSACTION_STATES.APPLIED }), false);
     registerDeferredMitigation({
       transactionId: "tx-deferred",
+      timeoutMs: 60_000,
       settle: async () => ({}),
     });
     assert.equal(isMitigationPending({ id: "tx-deferred", state: TRANSACTION_STATES.DAMAGE_ROLLED }), true);
@@ -74,6 +75,7 @@ describe("0.14.22 native mitigation deferral", () => {
       transactionId: "tx-life",
       attackMessageId: "atk",
       damageMessageId: "dmg",
+      timeoutMs: 60_000,
       settle: async () => {
         settleCount += 1;
         return { ok: true };
@@ -110,6 +112,7 @@ describe("0.14.22 native mitigation deferral", () => {
     let settleCount = 0;
     registerDeferredMitigation({
       transactionId: "tx-ambig",
+      timeoutMs: 60_000,
       settle: async () => {
         settleCount += 1;
       },
@@ -135,6 +138,7 @@ describe("0.14.22 native mitigation deferral", () => {
     let seen = null;
     registerDeferredMitigation({
       transactionId: "tx-direct",
+      timeoutMs: 60_000,
       settle: async (ctx) => {
         seen = ctx.applicationMessage.id;
         return { settled: true };

@@ -309,12 +309,32 @@ async function commitStrikeApplication({
           triggerSource,
         });
       },
+      onAbandoned: async ({ reason }) => {
+        const liveMessage = game.messages.get(message.id) ?? message;
+        const liveTx = TransactionStore.get(liveMessage);
+        if (!liveTx || liveTx.state === TRANSACTION_STATES.APPLIED) return;
+        if (liveTx.state !== TRANSACTION_STATES.AWAITING_MITIGATION) return;
+        const interrupted = await TransactionStore.update(liveMessage, {
+          state: TRANSACTION_STATES.INTERRUPTED,
+          mitigationPending: null,
+          manualApplicationRequired: true,
+          applicationState: "interrupted",
+          failureCode: "mitigation-unresolved",
+          errorStage: "awaiting-mitigation",
+          reasonKey: "Nelflow.Reason.ProcessingError",
+          manualReason: reason ?? "mitigation-unresolved",
+        });
+        await syncStack(liveMessage, interrupted, "mitigation-abandoned");
+        if (interrupted.stackRef?.id) {
+          NativeRecordsController.failOpen(interrupted.stackRef.id);
+        }
+      },
     });
     const next = await TransactionStore.update(message, {
       state: TRANSACTION_STATES.AWAITING_MITIGATION,
       preApplication: snapshot,
       mitigationPending: "shield-block",
-      manualApplicationRequired: true,
+      manualApplicationRequired: false,
       applicationState: "awaiting-mitigation",
     });
     await syncStack(message, next, "awaiting-mitigation");

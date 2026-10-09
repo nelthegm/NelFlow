@@ -1157,6 +1157,7 @@ for (const path of [
   "tests/shield-block-gate.test.mjs",
   "scripts/native-mitigation-deferral.js",
   "tests/native-mitigation-deferral.test.mjs",
+  "tests/damage-interaction-presentation.test.mjs",
   "tests/turn-stack-grouping.test.mjs",
   "scripts/stack-presentation-controller.js",
   "docs/HEALING_PRESENTATION_CONTRACT.md",

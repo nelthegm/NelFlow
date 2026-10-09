@@ -563,13 +563,30 @@ async function processDamage(message) {
             tryDeliverStrikePresentation(presentationArgs);
             return { applied: true };
           },
+          onAbandoned: async ({ reason }) => {
+            const liveMessage = game.messages.get(attackMessage.id) ?? attackMessage;
+            const liveTx = TransactionStore.get(liveMessage);
+            if (!liveTx || liveTx.state === TRANSACTION_STATES.APPLIED) return;
+            if (liveTx.state !== TRANSACTION_STATES.AWAITING_MITIGATION) return;
+            await TransactionStore.update(liveMessage, {
+              state: TRANSACTION_STATES.INTERRUPTED,
+              mitigationPending: null,
+              applicationState: "interrupted",
+              failureCode: PLAYER_STRIKE_FAILURES.INTERRUPTED,
+              errorStage: "awaiting-mitigation",
+              manualReason: reason ?? "mitigation-unresolved",
+              eligibilityResult: "manual-review",
+              manualApplicationRequired: true,
+              activeOperation: null,
+            });
+          },
         });
         await TransactionStore.update(attackMessage, {
           state: TRANSACTION_STATES.AWAITING_MITIGATION,
           preApplication: snapshot,
           mitigationPending: "shield-block",
           applicationState: "awaiting-mitigation",
-          manualApplicationRequired: true,
+          manualApplicationRequired: false,
           activeOperation: null,
         });
         logger.debug("player-strike-awaiting-mitigation", {
