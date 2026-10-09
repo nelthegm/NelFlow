@@ -202,10 +202,15 @@ describe("0.14.13 Strike damageApplied presentation feed", () => {
     assert.ok(stage3 > applying && stage3 < stage4);
 
     const resolver = source("scripts/strike-resolver.js");
+    const finalize = resolver.indexOf("async function finalizeStrikeApplication");
     const commit = resolver.indexOf("async function commitStrikeApplication");
     const applyCall = resolver.indexOf("applyDamageToRecordedTarget", commit);
-    const appliedEmit = resolver.indexOf("tryEmitStrikeDamageAppliedPresentationFeed", commit);
-    assert.ok(appliedEmit > applyCall);
+    const appliedEmit = resolver.indexOf("tryEmitStrikeDamageAppliedPresentationFeed", finalize);
+    // Auto-apply runs in commit; applied presentation emits from finalize after PF2e settles
+    // (including deferred Shield Block settlement).
+    assert.ok(finalize > -1 && commit > finalize);
+    assert.ok(applyCall > commit);
+    assert.ok(appliedEmit > finalize && appliedEmit < commit);
 
     const id = "timing-tx";
     tryEmitStrikeDamageRolledPresentationFeed({
@@ -346,12 +351,12 @@ describe("0.14.13 Strike damageApplied presentation feed", () => {
     );
   });
 
-  it("version metadata is 0.14.21", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
+  it("version metadata is 0.14.22", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.22");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.22");
     assert.match(
       source("module.json"),
-      /releases\/download\/v0\.14\.21\/nelflow\.zip/,
+      /releases\/download\/v0\.14\.22\/nelflow\.zip/,
     );
   });
 

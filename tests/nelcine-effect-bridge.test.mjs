@@ -627,11 +627,11 @@ test("52-60. Strike/save-batch untouched; effect bridge wired; version 0.14.16",
 
   const module = JSON.parse(source("module.json"));
   const pkg = JSON.parse(source("package.json"));
-  assert.equal(module.version, "0.14.21");
-  assert.equal(pkg.version, "0.14.21");
+  assert.equal(module.version, "0.14.22");
+  assert.equal(pkg.version, "0.14.22");
   assert.equal(
     module.download,
-    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.21/nelflow.zip",
+    "https://github.com/nelthegm/NelFlow/releases/download/v0.14.22/nelflow.zip",
   );
 });
 

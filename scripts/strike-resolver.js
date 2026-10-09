@@ -23,6 +23,8 @@ import {
   tryEmitStrikePresentationFeed,
 } from "./strike-presentation-feed.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
+import { registerDeferredMitigation } from "./native-mitigation-deferral.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { getSetting } from "./settings.js";
 import { SupplementalActionAwareness } from "./supplemental-action-awareness.js";
@@ -30,6 +32,7 @@ import { TransactionStore } from "./transaction-store.js";
 import { TurnStackService } from "./turn-stack-service.js";
 import { getRuntimeSessionId } from "./runtime-session.js";
 import { MULTI_TARGET_CAPTURE_FLAG, validCapture } from "./multi-target-strike-model.js";
+import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
 
 const inFlight = new Set();
 
@@ -161,6 +164,78 @@ async function syncStack(attackMessage, transaction, stage) {
 /**
  * Existing damage application + Undo metadata path. Used for immediate and delayed commits.
  */
+async function finalizeStrikeApplication({
+  message,
+  transaction,
+  strike,
+  targetToken,
+  damageMessage,
+  preApplication,
+  postApplication,
+  applicationMessage,
+  triggerSource = COMMIT_TRIGGERS.IMMEDIATE,
+}) {
+  noteLethalApplicationIfZeroHp({
+    actor: targetToken.actor,
+    token: targetToken.document ?? targetToken,
+    transactionId: transaction.id,
+    causeType: "strike",
+    postApplication,
+    sourceActor: strike?.actor ?? message?.actor,
+    sourceToken: strike?.token ?? message?.token,
+  });
+
+  let next = transaction;
+  if (applicationMessage) {
+    next = await TransactionStore.linkMessage(message, applicationMessage, "application");
+  }
+  const resourceLoss = resourceLossFromSnapshots(preApplication, postApplication);
+  next = await TransactionStore.update(message, {
+    state: TRANSACTION_STATES.APPLIED,
+    preApplication,
+    postApplication,
+    appliedAmount: resourceLoss.totalApplied,
+    resourceLoss,
+    mitigationPending: null,
+    manualApplicationRequired: false,
+    targetName: targetToken.name,
+    impactCommit: {
+      triggerSource,
+      committedAt: Date.now(),
+    },
+  });
+  await syncStack(message, next, "applied");
+  if (next.stackRef?.id) {
+    NativeRecordsController.markStackRendered(
+      game.messages.get(next.stackRef.id)?.getFlag?.(MODULE_ID, "stack"),
+    );
+  }
+  logger.debug("Damage applied", {
+    transactionId: next.id,
+    preApplication,
+    postApplication,
+    appliedAmount: next.appliedAmount,
+    resourceLoss,
+    triggerSource,
+  });
+  tryEmitStrikeDamageAppliedPresentationFeed({
+    ...presentationArgsFromStrike({
+      transaction: next,
+      strike,
+      message,
+      targetToken,
+      damageMessage,
+      damageSummary: next.damageSummary ?? null,
+      includeDamage: true,
+    }),
+    applied: resourceLoss.totalApplied,
+    resourceLoss,
+    preApplication,
+    postApplication,
+  });
+  return next;
+}
+
 async function commitStrikeApplication({
   message,
   transaction,
@@ -181,65 +256,105 @@ async function commitStrikeApplication({
     throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
   }
 
+  if (applied.deferred === true) {
+    const snapshot = applied.preApplication ?? preApplication;
+    registerDeferredMitigation({
+      transactionId: transaction.id,
+      attackMessageId: message.id,
+      damageMessageId: damageMessage.id,
+      sourceActorUuid: strike.actor?.uuid ?? null,
+      sourceItemUuid: strike.item?.uuid ?? null,
+      targetTokenUuid: targetToken.document?.uuid ?? targetToken.uuid ?? null,
+      targetActorUuid: targetToken.actor?.uuid ?? null,
+      preApplication: snapshot,
+      outcome: strike.outcome ?? null,
+      settle: async ({ applicationMessage, deferred }) => {
+        const liveMessage = game.messages.get(message.id) ?? message;
+        let liveTx = TransactionStore.get(liveMessage) ?? transaction;
+        if (liveTx.state === TRANSACTION_STATES.APPLIED) {
+          return { alreadyApplied: true };
+        }
+        const token =
+          (await PF2eAdapter.resolveToken(deferred.targetTokenUuid)) ?? targetToken;
+        const postApplication = PF2eAdapter.healthSnapshot(token?.actor);
+        if (!postApplication) {
+          throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
+        }
+        try {
+          emitDamageAppliedFromApplication({
+            transactionId: liveTx.id,
+            applicationMessage,
+            damageMessage: game.messages.get(deferred.damageMessageId) ?? damageMessage,
+            targetActorUuid: deferred.targetActorUuid,
+            targetTokenUuid: deferred.targetTokenUuid,
+            sourceActor: strike.actor,
+            sourceItem: strike.item,
+          });
+        } catch (error) {
+          logger.error(
+            "damageApplied emission after native mitigation failed open",
+            { transactionId: liveTx.id, stage: "shield-block-defer" },
+            error,
+          );
+        }
+        return finalizeStrikeApplication({
+          message: liveMessage,
+          transaction: liveTx,
+          strike,
+          targetToken: token,
+          damageMessage: game.messages.get(deferred.damageMessageId) ?? damageMessage,
+          preApplication: deferred.preApplication ?? snapshot,
+          postApplication,
+          applicationMessage,
+          triggerSource,
+        });
+      },
+    });
+    const next = await TransactionStore.update(message, {
+      state: TRANSACTION_STATES.AWAITING_MITIGATION,
+      preApplication: snapshot,
+      mitigationPending: "shield-block",
+      manualApplicationRequired: true,
+      applicationState: "awaiting-mitigation",
+    });
+    await syncStack(message, next, "awaiting-mitigation");
+    if (next.stackRef?.id) {
+      // Keep native damage card interactive while Shield Block is pending.
+      NativeRecordsController.failOpen(next.stackRef.id);
+    }
+    try {
+      ui.notifications?.info?.(
+        game.i18n.format("Nelflow.ShieldBlock.Waiting", {
+          target: targetToken.name ?? localize("Nelflow.ShieldBlock.UnknownTarget"),
+        }),
+      );
+    } catch {
+      /* notification fail-open */
+    }
+    logger.debug("Strike awaiting native Shield Block", {
+      transactionId: next.id,
+      damageMessageId: damageMessage.id,
+      triggerSource,
+    });
+    return next;
+  }
+
   const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
   if (!postApplication) {
     throw new Error(localize("Nelflow.Reason.NativeApplyUnavailable"));
   }
 
-  noteLethalApplicationIfZeroHp({
-    actor: targetToken.actor,
-    token: targetToken.document ?? targetToken,
-    transactionId: transaction.id,
-    causeType: "strike",
-    postApplication,
-    sourceActor: strike?.actor ?? message?.actor,
-    sourceToken: strike?.token ?? message?.token,
-  });
-
-  let next = transaction;
-  if (applied.applicationMessage) {
-    next = await TransactionStore.linkMessage(message, applied.applicationMessage, "application");
-  }
-  const resourceLoss = resourceLossFromSnapshots(preApplication, postApplication);
-  next = await TransactionStore.update(message, {
-    state: TRANSACTION_STATES.APPLIED,
+  return finalizeStrikeApplication({
+    message,
+    transaction,
+    strike,
+    targetToken,
+    damageMessage,
     preApplication,
     postApplication,
-    appliedAmount: resourceLoss.totalApplied,
-    resourceLoss,
-    targetName: targetToken.name,
-    impactCommit: {
-      triggerSource,
-      committedAt: Date.now(),
-    },
-  });
-  await syncStack(message, next, "applied");
-  logger.debug("Damage applied", {
-    transactionId: next.id,
-    preApplication,
-    postApplication,
-    appliedAmount: next.appliedAmount,
-    resourceLoss,
+    applicationMessage: applied.applicationMessage,
     triggerSource,
   });
-  // Stage 3: authoritative actual resource loss after PF2e application.
-  // Emits for both immediate and delayed (impact-sync) commits.
-  tryEmitStrikeDamageAppliedPresentationFeed({
-    ...presentationArgsFromStrike({
-      transaction: next,
-      strike,
-      message,
-      targetToken,
-      damageMessage,
-      damageSummary: next.damageSummary ?? null,
-      includeDamage: true,
-    }),
-    applied: resourceLoss.totalApplied,
-    resourceLoss,
-    preApplication,
-    postApplication,
-  });
-  return next;
 }
 
 async function commitArmedImpact(transactionId, triggerSource) {
@@ -613,7 +728,7 @@ export class StrikeResolver {
           transactionId: transaction.id,
           reason: syncGate.reason,
         });
-        await commitStrikeApplication({
+        const committed = await commitStrikeApplication({
           message,
           transaction,
           strike,
@@ -622,9 +737,12 @@ export class StrikeResolver {
           preApplication,
           triggerSource: COMMIT_TRIGGERS.IMMEDIATE,
         });
+        // While Shield Block is pending on the native card, do not present a
+        // settled result. Settlement emits applied presentation after PF2e Apply.
+        if (committed?.state === TRANSACTION_STATES.AWAITING_MITIGATION) return;
         deliverResolvedStrikePresentation(
           presentationArgsFromStrike({
-            transaction,
+            transaction: committed ?? transaction,
             strike,
             message,
             targetToken,

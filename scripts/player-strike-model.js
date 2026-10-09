@@ -401,7 +401,12 @@ export function validatePlayerStrikeSocketPayload(payload) {
 export function reconcilePlayerStrikeReload(transaction, currentSessionId) {
   if (!transaction || transaction.transactionType !== PLAYER_STRIKE_TRANSACTION_TYPE) return "ignore";
   if (transaction.state === TRANSACTION_STATES.WAITING_FOR_DAMAGE) return "wait";
-  if ([TRANSACTION_STATES.CLAIMED, TRANSACTION_STATES.APPLYING, TRANSACTION_STATES.VALIDATING].includes(transaction.state)) {
+  if ([
+    TRANSACTION_STATES.CLAIMED,
+    TRANSACTION_STATES.APPLYING,
+    TRANSACTION_STATES.VALIDATING,
+    TRANSACTION_STATES.AWAITING_MITIGATION,
+  ].includes(transaction.state)) {
     return transaction.activeOperation?.sessionId === currentSessionId ? "owned" : "interrupt";
   }
   return "terminal";

@@ -5,6 +5,7 @@ import {
   STACK_DEFAULT_STATES,
   STACK_FIRST_NATIVE_RECORD_MODES,
 } from "./constants.js";
+import { isMitigationPending } from "./native-mitigation-deferral.js";
 import { getSetting } from "./settings.js";
 import { TransactionStore } from "./transaction-store.js";
 
@@ -61,6 +62,24 @@ function stackFirstEnabled() {
     getSetting(SETTINGS.STACK_FIRST_NATIVE_RECORDS) ===
       STACK_FIRST_NATIVE_RECORD_MODES.HIDE_BEHIND_STACK
   );
+}
+
+/** Keep native damage interactive while PF2e Shield Block / Apply is pending. */
+function stackHasMitigationPending(stack) {
+  for (const row of stack?.rows ?? []) {
+    if (row.batch) {
+      const attack = row.attackMessageId ? game.messages?.get?.(row.attackMessageId) : null;
+      const transaction = TransactionStore.get(attack);
+      if (isMitigationPending(transaction)) return true;
+      if (transaction?.targets?.some((target) => target.state === "awaiting-mitigation")) {
+        return true;
+      }
+      continue;
+    }
+    const attack = row.attackMessageId ? game.messages?.get?.(row.attackMessageId) : null;
+    if (isMitigationPending(TransactionStore.get(attack))) return true;
+  }
+  return false;
 }
 
 function resultsEnabled() {
@@ -334,7 +353,10 @@ export class NativeRecordsController {
       return false;
     }
     html.dataset.nelflowNativeStackId = stackId;
-    const hide = stackFirstEnabled() && !failedStacks.has(stackId);
+    const hide =
+      stackFirstEnabled() &&
+      !failedStacks.has(stackId) &&
+      !stackHasMitigationPending(stack);
     html.classList.toggle("nelflow-native-record-hidden", hide);
     return hide;
   }
@@ -347,11 +369,12 @@ export class NativeRecordsController {
   static markStackRendered(stack) {
     if (!stack?.id) return;
     failedStacks.delete(stack.id);
+    const hide = stackFirstEnabled() && !stackHasMitigationPending(stack);
     for (const record of this.linkedRecordsForStack(stack)) {
       const element = renderedMessage(record.id);
       if (!element?.classList.contains("nelflow-linked-native")) continue;
       element.dataset.nelflowNativeStackId = stack.id;
-      element.classList.toggle("nelflow-native-record-hidden", stackFirstEnabled());
+      element.classList.toggle("nelflow-native-record-hidden", hide);
     }
   }
 

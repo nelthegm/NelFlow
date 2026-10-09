@@ -83,7 +83,13 @@ export function groupTargetOutcomes(children) {
 
 export function batchState(children) {
   const states = new Set((children ?? []).map((child) => child.state));
-  if (states.has("resolving") || states.has("applying")) return "processing";
+  if (
+    states.has("resolving") ||
+    states.has("applying") ||
+    states.has("awaiting-mitigation")
+  ) {
+    return "processing";
+  }
   if (states.has("review")) return "manual";
   if (states.has("applied")) return "applied";
   if (states.has("damage-rolled")) return "damage-rolled";

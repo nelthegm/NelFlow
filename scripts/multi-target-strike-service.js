@@ -13,6 +13,9 @@ import {
   multiTargetModeAllows,
 } from "./multi-target-strike-model.js";
 import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
+import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
+import { registerDeferredMitigation } from "./native-mitigation-deferral.js";
+import { NativeRecordsController } from "./native-records-controller.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { playerStrikeModeAllows } from "./player-strike-model.js";
@@ -200,6 +203,7 @@ async function processDamageGroup(message, strike, transaction, groupName, group
       continue;
     }
     const applicationId = `${transaction.id}:target:${child.key}`;
+    const targetKey = child.key;
     const applied = await PF2eAdapter.applyDamageRollToRecordedTarget({
       damageMessage: rolled.damageMessage,
       damageRoll: rolled.roll,
@@ -217,9 +221,138 @@ async function processDamageGroup(message, strike, transaction, groupName, group
         transactionId: transaction.id,
         attackMessageId: message.id,
         role: "application",
-        targetKey: child.key,
+        targetKey,
       },
     });
+    if (applied?.deferred === true) {
+      const snapshot = applied.preApplication ?? preApplication;
+      registerDeferredMitigation({
+        transactionId: applicationId,
+        attackMessageId: message.id,
+        damageMessageId: rolled.damageMessage.id,
+        sourceActorUuid: strike.actor?.uuid ?? null,
+        sourceItemUuid: strike.item?.uuid ?? null,
+        targetTokenUuid: trustedChild.tokenUuid,
+        targetActorUuid: trustedChild.actorUuid,
+        preApplication: snapshot,
+        outcome,
+        settle: async ({ applicationMessage, deferred }) => {
+          const liveMessage = game.messages.get(message.id) ?? message;
+          let liveTx = TransactionStore.get(liveMessage);
+          if (!liveTx) return { settled: false };
+          const liveChild = liveTx.targets?.find((candidate) => candidate.key === targetKey);
+          if (liveChild?.state === "applied") return { alreadyApplied: true };
+          const liveToken =
+            (await PF2eAdapter.resolveToken(deferred.targetTokenUuid)) ?? token;
+          const postApplication = PF2eAdapter.healthSnapshot(liveToken?.actor);
+          if (!postApplication) {
+            const failedTargets = liveTx.targets.map((candidate) =>
+              candidate.key === targetKey
+                ? { ...candidate, state: "review", reviewReason: "application-unverified" }
+                : candidate,
+            );
+            await update(liveMessage, {
+              targets: failedTargets,
+              state: batchState(failedTargets),
+            });
+            return { settled: false };
+          }
+          noteLethalApplicationIfZeroHp({
+            actor: liveToken.actor,
+            token: liveToken.document ?? liveToken,
+            transactionId: liveTx.id,
+            causeType: "strike",
+            postApplication,
+            sourceActor: strike.actor,
+            sourceToken: strike.token ?? null,
+          });
+          if (applicationMessage) {
+            liveTx = await TransactionStore.linkMultiTargetMessage(liveMessage, applicationMessage, {
+              role: "application",
+              targetKey,
+            });
+            await applicationMessage.setFlag(MODULE_ID, "multiTargetApplicationProof", {
+              transactionId: liveTx.id,
+              attackMessageId: liveMessage.id,
+              targetKey,
+              targetTokenUuid: trustedChild.tokenUuid,
+              targetActorUuid: trustedChild.actorUuid,
+              preApplication: deferred.preApplication ?? snapshot,
+              postApplication,
+              processingUserId: liveTx.snapshot.processingUserId,
+            });
+          }
+          try {
+            emitDamageAppliedFromApplication({
+              transactionId: liveTx.id,
+              applicationMessage,
+              damageMessage: game.messages.get(deferred.damageMessageId) ?? rolled.damageMessage,
+              targetActorUuid: deferred.targetActorUuid,
+              targetTokenUuid: deferred.targetTokenUuid,
+              sourceActor: strike.actor,
+              sourceItem: strike.item,
+            });
+          } catch (error) {
+            logger.error(
+              "damageApplied emission after native mitigation failed open",
+              { transactionId: liveTx.id, targetKey, stage: "multi-target-mitigation" },
+              error,
+            );
+          }
+          const resourceLoss = resourceLossFromSnapshots(
+            deferred.preApplication ?? snapshot,
+            postApplication,
+          );
+          const settledTargets = liveTx.targets.map((candidate) =>
+            candidate.key === targetKey
+              ? {
+                  ...candidate,
+                  state: "applied",
+                  preApplication: deferred.preApplication ?? snapshot,
+                  postApplication,
+                  appliedAmount: resourceLoss.totalApplied,
+                  resourceLoss,
+                  appliedSequence: Number(liveTx.revision ?? 0) + 1,
+                  applicationMessageId: applicationMessage?.id ?? null,
+                  undoEligible:
+                    liveTx.snapshot.actorType === "npc" || Boolean(applicationMessage),
+                  tokenUuid: trustedChild.tokenUuid,
+                  actorUuid: trustedChild.actorUuid,
+                  sceneId: trustedChild.sceneId,
+                  reviewReason: null,
+                  mitigationPending: null,
+                }
+              : candidate,
+          );
+          const settled = await update(liveMessage, {
+            targets: settledTargets,
+            state: batchState(settledTargets),
+          });
+          if (settled.stackRef?.id) {
+            NativeRecordsController.markStackRendered(
+              game.messages.get(settled.stackRef.id)?.getFlag?.(MODULE_ID, "stack"),
+            );
+          }
+          return { settled: true };
+        },
+      });
+      targets = transaction.targets.map((candidate) =>
+        candidate.key === targetKey
+          ? {
+              ...candidate,
+              state: "awaiting-mitigation",
+              preApplication: snapshot,
+              mitigationPending: "shield-block",
+              reviewReason: null,
+            }
+          : candidate,
+      );
+      transaction = await update(message, { targets, state: batchState(targets) });
+      if (transaction.stackRef?.id) {
+        NativeRecordsController.failOpen(transaction.stackRef.id);
+      }
+      continue;
+    }
     const postApplication = applied ? PF2eAdapter.healthSnapshot(token.actor) : null;
     if (!applied || !postApplication) {
       targets = transaction.targets.map((candidate) => candidate.key === child.key

@@ -351,9 +351,9 @@ describe("0.14.13 healing presentation feed", () => {
     assert.equal(typeof game.nelflow.dev.watchHealingPresentationFeed, "function");
   });
 
-  it("metadata version 0.14.21", () => {
+  it("metadata version 0.14.22", () => {
     const manifest = JSON.parse(source("module.json"));
-    assert.equal(manifest.version, "0.14.21");
-    assert.match(manifest.download, /v0\.14\.21\/nelflow\.zip/);
+    assert.equal(manifest.version, "0.14.22");
+    assert.match(manifest.download, /v0\.14\.22\/nelflow\.zip/);
   });
 });

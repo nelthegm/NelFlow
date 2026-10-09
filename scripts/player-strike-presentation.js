@@ -33,6 +33,7 @@ export function playerStrikePresentationState(transaction) {
     [TRANSACTION_STATES.VALIDATING]: "applying",
     [TRANSACTION_STATES.CLAIMED]: "applying",
     [TRANSACTION_STATES.APPLYING]: "applying",
+    [TRANSACTION_STATES.AWAITING_MITIGATION]: "applying",
     [TRANSACTION_STATES.APPLIED]: "applied",
     [TRANSACTION_STATES.UNDONE]: "undone",
     [TRANSACTION_STATES.SKIPPED]: "not-a-hit",

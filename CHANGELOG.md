@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.14.22
+
+- Defer Strike auto-apply when Raise a Shield is active so PF2e's native
+  damage-card Shield Block toggle and Apply Damage remain interactive
+- Keep the NelFlow stack pending (`awaiting-mitigation`) until PF2e settles
+  the application; then account for HP / Temp HP / Stamina and finalize once
+- While mitigation is pending, keep linked native damage cards visible; restore
+  stack-first hide after settlement so NPC presentation stays stack-canonical
+- Remove the DialogV2 / socket Shield Block replacement that could hang stacks
+  and hide the required native controls
+
 ## 0.14.21
 
 - Account for Temporary HP and Stamina (when the PF2e Stamina variant is

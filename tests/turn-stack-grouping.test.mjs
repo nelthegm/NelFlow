@@ -219,8 +219,8 @@ describe("0.14.17 durable combat-turn stack grouping", () => {
     assert.match(source("scripts/turn-stack-service.js"), /Stack identity/);
   });
 
-  it("version metadata is 0.14.21", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
+  it("version metadata is 0.14.22", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.22");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.22");
   });
 });

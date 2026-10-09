@@ -27,7 +27,7 @@ import { buildDamageAppliedPayload } from "../scripts/damage-applied-bridge.js";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path) => readFileSync(join(root, path), "utf8");
 
-describe("0.14.21 damage resource accounting — normalization", () => {
+describe("0.14.22 damage resource accounting — normalization", () => {
   it("1. HP-only damage", () => {
     const loss = normalizeResourceLoss({ hpLoss: 8, tempHpLoss: 0, staminaLoss: 0 });
     assert.deepEqual(loss, { hpLoss: 8, tempHpLoss: 0, staminaLoss: 0, totalApplied: 8 });
@@ -137,7 +137,7 @@ describe("0.14.21 damage resource accounting — normalization", () => {
   });
 });
 
-describe("0.14.21 damage resource accounting — application / events", () => {
+describe("0.14.22 damage resource accounting — application / events", () => {
   it("16-18. snapshot and AppliedDamageFlag deltas agree on mixed pools", () => {
     const fromSnap = deriveResourceLossFromSnapshots(
       { hp: 80, tempHp: 10, stamina: 20 },
@@ -250,7 +250,7 @@ describe("0.14.21 damage resource accounting — application / events", () => {
   });
 });
 
-describe("0.14.21 damage resource accounting — presentation", () => {
+describe("0.14.22 damage resource accounting — presentation", () => {
   it("27. HP-only shows total without breakdown", () => {
     globalThis.game = {
       i18n: {
@@ -328,7 +328,7 @@ describe("0.14.21 damage resource accounting — presentation", () => {
   });
 });
 
-describe("0.14.21 damage resource accounting — wiring / undo / version", () => {
+describe("0.14.22 damage resource accounting — wiring / undo / version", () => {
   it("38-44. transactions persist resourceLoss; undo restores stamina when snapshotted", () => {
     assert.match(source("scripts/strike-resolver.js"), /resourceLoss/);
     assert.match(source("scripts/player-strike-service.js"), /resourceLoss/);
@@ -356,8 +356,8 @@ describe("0.14.21 damage resource accounting — wiring / undo / version", () =>
     });
   });
 
-  it("version metadata is 0.14.21", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
+  it("version metadata is 0.14.22", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.22");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.22");
   });
 });

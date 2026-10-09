@@ -121,6 +121,8 @@ export const TRANSACTION_STATES = Object.freeze({
   SKIPPED: "skipped",
   DAMAGE_ROLLED: "damage-rolled",
   AWAITING_IMPACT: "awaiting-impact",
+  /** Waiting for PF2e native Shield Block toggle + Apply Damage. */
+  AWAITING_MITIGATION: "awaiting-mitigation",
   APPLIED: "applied",
   FAILED: "failed",
   UNDONE: "undone",

@@ -7,6 +7,7 @@ import {
 } from "./damage-correlation.js";
 import { logger } from "./logger.js";
 import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
+import { observeDeferredMitigationMessage } from "./native-mitigation-deferral.js";
 import { resolveShieldBlockForApplication } from "./shield-block-gate.js";
 
 const pendingApplicationCaptures = new Map();
@@ -154,6 +155,8 @@ function onCreateChatMessage(message) {
       capture.candidates.push(message);
     }
   }
+  // Deferred Shield Block: settle when PF2e's native Apply produces a unique damage-taken.
+  observeDeferredMitigationMessage(message, pendingApplicationCaptures);
   for (const capture of pendingSpellDamageCaptures.values()) {
     const marker = message.getFlag?.(MODULE_ID, "saveResolverNative");
     if (
@@ -225,6 +228,7 @@ function createApplicationCapture({
     targetActorUuid: refs.actor.uuid,
     candidates: [],
     nativeMarker,
+    deferred: false,
   };
   pendingApplicationCaptures.set(transactionId, capture);
   return capture;
@@ -880,6 +884,8 @@ export class PF2eAdapter {
       }
 
       let shieldBlockRequest = false;
+      let deferToNative = false;
+      let deferReason = null;
       if (shieldBlockPrompt === true) {
         try {
           const choice = await resolveShieldBlockForApplication({
@@ -887,18 +893,24 @@ export class PF2eAdapter {
             targetActor,
             applicationId,
           });
-          shieldBlockRequest = choice.block === true;
-          if (choice.prompted) {
-            logger.debug("Shield Block prompt resolved", {
+          if (choice.deferToNative === true) {
+            deferToNative = true;
+            deferReason = choice.reason ?? "defer-to-native-shield-block";
+          } else {
+            shieldBlockRequest = choice.block === true;
+          }
+          if (choice.prompted || choice.deferToNative) {
+            logger.debug("Shield Block gate resolved", {
               stage: "shield-block-gate",
               applicationId,
               block: shieldBlockRequest,
+              deferToNative,
               reason: choice.reason,
             });
           }
         } catch (error) {
           logger.warn(
-            "Shield Block prompt failed open; applying without block",
+            "Shield Block gate failed open; applying without block",
             {
               stage: "shield-block-gate",
               reason: error instanceof Error ? error.message : String(error),
@@ -907,7 +919,37 @@ export class PF2eAdapter {
             error,
           );
           shieldBlockRequest = false;
+          deferToNative = false;
         }
+      }
+
+      // Keep the native damage card interactive. Do not auto-apply while the
+      // player must use PF2e's Shield Block toggle + Apply Damage controls.
+      if (deferToNative) {
+        capture.deferred = true;
+        const preApplication = this.healthSnapshot(targetActor);
+        logger.debug("Deferring Strike auto-apply for native Shield Block", {
+          stage: "shield-block-defer",
+          applicationId,
+          attackMessageId,
+          damageMessageId: damageMessage?.id ?? null,
+          reason: deferReason,
+        });
+        return {
+          deferred: true,
+          reason: deferReason,
+          applicationId,
+          attackMessageId,
+          damageMessageId: damageMessage?.id ?? null,
+          targetTokenUuid: targetRefs?.tokenUuid ?? null,
+          targetActorUuid: targetActor.uuid,
+          sourceActorUuid: sourceActor.uuid,
+          sourceItemUuid: sourceItem.uuid,
+          preApplication,
+          outcome,
+          transformedRoll,
+          capture,
+        };
       }
 
       await contextClone.applyDamage({
@@ -951,7 +993,11 @@ export class PF2eAdapter {
         transformedRoll,
       };
     } finally {
-      pendingApplicationCaptures.delete(applicationId);
+      const captureStillOpen = pendingApplicationCaptures.get(applicationId);
+      // Deferred captures stay open until native Apply produces damage-taken.
+      if (!captureStillOpen?.deferred) {
+        pendingApplicationCaptures.delete(applicationId);
+      }
     }
   }
 

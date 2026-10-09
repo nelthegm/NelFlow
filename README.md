@@ -1,8 +1,11 @@
 # Nelflow
 
 Nelflow is an experimental Foundry VTT module for PF2e NPC Strike workflows.
-Nelflow **0.14.21** accounts for Temporary HP and Stamina in applied-damage totals
-and breakdowns while preserving ordinary HP as a separate component.
+Nelflow **0.14.22** preserves PF2e Shield Block on the native damage card while
+deferring Strike auto-apply, then settles HP / Temp HP / Stamina accounting into
+the canonical stack once. **0.14.21** accounts for Temporary HP and Stamina in
+applied-damage totals and breakdowns while preserving ordinary HP as a separate
+component.
 Nelflow **0.14.20** presents single-target spell attacks on native PF2e attack and
 damage cards (no more "Unknown Strike" compact summaries) while keeping auto-apply
 and Applied/Undo on the damage host.
@@ -14,10 +17,10 @@ controls with accessible exact-record icons. Nelflow **0.14.17** repairs compact
 NPC Strike stack grouping so multiple
 Strikes from the same attacker in one logical combat activation append to a
 single parent stack (stable under NelTempo / Dynamic Initiative Combat updates).
-Nelflow **0.14.16** prompts for **Shield Block** before Strike auto-apply when
-the target has Raise a Shield active, asking the token's controlling user and
-passing PF2e's native `shieldBlockRequest` (PC, NPC, and multi-target Strikes;
-not spell attacks or saves).
+Nelflow **0.14.16** introduced Shield Block awareness before Strike auto-apply;
+**0.14.22** repairs that path to defer to PF2e's native damage-card Shield Block
+toggle and Apply Damage (PC, NPC, and multi-target Strikes; not spell attacks or
+saves).
 Nelflow **0.14.15** adds client-only follow and disclosure controls for compact
 NPC Strike stacks. A live update to the current turn's stack can move that exact
 rendered card to the bottom of chat, and each viewer may default stacks to
@@ -125,14 +128,14 @@ https://raw.githubusercontent.com/nelthegm/NelFlow/main/module.json
 That manifest points at the published GitHub release asset:
 
 ```text
-https://github.com/nelthegm/NelFlow/releases/download/v0.14.21/nelflow.zip
+https://github.com/nelthegm/NelFlow/releases/download/v0.14.22/nelflow.zip
 ```
 
 After install or update, restart Foundry if prompted, enable **Nelflow**, and
 confirm:
 
 ```js
-game.modules.get("nelflow")?.version // "0.14.21"
+game.modules.get("nelflow")?.version // "0.14.22"
 ```
 
 Do not merge a new build into an older `0.7.0` module folder. Prefer Foundry’s
@@ -150,6 +153,12 @@ npm test
 npm run check
 npm run package
 ```
+
+## Nelflow 0.14.22 damage interaction repair
+
+See [RELEASE_NOTES_0.14.22.md](docs/RELEASE_NOTES_0.14.22.md),
+[NELFLOW_DAMAGE_INTERACTION_AUDIT.md](docs/NELFLOW_DAMAGE_INTERACTION_AUDIT.md),
+and [NELFLOW_0.14.22_TEST_PLAN.md](docs/NELFLOW_0.14.22_TEST_PLAN.md).
 
 ## Nelflow 0.14.21 damage resource accounting
 
@@ -1416,6 +1425,7 @@ Static checks validate syntax, JSON/localization, imports, module assets,
 settings, and safety invariants. They are not Foundry runtime acceptance.
 
 - [Nelflow 0.13.0 combat action cinematic notes](docs/RELEASE_NOTES_0.13.0.md)
+- [Nelflow 0.14.22 damage interaction repair](docs/RELEASE_NOTES_0.14.22.md)
 - [Nelflow 0.14.21 damage resource accounting](docs/RELEASE_NOTES_0.14.21.md)
 - [Nelflow 0.14.20 spell-attack native presentation](docs/RELEASE_NOTES_0.14.20.md)
 - [Nelflow 0.14.19 default-expanded Strike Results](docs/NELFLOW_0.14.19_DEFAULT_RESULTS_STATE.md)

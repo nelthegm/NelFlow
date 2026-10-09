@@ -1,5 +1,5 @@
 /**
- * Shield Block prompt gate for Strike auto-apply (0.14.16).
+ * Shield Block gate for Strike auto-apply — defer to PF2e native UI (0.14.22).
  */
 import assert from "node:assert/strict";
 import { describe, it, beforeEach, afterEach } from "node:test";
@@ -13,7 +13,7 @@ import {
   resolveShieldBlockForApplication,
   SHIELD_BLOCK_SOCKET_ACTION,
 } from "../scripts/shield-block-gate.js";
-import { SETTINGS } from "../scripts/constants.js";
+import { SETTINGS, TRANSACTION_STATES } from "../scripts/constants.js";
 
 const root = dirname(fileURLToPath(import.meta.url));
 
@@ -21,7 +21,7 @@ function source(rel) {
   return readFileSync(join(root, "..", rel), "utf8");
 }
 
-describe("0.14.16 Shield Block prompt gate", () => {
+describe("0.14.22 Shield Block defer-to-native gate", () => {
   beforeEach(() => {
     clearShieldBlockGatePending();
     globalThis.CONST = { DOCUMENT_OWNERSHIP_LEVELS: { OWNER: 3 } };
@@ -50,18 +50,6 @@ describe("0.14.16 Shield Block prompt gate", () => {
       },
       socket: { emits: [], on() {}, emit(_ns, payload) { this.emits.push(payload); } },
     };
-    globalThis.ui = { notifications: { info() {} } };
-    globalThis.foundry = {
-      applications: {
-        api: {
-          DialogV2: {
-            async wait() {
-              return "block";
-            },
-          },
-        },
-      },
-    };
   });
 
   afterEach(() => {
@@ -74,7 +62,7 @@ describe("0.14.16 Shield Block prompt gate", () => {
     assert.equal(isShieldRaised(null), false);
   });
 
-  it("2. prefers active player OWNER as chooser", () => {
+  it("2. prefers active player OWNER as chooser identity helper", () => {
     const token = {
       actor: {
         id: "Actor.pc1",
@@ -98,7 +86,7 @@ describe("0.14.16 Shield Block prompt gate", () => {
     assert.equal(resolveShieldBlockChooserUserId(token), "gm1");
   });
 
-  it("4. setting off skips prompt", async () => {
+  it("4. setting off skips deferral", async () => {
     game.settings.get = () => false;
     const result = await resolveShieldBlockForApplication({
       targetToken: {
@@ -109,10 +97,11 @@ describe("0.14.16 Shield Block prompt gate", () => {
     });
     assert.equal(result.prompted, false);
     assert.equal(result.block, false);
+    assert.equal(result.deferToNative, false);
     assert.equal(result.reason, "setting-off");
   });
 
-  it("5. not raised skips prompt", async () => {
+  it("5. not raised skips deferral", async () => {
     const result = await resolveShieldBlockForApplication({
       targetToken: {
         name: "Hero",
@@ -122,10 +111,11 @@ describe("0.14.16 Shield Block prompt gate", () => {
     });
     assert.equal(result.prompted, false);
     assert.equal(result.block, false);
+    assert.equal(result.deferToNative, false);
     assert.equal(result.reason, "shield-not-raised");
   });
 
-  it("6. local chooser Block returns shieldBlockRequest true", async () => {
+  it("6. raised shield defers to native PF2e card (no DialogV2)", async () => {
     const result = await resolveShieldBlockForApplication({
       targetToken: {
         name: "Guard",
@@ -137,25 +127,18 @@ describe("0.14.16 Shield Block prompt gate", () => {
       },
       applicationId: "tx-3",
     });
-    assert.equal(result.prompted, true);
-    assert.equal(result.block, true);
-    assert.equal(result.reason, "user-block");
+    assert.equal(result.prompted, false);
+    assert.equal(result.block, false);
+    assert.equal(result.deferToNative, true);
+    assert.equal(result.reason, "defer-to-native-shield-block");
   });
 
-  it("7. local chooser Apply without blocking returns false", async () => {
-    foundry.applications.api.DialogV2.wait = async () => "no-block";
-    const result = await resolveShieldBlockForApplication({
-      targetToken: {
-        name: "Guard",
-        actor: {
-          ownership: { gm1: 3 },
-          system: { attributes: { shield: { raised: true } } },
-        },
-      },
-      applicationId: "tx-4",
-    });
-    assert.equal(result.block, false);
-    assert.equal(result.reason, "user-no-block");
+  it("7. gate source does not open DialogV2 or socket prompts", () => {
+    const gate = source("scripts/shield-block-gate.js");
+    assert.doesNotMatch(gate, /DialogV2/);
+    assert.doesNotMatch(gate, /socket\.emit/);
+    assert.match(gate, /deferToNative:\s*true/);
+    assert.match(gate, /attributes\?\.shield\?\.raised === true/);
   });
 
   it("8-11. Strike paths enable prompt; spell/save do not", () => {
@@ -170,29 +153,33 @@ describe("0.14.16 Shield Block prompt gate", () => {
     assert.doesNotMatch(source("scripts/save-resolver-service.js"), /shieldBlockPrompt:\s*true/);
   });
 
-  it("12. adapter resolves gate then passes dynamic shieldBlockRequest", () => {
+  it("12. adapter defers instead of forcing shieldBlockRequest", () => {
     const adapter = source("scripts/pf2e-adapter.js");
     assert.match(adapter, /resolveShieldBlockForApplication/);
-    assert.match(adapter, /shieldBlockRequest,/);
-    assert.match(adapter, /let shieldBlockRequest = false/);
+    assert.match(adapter, /deferToNative/);
+    assert.match(adapter, /deferred:\s*true/);
+    assert.match(adapter, /observeDeferredMitigationMessage/);
   });
 
   it("13. no IWR reimplementation in gate", () => {
     const gate = source("scripts/shield-block-gate.js");
     assert.doesNotMatch(gate, /\bweakness\b|\bresistance\b|\biwr\b/i);
-    assert.match(gate, /attributes\?\.shield\?\.raised === true/);
   });
 
-  it("14. main initializes socket gate", () => {
+  it("14. main initializes shield block gate", () => {
     assert.match(source("scripts/main.js"), /initializeShieldBlockGate/);
   });
 
-  it("15. remote prompt uses socket action", () => {
+  it("15. socket action constant retained for compatibility", () => {
     assert.equal(SHIELD_BLOCK_SOCKET_ACTION, "shield-block-prompt");
   });
 
-  it("16. version metadata is 0.14.21", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
+  it("16. AWAITING_MITIGATION transaction state exists", () => {
+    assert.equal(TRANSACTION_STATES.AWAITING_MITIGATION, "awaiting-mitigation");
+  });
+
+  it("17. version metadata is 0.14.22", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.22");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.22");
   });
 });

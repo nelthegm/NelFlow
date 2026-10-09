@@ -23,6 +23,8 @@ import {
   playerStrikeAuthorId as authorId,
 } from "./player-strike-adapter.js";
 import { deriveResourceLossFromSnapshots } from "./damage-resource-loss.js";
+import { emitDamageAppliedFromApplication } from "./damage-applied-bridge.js";
+import { registerDeferredMitigation } from "./native-mitigation-deferral.js";
 import { PF2eAdapter } from "./pf2e-adapter.js";
 import { noteLethalApplicationIfZeroHp } from "./nelcine-defeated-bridge.js";
 import { tryDeliverStrikePresentation } from "./nelcine-strike-delivery.js";
@@ -473,6 +475,120 @@ async function processDamage(message) {
         shieldBlockPrompt: true,
       });
       if (!applied) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
+
+      if (applied.deferred === true) {
+        const snapshot = applied.preApplication ?? preApplication;
+        registerDeferredMitigation({
+          transactionId: transaction.id,
+          attackMessageId: attackMessage.id,
+          damageMessageId: damageMessage.id,
+          sourceActorUuid: sourceActor.uuid,
+          sourceItemUuid: sourceItem.uuid,
+          targetTokenUuid:
+            targetToken.document?.uuid ?? targetToken.uuid ?? transaction.snapshot.targetTokenUuid,
+          targetActorUuid: targetToken.actor?.uuid ?? transaction.snapshot.targetActorUuid,
+          preApplication: snapshot,
+          outcome: damage.evidence.outcome,
+          settle: async ({ applicationMessage, deferred }) => {
+            const liveMessage = game.messages.get(attackMessage.id) ?? attackMessage;
+            let liveTx = TransactionStore.get(liveMessage);
+            if (!liveTx || liveTx.state === TRANSACTION_STATES.APPLIED) {
+              return { alreadyApplied: true };
+            }
+            const token =
+              (await PF2eAdapter.resolveToken(deferred.targetTokenUuid)) ?? targetToken;
+            const postApplication = PF2eAdapter.healthSnapshot(token?.actor);
+            if (!postApplication) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
+            noteLethalApplicationIfZeroHp({
+              actor: token.actor,
+              token: token.document ?? token,
+              transactionId: liveTx.id,
+              causeType: "strike",
+              postApplication,
+              sourceActor,
+              sourceToken: liveMessage.token ?? null,
+            });
+            if (applicationMessage) {
+              liveTx = await TransactionStore.linkMessage(
+                liveMessage,
+                applicationMessage,
+                "application",
+              );
+            }
+            const resourceLoss = resourceLossFromSnapshots(
+              deferred.preApplication ?? snapshot,
+              postApplication,
+            );
+            try {
+              emitDamageAppliedFromApplication({
+                transactionId: liveTx.id,
+                applicationMessage,
+                damageMessage: game.messages.get(deferred.damageMessageId) ?? damageMessage,
+                targetActorUuid: deferred.targetActorUuid,
+                targetTokenUuid: deferred.targetTokenUuid,
+                sourceActor,
+                sourceItem,
+              });
+            } catch (error) {
+              logger.error(
+                "damageApplied emission after native mitigation failed open",
+                { transactionId: liveTx.id, stage: "player-strike-mitigation" },
+                error,
+              );
+            }
+            await TransactionStore.update(liveMessage, {
+              state: TRANSACTION_STATES.APPLIED,
+              preApplication: deferred.preApplication ?? snapshot,
+              postApplication,
+              appliedAmount: resourceLoss.totalApplied,
+              resourceLoss,
+              mitigationPending: null,
+              applicationState: "applied",
+              authorityClaimState: "completed",
+              appliedAt: Date.now(),
+              eligibilityResult: "applied",
+              failureCode: null,
+              manualReason: null,
+              manualApplicationRequired: false,
+              activeOperation: null,
+            });
+            tryEmitStrikeDamageAppliedPresentationFeed({
+              ...presentationArgs,
+              applied: resourceLoss.totalApplied,
+              resourceLoss,
+              preApplication: deferred.preApplication ?? snapshot,
+              postApplication,
+            });
+            tryEmitStrikePresentationFeed(presentationArgs);
+            tryDeliverStrikePresentation(presentationArgs);
+            return { applied: true };
+          },
+        });
+        await TransactionStore.update(attackMessage, {
+          state: TRANSACTION_STATES.AWAITING_MITIGATION,
+          preApplication: snapshot,
+          mitigationPending: "shield-block",
+          applicationState: "awaiting-mitigation",
+          manualApplicationRequired: true,
+          activeOperation: null,
+        });
+        logger.debug("player-strike-awaiting-mitigation", {
+          transactionId: transaction.id,
+          stage: "player-strike-application",
+          reason: applied.reason ?? "defer-to-native-shield-block",
+        });
+        try {
+          ui.notifications?.info?.(
+            game.i18n.format("Nelflow.ShieldBlock.Waiting", {
+              target: targetToken.name ?? game.i18n.localize("Nelflow.ShieldBlock.UnknownTarget"),
+            }),
+          );
+        } catch {
+          /* notification fail-open */
+        }
+        return true;
+      }
+
       const postApplication = PF2eAdapter.healthSnapshot(targetToken.actor);
       if (!postApplication) throw new Error(PLAYER_STRIKE_FAILURES.APPLICATION_FAILED);
       noteLethalApplicationIfZeroHp({

@@ -14,7 +14,7 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const source = (path) => readFileSync(join(root, path), "utf8");
 
-describe("0.14.21 spell-attack native presentation", () => {
+describe("0.14.22 spell-attack native presentation", () => {
   it("1. spell-attack selects native-augmented presentation like character Strikes", () => {
     const transaction = { transactionType: "spell-attack", snapshot: { actionName: "Ray of Frost" } };
     assert.equal(getStrikePresentationMode(transaction), STRIKE_PRESENTATION_MODES.NATIVE_AUGMENTED);
@@ -77,8 +77,8 @@ describe("0.14.21 spell-attack native presentation", () => {
     assert.match(mode, /transactionType === "spell-attack"/);
   });
 
-  it("7. version metadata is 0.14.21", () => {
-    assert.equal(JSON.parse(source("module.json")).version, "0.14.21");
-    assert.equal(JSON.parse(source("package.json")).version, "0.14.21");
+  it("7. version metadata is 0.14.22", () => {
+    assert.equal(JSON.parse(source("module.json")).version, "0.14.22");
+    assert.equal(JSON.parse(source("package.json")).version, "0.14.22");
   });
 });
